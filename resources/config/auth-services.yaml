@@ -1,0 +1,40 @@
+services:
+
+    _defaults:
+        autowire: true
+        autoconfigure: true
+        public: false
+
+    Derafu\Auth\Contract\AuthConfigurationInterface:
+        class: Derafu\Auth\Configuration\AuthConfiguration
+        arguments:
+            $config:
+                keycloak_url: '%env(default::string:KEYCLOAK_URL)%'
+                realm: '%env(default::string:KEYCLOAK_REALM)%'
+                client_id: '%env(default::string:KEYCLOAK_CLIENT_ID)%'
+                client_secret: '%env(default::string:KEYCLOAK_CLIENT_SECRET)%'
+                redirect_uri: '%env(default::string:KEYCLOAK_REDIRECT_URI)%'
+                scopes: '%env(default::json:KEYCLOAK_SCOPES)%'
+                protected_routes: '%env(default::json:KEYCLOAK_PROTECTED_ROUTES)%'
+                callback_route: '%env(default::string:KEYCLOAK_CALLBACK_ROUTE)%'
+                logout_route: '%env(default::string:KEYCLOAK_LOGOUT_ROUTE)%'
+                session_lifetime: '%env(default::int:KEYCLOAK_SESSION_LIFETIME)%'
+                secure_cookies: '%env(default::bool:KEYCLOAK_SECURE_COOKIES)%'
+                http_client_options:
+                    timeout: '%env(default::int:KEYCLOAK_HTTP_TIMEOUT)%'
+                    connect_timeout: '%env(default::int:KEYCLOAK_HTTP_CONNECT_TIMEOUT)%'
+                    verify: '%env(default::bool:KEYCLOAK_HTTP_VERIFY)%'
+
+    Derafu\Auth\Contract\AuthenticationProviderInterface:
+        class: Derafu\Auth\Service\KeycloakAuthenticationService
+
+    Derafu\Auth\Contract\SessionManagerInterface:
+        class: Derafu\Auth\Service\SessionService
+
+    Derafu\Auth\Contract\RouteValidatorInterface:
+        class: Derafu\Auth\Validator\RouteValidator
+
+    Derafu\Auth\Middleware\AuthenticationMiddleware: ~
+
+    Derafu\Auth\Controller\CallbackController:
+        public: true
