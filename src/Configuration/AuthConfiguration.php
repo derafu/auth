@@ -13,7 +13,6 @@ declare(strict_types=1);
 namespace Derafu\Auth\Configuration;
 
 use Derafu\Auth\Contract\AuthConfigurationInterface;
-use Derafu\Auth\Exception\ConfigurationException;
 
 /**
  * Configuration class for authentication settings.
@@ -21,159 +20,39 @@ use Derafu\Auth\Exception\ConfigurationException;
 class AuthConfiguration implements AuthConfigurationInterface
 {
     /**
-     * The Keycloak URL.
-     *
-     * @var string
-     */
-    private string $keycloakUrl;
-
-    /**
-     * The Keycloak realm.
-     *
-     * @var string
-     */
-    private string $realm = 'master';
-
-    /**
-     * The client ID.
-     *
-     * @var string
-     */
-    private string $clientId;
-
-    /**
-     * The client secret.
-     *
-     * @var string
-     */
-    private string $clientSecret;
-
-    /**
-     * The redirect URI.
-     *
-     * @var string
-     */
-    private string $redirectUri;
-
-    /**
-     * The OAuth scopes.
-     *
-     * @var array<string>
-     */
-    private array $scopes = ['openid', 'profile', 'email'];
-
-    /**
-     * The protected routes.
-     *
-     * @var array<string>
-     */
-    private array $protectedRoutes = ['/dashboard', '/profile', '/admin'];
-
-    /**
-     * The callback route.
-     *
-     * @var string
-     */
-    private string $callbackRoute = '/auth/callback';
-
-    /**
-     * The logout route.
-     *
-     * @var string
-     */
-    private string $logoutRoute = '/auth/logout';
-
-    /**
-     * The session lifetime.
-     *
-     * @var int
-     */
-    private int $sessionLifetime = 3600;
-
-    /**
-     * Whether to use secure cookies.
-     *
-     * @var bool
-     */
-    private bool $secureCookies = false;
-
-    /**
-     * The HTTP client options.
-     *
-     * @var array
-     */
-    private array $httpClientOptions = [
-        'timeout' => 30,
-        'connect_timeout' => 30,
-        'verify' => false,
-    ];
-
-    /**
      * Creates a new authentication configuration.
      *
-     * @param array $config The configuration array.
+     * @param string $keycloakUrl The Keycloak URL.
+     * @param string $realm The Keycloak realm.
+     * @param string $clientId The client ID.
+     * @param string $clientSecret The client secret.
+     * @param string $redirectUri The redirect URI.
+     * @param array $scopes The OAuth scopes.
+     * @param array $protectedRoutes The protected routes.
+     * @param string $callbackRoute The callback route.
+     * @param string $logoutRoute The logout route.
+     * @param int $sessionLifetime The session lifetime.
+     * @param bool $secureCookies Whether to use secure cookies.
+     * @param array $httpClientOptions The HTTP client options.
      */
-    public function __construct(array $config = [])
-    {
-        if (empty($config['keycloak_url'])) {
-            throw new ConfigurationException('Keycloak URL is required.');
-        }
-        $this->keycloakUrl = $config['keycloak_url'];
-
-        if (!empty($config['realm'])) {
-            $this->realm = $config['realm'];
-        }
-
-        if (empty($config['client_id'])) {
-            throw new ConfigurationException('Client ID is required.');
-        }
-        $this->clientId = $config['client_id'];
-
-        if (empty($config['client_secret'])) {
-            throw new ConfigurationException('Client secret is required.');
-        }
-        $this->clientSecret = $config['client_secret'];
-
-        if (empty($config['redirect_uri'])) {
-            throw new ConfigurationException('Redirect URI is required.');
-        }
-        $this->redirectUri = $config['redirect_uri'];
-
-        if (!empty($config['scopes'])) {
-            $this->scopes = $config['scopes'];
-        }
-
-        if (!empty($config['protected_routes'])) {
-            $this->protectedRoutes = $config['protected_routes'];
-        }
-
-        if (!empty($config['callback_route'])) {
-            $this->callbackRoute = $config['callback_route'];
-        }
-
-        if (!empty($config['logout_route'])) {
-            $this->logoutRoute = $config['logout_route'];
-        }
-
-        if (!empty($config['session_lifetime'])) {
-            $this->sessionLifetime = $config['session_lifetime'];
-        }
-
-        if (isset($config['secure_cookies'])) {
-            $this->secureCookies = $config['secure_cookies'];
-        }
-
-        if (!empty($config['http_client_options']['timeout'])) {
-            $this->httpClientOptions['timeout'] = $config['http_client_options']['timeout'];
-        }
-
-        if (!empty($config['http_client_options']['connect_timeout'])) {
-            $this->httpClientOptions['connect_timeout'] = $config['http_client_options']['connect_timeout'];
-        }
-
-        if (isset($config['http_client_options']['verify'])) {
-            $this->httpClientOptions['verify'] = $config['http_client_options']['verify'];
-        }
+    public function __construct(
+        private string $keycloakUrl = '',
+        private string $realm = 'master',
+        private string $clientId = '',
+        private string $clientSecret = '',
+        private string $redirectUri = '',
+        private array $scopes = ['openid', 'profile', 'email'],
+        private array $protectedRoutes = ['/dashboard', '/profile', '/admin'],
+        private string $callbackRoute = '/auth/callback',
+        private string $logoutRoute = '/auth/logout',
+        private int $sessionLifetime = 3600,
+        private bool $secureCookies = false,
+        private array $httpClientOptions = [
+            'timeout' => 30,
+            'connect_timeout' => 30,
+            'verify' => false,
+        ],
+    ) {
     }
 
     /**

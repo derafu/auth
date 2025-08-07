@@ -6,7 +6,7 @@ services:
         public: false
 
     Derafu\Auth\Contract\AuthConfigurationInterface:
-        class: Derafu\Auth\Configuration\AuthConfiguration
+        factory: Derafu\Auth\Factory\AuthConfigurationFactory::create
         arguments:
             $config:
                 keycloak_url: '%env(default::string:KEYCLOAK_URL)%'
@@ -24,6 +24,7 @@ services:
                     timeout: '%env(default::int:KEYCLOAK_HTTP_TIMEOUT)%'
                     connect_timeout: '%env(default::int:KEYCLOAK_HTTP_CONNECT_TIMEOUT)%'
                     verify: '%env(default::bool:KEYCLOAK_HTTP_VERIFY)%'
+                enabled: '%env(default::bool:KEYCLOAK_ENABLED)%'
 
     Derafu\Auth\Contract\AuthenticationProviderInterface:
         class: Derafu\Auth\Service\KeycloakAuthenticationService
