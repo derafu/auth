@@ -14,6 +14,8 @@ namespace Derafu\TestsAuth\Integration;
 
 use Derafu\Auth\Adapter\KeycloakAuthenticationAdapter;
 use Derafu\Auth\Configuration\AuthConfiguration;
+use Derafu\Auth\Contract\AuthConfigurationInterface;
+use Derafu\Auth\Factory\AuthConfigurationFactory;
 use Derafu\Auth\User\KeycloakUser;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
@@ -28,9 +30,10 @@ use PHPUnit\Framework\TestCase;
 #[CoversClass(KeycloakAuthenticationAdapter::class)]
 #[CoversClass(AuthConfiguration::class)]
 #[CoversClass(KeycloakUser::class)]
+#[CoversClass(AuthConfigurationFactory::class)]
 class KeycloakAuthenticationFlowTest extends TestCase
 {
-    private AuthConfiguration $config;
+    private AuthConfigurationInterface $config;
 
     private MockHandler $mockHandler;
 
@@ -39,7 +42,7 @@ class KeycloakAuthenticationFlowTest extends TestCase
         $this->mockHandler = new MockHandler();
         $handlerStack = HandlerStack::create($this->mockHandler);
 
-        $this->config = new AuthConfiguration([
+        $this->config = AuthConfigurationFactory::create([
             'keycloak_url' => 'http://localhost:8080',
             'realm' => 'test-realm',
             'client_id' => 'test-client',

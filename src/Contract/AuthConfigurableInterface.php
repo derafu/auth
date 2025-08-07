@@ -21,32 +21,9 @@ namespace Derafu\Auth\Contract;
 interface AuthConfigurableInterface
 {
     /**
-     * Sets the authentication configuration.
-     *
-     * @param array $configuration The configuration array.
-     * @return static
-     */
-    public function setConfiguration(array $configuration): static;
-
-    /**
      * Gets the current authentication configuration.
      *
      * @return AuthConfigurationInterface The configuration.
      */
     public function getConfiguration(): AuthConfigurationInterface;
-
-    /**
-     * Resolves and validates the configuration.
-     *
-     * @param array $configuration The raw configuration array.
-     * @return AuthConfigurationInterface The resolved and validated configuration.
-     */
-    public function resolveConfiguration(array $configuration): AuthConfigurationInterface;
-
-    /**
-     * Gets the configuration schema for validation.
-     *
-     * @return array<string,array<string,mixed>> The configuration schema.
-     */
-    public function getConfigurationSchema(): array;
 }

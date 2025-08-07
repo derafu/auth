@@ -139,93 +139,9 @@ class KeycloakAuthenticationService implements AuthenticationProviderInterface, 
     /**
      * {@inheritDoc}
      */
-    public function setConfiguration(array $configuration): static
-    {
-        $this->config = new \Derafu\Auth\Configuration\AuthConfiguration($configuration);
-        $this->initializeProvider();
-
-        return $this;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
     public function getConfiguration(): AuthConfigurationInterface
     {
         return $this->config;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function resolveConfiguration(array $configuration): AuthConfigurationInterface
-    {
-        return new \Derafu\Auth\Configuration\AuthConfiguration($configuration);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function getConfigurationSchema(): array
-    {
-        return [
-            'keycloak_url' => [
-                'type' => 'string',
-                'required' => true,
-            ],
-            'realm' => [
-                'type' => 'string',
-                'required' => false,
-                'default' => 'master',
-            ],
-            'client_id' => [
-                'type' => 'string',
-                'required' => true,
-            ],
-            'client_secret' => [
-                'type' => 'string',
-                'required' => true,
-            ],
-            'redirect_uri' => [
-                'type' => 'string',
-                'required' => true,
-            ],
-            'scopes' => [
-                'type' => 'array',
-                'required' => false,
-                'default' => ['openid'],
-            ],
-            'protected_routes' => [
-                'type' => 'array',
-                'required' => false,
-                'default' => ['/dashboard', '/profile', '/admin'],
-            ],
-            'callback_route' => [
-                'type' => 'string',
-                'required' => false,
-                'default' => '/auth/callback',
-            ],
-            'logout_route' => [
-                'type' => 'string',
-                'required' => false,
-                'default' => '/auth/logout',
-            ],
-            'session_lifetime' => [
-                'type' => 'integer',
-                'required' => false,
-                'default' => 3600,
-            ],
-            'secure_cookies' => [
-                'type' => 'boolean',
-                'required' => false,
-                'default' => false,
-            ],
-            'http_client_options' => [
-                'type' => 'array',
-                'required' => false,
-                'default' => [],
-            ],
-        ];
     }
 
     /**
