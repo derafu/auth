@@ -49,6 +49,3 @@ services:
     # Keycloak controller.
     Derafu\Auth\Provider\Keycloak\KeycloakController:
         public: true
-
-    # Derafu\Auth\Contract\RouteValidatorInterface:
-    #     class: Derafu\Auth\Validator\RouteValidator
