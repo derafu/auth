@@ -10,56 +10,47 @@ declare(strict_types=1);
  * See LICENSE file for more details.
  */
 
-namespace Derafu\Auth\Adapter;
+namespace Derafu\Auth\Provider\Keycloak;
 
+use Derafu\Auth\Contract\AuthorizationInterface;
 use Mezzio\Authentication\UserInterface;
-use Mezzio\Authorization\AuthorizationInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
- * Keycloak authorization adapter for Mezzio.
+ * Keycloak authorization implementation.
  *
- * This adapter implements Mezzio's AuthorizationInterface to provide role-based
- * authorization using Keycloak user roles.
+ * This class handles role-based authorization using Keycloak user roles.
  */
-class KeycloakAuthorizationAdapter implements AuthorizationInterface
+class KeycloakAuthorization implements AuthorizationInterface
 {
-    /**
-     * Creates a new Keycloak authorization adapter.
-     */
-    public function __construct()
-    {
-    }
-
     /**
      * {@inheritDoc}
      */
     public function isGranted(string $role, ServerRequestInterface $request): bool
     {
-        $user = $request->getAttribute(UserInterface::class);
+        $user = $this->getUserFromRequest($request);
 
-        if (!$user instanceof UserInterface) {
+        if (!$user) {
             return false;
         }
 
-        // Check if user has the required role.
         $userRoles = iterator_to_array($user->getRoles());
 
         return in_array($role, $userRoles, true);
     }
 
     /**
-     * Checks if the user has any of the specified roles.
-     *
-     * @param array<string> $roles The roles to check.
-     * @param ServerRequestInterface $request The request.
-     * @return bool True if the user has any of the roles, false otherwise.
+     * {@inheritDoc}
      */
     public function isGrantedAny(array $roles, ServerRequestInterface $request): bool
     {
-        $user = $request->getAttribute(UserInterface::class);
+        if (empty($roles)) {
+            return false;
+        }
 
-        if (!$user instanceof UserInterface) {
+        $user = $this->getUserFromRequest($request);
+
+        if (!$user) {
             return false;
         }
 
@@ -75,17 +66,17 @@ class KeycloakAuthorizationAdapter implements AuthorizationInterface
     }
 
     /**
-     * Checks if the user has all of the specified roles.
-     *
-     * @param array<string> $roles The roles to check.
-     * @param ServerRequestInterface $request The request.
-     * @return bool True if the user has all of the roles, false otherwise.
+     * {@inheritDoc}
      */
     public function isGrantedAll(array $roles, ServerRequestInterface $request): bool
     {
-        $user = $request->getAttribute(UserInterface::class);
+        if (empty($roles)) {
+            return true;
+        }
 
-        if (!$user instanceof UserInterface) {
+        $user = $this->getUserFromRequest($request);
+
+        if (!$user) {
             return false;
         }
 
@@ -98,5 +89,18 @@ class KeycloakAuthorizationAdapter implements AuthorizationInterface
         }
 
         return true;
+    }
+
+    /**
+     * Gets the user from the request.
+     *
+     * @param ServerRequestInterface $request The request.
+     * @return UserInterface|null The user or null if not found.
+     */
+    private function getUserFromRequest(ServerRequestInterface $request): ?UserInterface
+    {
+        $user = $request->getAttribute('user');
+
+        return $user instanceof UserInterface ? $user : null;
     }
 }

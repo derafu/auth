@@ -10,22 +10,22 @@ declare(strict_types=1);
  * See LICENSE file for more details.
  */
 
-namespace Derafu\Auth\User;
+namespace Derafu\Auth\Provider\Keycloak;
 
-use Mezzio\Authentication\UserInterface;
+use Derafu\Auth\Contract\UserInterface;
 
 /**
  * Keycloak user implementation.
  *
  * This class represents a user authenticated through Keycloak and implements
- * Mezzio's UserInterface to provide user information to the application.
+ * our UserInterface to provide user information to the application.
  */
 class KeycloakUser implements UserInterface
 {
     /**
      * Creates a new Keycloak user.
      *
-     * @param array $userInfo The user information from Keycloak.
+     * @param array<string, mixed> $userInfo The user information from Keycloak.
      */
     public function __construct(
         private readonly array $userInfo
@@ -55,14 +55,16 @@ class KeycloakUser implements UserInterface
         $resourceAccess = $this->userInfo['resource_access'] ?? [];
 
         // Add realm roles.
-        if (isset($realmAccess['roles'])) {
+        if (isset($realmAccess['roles']) && is_array($realmAccess['roles'])) {
             $roles = array_merge($roles, $realmAccess['roles']);
         }
 
         // Add resource roles.
-        foreach ($resourceAccess as $resource => $access) {
-            if (isset($access['roles'])) {
-                $roles = array_merge($roles, $access['roles']);
+        if (is_array($resourceAccess)) {
+            foreach ($resourceAccess as $resource => $access) {
+                if (is_array($access) && isset($access['roles']) && is_array($access['roles'])) {
+                    $roles = array_merge($roles, $access['roles']);
+                }
             }
         }
 
@@ -83,6 +85,14 @@ class KeycloakUser implements UserInterface
     public function getDetails(): array
     {
         return $this->userInfo;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function isAnonymous(): bool
+    {
+        return false; // Keycloak users are always authenticated, never anonymous.
     }
 
     /**

@@ -1,3 +1,0 @@
-auth_callback:
-    path: /auth/callback
-    handler: Derafu\Auth\Controller\CallbackController::handle

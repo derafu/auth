@@ -1,0 +1,3 @@
+auth_callback:
+    path: /auth/callback
+    handler: Derafu\Auth\Provider\Keycloak\KeycloakController::handle

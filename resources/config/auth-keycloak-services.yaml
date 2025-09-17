@@ -5,8 +5,26 @@ services:
         autoconfigure: true
         public: false
 
-    Derafu\Auth\Contract\AuthConfigurationInterface:
-        factory: Derafu\Auth\Factory\AuthConfigurationFactory::create
+    # Session configuration.
+    Mezzio\Session\SessionMiddleware:
+        arguments:
+            $persistence: '@Mezzio\Session\SessionPersistenceInterface'
+
+    Mezzio\Session\SessionPersistenceInterface:
+        class: Mezzio\Session\Ext\PhpSessionPersistence
+
+    # Flash messages configuration.
+    Mezzio\Flash\FlashMessageMiddleware: ~
+
+    # Authentication configuration.
+    Mezzio\Authentication\AuthenticationMiddleware: ~
+    Mezzio\Authentication\AuthenticationInterface:
+        class: Derafu\Auth\Provider\Keycloak\KeycloakAuthentication
+
+    # Keycloak configuration.
+    Derafu\Auth\Provider\Keycloak\KeycloakUserRepository: ~
+    Derafu\Auth\Provider\Keycloak\KeycloakSessionManager: ~
+    Derafu\Auth\Provider\Keycloak\KeycloakConfiguration:
         arguments:
             $config:
                 keycloak_url: '%env(default::string:KEYCLOAK_URL)%'
@@ -18,6 +36,8 @@ services:
                 protected_routes: '%env(default::json:KEYCLOAK_PROTECTED_ROUTES)%'
                 callback_route: '%env(default::string:KEYCLOAK_CALLBACK_ROUTE)%'
                 logout_route: '%env(default::string:KEYCLOAK_LOGOUT_ROUTE)%'
+                logout_redirect_route: '%env(default::string:KEYCLOAK_LOGOUT_REDIRECT_ROUTE)%'
+                unauthorized_redirect_route: '%env(default::string:KEYCLOAK_UNAUTHORIZED_REDIRECT_ROUTE)%'
                 session_lifetime: '%env(default::int:KEYCLOAK_SESSION_LIFETIME)%'
                 secure_cookies: '%env(default::bool:KEYCLOAK_SECURE_COOKIES)%'
                 http_client_options:
@@ -26,16 +46,9 @@ services:
                     verify: '%env(default::bool:KEYCLOAK_HTTP_VERIFY)%'
                 enabled: '%env(default::bool:KEYCLOAK_ENABLED)%'
 
-    Derafu\Auth\Contract\AuthenticationProviderInterface:
-        class: Derafu\Auth\Service\KeycloakAuthenticationService
-
-    Derafu\Auth\Contract\SessionManagerInterface:
-        class: Derafu\Auth\Service\SessionService
-
-    Derafu\Auth\Contract\RouteValidatorInterface:
-        class: Derafu\Auth\Validator\RouteValidator
-
-    Derafu\Auth\Middleware\AuthenticationMiddleware: ~
-
-    Derafu\Auth\Controller\CallbackController:
+    # Keycloak controller.
+    Derafu\Auth\Provider\Keycloak\KeycloakController:
         public: true
+
+    # Derafu\Auth\Contract\RouteValidatorInterface:
+    #     class: Derafu\Auth\Validator\RouteValidator
