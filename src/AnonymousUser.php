@@ -35,7 +35,7 @@ class AnonymousUser implements UserInterface
      */
     public function getRoles(): iterable
     {
-        return [];
+        return ['anonymous'];
     }
 
     /**

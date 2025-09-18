@@ -21,6 +21,14 @@ services:
     Mezzio\Authentication\AuthenticationInterface:
         class: Derafu\Auth\Provider\Keycloak\KeycloakAuthentication
 
+    # Authorization configuration.
+    Mezzio\Authorization\AuthorizationMiddleware:
+        arguments:
+            $responseFactory: '@Derafu\Auth\Provider\Keycloak\KeycloakResponseFactory'
+    Mezzio\Authorization\AuthorizationInterface:
+        class: Derafu\Auth\Provider\Keycloak\KeycloakAuthorization
+    Derafu\Auth\Provider\Keycloak\KeycloakResponseFactory: ~
+
     # Keycloak configuration.
     Derafu\Auth\Provider\Keycloak\KeycloakUserRepository: ~
     Derafu\Auth\Provider\Keycloak\KeycloakSessionManager: ~

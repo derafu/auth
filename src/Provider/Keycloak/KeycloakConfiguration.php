@@ -81,10 +81,20 @@ class KeycloakConfiguration implements ConfigurationInterface
         $this->scopes = $config['scopes']
             ?? ['openid', 'profile', 'email']
         ;
-        $this->protectedRoutes = $config['protected_routes']
+        $protectedRoutes = $config['protected_routes']
             ?? $config['protectedRoutes']
-            ?? ['/dashboard', '/profile', '/admin']
+            ?? []
         ;
+        foreach ($protectedRoutes as $key => $value) {
+            if (is_int($key)) {
+                $route = $value;
+                $roles = [];
+            } else {
+                $route = $key;
+                $roles = is_array($value) ? $value : [$value];
+            }
+            $this->protectedRoutes[$route] = $roles;
+        }
         $this->callbackRoute = $config['callback_route']
             ?? $config['callbackRoute']
             ?? '/auth/callback'
@@ -282,5 +292,55 @@ class KeycloakConfiguration implements ConfigurationInterface
     public function isEnabled(): bool
     {
         return $this->enabled;
+    }
+
+    /**
+     * Gets the allowed roles for the given path.
+     *
+     * @param string $path The path to check.
+     * @return array<string> The required roles.
+     */
+    public function allowedRoles(string $path): array
+    {
+        // If the authentication is not enabled, return false.
+        if (!$this->isEnabled()) {
+            return [];
+        }
+
+        // Check if path is in protected paths.
+        $protectedRoutes = $this->getProtectedRoutes();
+        foreach ($protectedRoutes as $route => $roles) {
+            if (str_starts_with($path, $route)) { // Simple route match.
+                return $roles;
+            }
+        }
+
+        // If no route is matched, return all roles.
+        return [];
+    }
+
+    /**
+     * Checks if the given path requires authentication.
+     *
+     * @param string $path The path to check.
+     * @return bool True if authentication is required, false otherwise.
+     */
+    public function requiresAuth(string $path): bool
+    {
+        // If the authentication is not enabled, return false.
+        if (!$this->isEnabled()) {
+            return false;
+        }
+
+        // Check if path is in protected paths.
+        $protectedRoutes = $this->getProtectedRoutes();
+        foreach ($protectedRoutes as $route => $roles) {
+            if (str_starts_with($path, $route)) { // Simple route match.
+                return true;
+            }
+        }
+
+        // If no route is matched, no authentication is required.
+        return false;
     }
 }

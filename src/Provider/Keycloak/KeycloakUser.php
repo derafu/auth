@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Derafu\Auth\Provider\Keycloak;
 
 use Derafu\Auth\Contract\UserInterface;
+use Derafu\Auth\Exception\AuthenticationException;
 
 /**
  * Keycloak user implementation.
@@ -22,6 +23,13 @@ use Derafu\Auth\Contract\UserInterface;
  */
 class KeycloakUser implements UserInterface
 {
+    /**
+     * The user roles.
+     *
+     * @var array<string>
+     */
+    private array $roles;
+
     /**
      * Creates a new Keycloak user.
      *
@@ -37,11 +45,8 @@ class KeycloakUser implements UserInterface
      */
     public function getIdentity(): string
     {
-        return
-            $this->userInfo['sub']
-            ?? $this->userInfo['id']
-            ?? $this->userInfo['email']
-            ?? 'unknown'
+        return $this->userInfo['sub']
+            ?? throw new AuthenticationException('User identity not found in keycloak user info.')
         ;
     }
 
@@ -49,6 +54,20 @@ class KeycloakUser implements UserInterface
      * {@inheritDoc}
      */
     public function getRoles(): iterable
+    {
+        if (!isset($this->roles)) {
+            $this->roles = $this->extractRoles();
+        }
+
+        return $this->roles;
+    }
+
+    /**
+     * Extracts the user roles from the user information.
+     *
+     * @return array<string> The user roles.
+     */
+    private function extractRoles(): array
     {
         $roles = $this->userInfo['roles'] ?? [];
         $realmAccess = $this->userInfo['realm_access'] ?? [];
@@ -96,16 +115,6 @@ class KeycloakUser implements UserInterface
     }
 
     /**
-     * Gets the user's email address.
-     *
-     * @return string|null The email address or null if not available.
-     */
-    public function getEmail(): ?string
-    {
-        return $this->userInfo['email'] ?? null;
-    }
-
-    /**
      * Gets the user's name.
      *
      * @return string|null The name or null if not available.
@@ -140,6 +149,46 @@ class KeycloakUser implements UserInterface
     }
 
     /**
+     * Gets the user's email address.
+     *
+     * @return string|null The email address or null if not available.
+     */
+    public function getEmail(): ?string
+    {
+        return $this->userInfo['email'] ?? null;
+    }
+
+    /**
+     * Checks if the user's email address is verified.
+     *
+     * @return bool True if the email address is verified, false otherwise.
+     */
+    public function isEmailVerified(): bool
+    {
+        return $this->userInfo['email_verified'] ?? false;
+    }
+
+    /**
+     * Gets the user's username.
+     *
+     * @return string|null The username or null if not available.
+     */
+    public function getUsername(): ?string
+    {
+        return $this->userInfo['preferred_username'] ?? $this->getEmail();
+    }
+
+    /**
+     * Gets the user's locale.
+     *
+     * @return string|null The locale or null if not available.
+     */
+    public function getLocale(): ?string
+    {
+        return $this->userInfo['locale'] ?? null;
+    }
+
+    /**
      * Checks if the user has a specific role.
      *
      * @param string $role The role to check.
@@ -147,9 +196,7 @@ class KeycloakUser implements UserInterface
      */
     public function hasRole(string $role): bool
     {
-        $roles = iterator_to_array($this->getRoles());
-
-        return in_array($role, $roles, true);
+        return in_array($role, $this->getRoles(), true);
     }
 
     /**
@@ -160,7 +207,7 @@ class KeycloakUser implements UserInterface
      */
     public function hasAnyRole(array $roles): bool
     {
-        $userRoles = iterator_to_array($this->getRoles());
+        $userRoles = $this->getRoles();
         foreach ($roles as $role) {
             if (in_array($role, $userRoles, true)) {
                 return true;
@@ -168,5 +215,16 @@ class KeycloakUser implements UserInterface
         }
 
         return false;
+    }
+
+    /**
+     * Checks if the user has all of the specified roles.
+     *
+     * @param array<string> $roles The roles to check.
+     * @return bool True if the user has all of the roles, false otherwise.
+     */
+    public function hasAllRoles(array $roles): bool
+    {
+        return count(array_intersect($roles, $this->getRoles())) === count($roles);
     }
 }

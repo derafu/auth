@@ -24,71 +24,92 @@ use Psr\Http\Message\ServerRequestInterface;
 class KeycloakAuthorization implements AuthorizationInterface
 {
     /**
-     * {@inheritDoc}
+     * The attribute name used to store the matched route.
      */
-    public function isGranted(string $role, ServerRequestInterface $request): bool
-    {
-        $user = $this->getUserFromRequest($request);
+    public const ROUTE_ATTRIBUTE = 'derafu.route';
 
-        if (!$user) {
-            return false;
-        }
-
-        $userRoles = iterator_to_array($user->getRoles());
-
-        return in_array($role, $userRoles, true);
+    /**
+     * Creates a new Keycloak authorization implementation.
+     *
+     * @param KeycloakConfiguration $config The configuration.
+     */
+    public function __construct(
+        private readonly KeycloakConfiguration $config,
+        private readonly string $routeAttribute = self::ROUTE_ATTRIBUTE
+    ) {
     }
 
     /**
      * {@inheritDoc}
      */
-    public function isGrantedAny(array $roles, ServerRequestInterface $request): bool
+    public function isGranted(string $userRole, ServerRequestInterface $request): bool
     {
-        if (empty($roles)) {
-            return false;
+        $path = $request->getUri()->getPath();
+
+        if (!$this->config->requiresAuth($path)) {
+            return true;
         }
 
-        $user = $this->getUserFromRequest($request);
-
-        if (!$user) {
-            return false;
+        $allowedRoles = $this->config->allowedRoles($path);
+        if (!empty($allowedRoles)) {
+            return in_array($userRole, $allowedRoles);
         }
 
-        $userRoles = iterator_to_array($user->getRoles());
+        $route = $request->getAttribute($this->routeAttribute);
 
-        foreach ($roles as $role) {
-            if (in_array($role, $userRoles, true)) {
-                return true;
-            }
+        if (!$route) {
+            return true; // If no route is matched, the user is granted.
         }
 
-        return false;
+        return $route->isGranted($userRole);
     }
 
     /**
      * {@inheritDoc}
      */
-    public function isGrantedAll(array $roles, ServerRequestInterface $request): bool
+    public function isGrantedAny(array $requiredRoles, ServerRequestInterface $request): bool
     {
-        if (empty($roles)) {
+        $path = $request->getUri()->getPath();
+
+        if (!$this->config->requiresAuth($path)) {
+            return true;
+        }
+
+        if (empty($requiredRoles)) {
+            return false;
+        }
+
+        $user = $this->getUserFromRequest($request);
+
+        if (!$user || !$user instanceof KeycloakUser) {
+            return false;
+        }
+
+        return $user->hasAnyRole($requiredRoles);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function isGrantedAll(array $requiredRoles, ServerRequestInterface $request): bool
+    {
+        $path = $request->getUri()->getPath();
+
+        if (!$this->config->requiresAuth($path)) {
+            return true;
+        }
+
+        if (empty($requiredRoles)) {
             return true;
         }
 
         $user = $this->getUserFromRequest($request);
 
-        if (!$user) {
+        if (!$user || !$user instanceof KeycloakUser) {
             return false;
         }
 
-        $userRoles = iterator_to_array($user->getRoles());
-
-        foreach ($roles as $role) {
-            if (!in_array($role, $userRoles, true)) {
-                return false;
-            }
-        }
-
-        return true;
+        return $user->hasAllRoles($requiredRoles);
     }
 
     /**
@@ -99,7 +120,7 @@ class KeycloakAuthorization implements AuthorizationInterface
      */
     private function getUserFromRequest(ServerRequestInterface $request): ?UserInterface
     {
-        $user = $request->getAttribute('user');
+        $user = $request->getAttribute(UserInterface::class);
 
         return $user instanceof UserInterface ? $user : null;
     }

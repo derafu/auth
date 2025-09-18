@@ -56,7 +56,7 @@ final class KeycloakAuthentication implements AuthenticationInterface
         $user = $this->getUserFromSession($session);
 
         // If the path is not protected, return the user (authenticated or anonymous).
-        if (!$this->requiresAuth($path)) {
+        if (!$this->config->requiresAuth($path)) {
             return $user;
         }
 
@@ -276,29 +276,5 @@ final class KeycloakAuthentication implements AuthenticationInterface
     private function isLogoutPath(string $path): bool
     {
         return $path === $this->config->getLogoutRoute();
-    }
-
-    /**
-     * Checks if the given path requires authentication.
-     *
-     * @param string $path The path to check.
-     * @return bool True if authentication is required, false otherwise.
-     */
-    private function requiresAuth(string $path): bool
-    {
-        // If the authentication is not enabled, return false.
-        if (!$this->config->isEnabled()) {
-            return false;
-        }
-
-        // Check if path is in protected paths.
-        $publicPaths = $this->config->getProtectedRoutes();
-        foreach ($publicPaths as $publicPath) {
-            if (str_starts_with($path, $publicPath)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

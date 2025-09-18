@@ -68,8 +68,13 @@ class KeycloakUserRepository implements UserRepositoryInterface
         try {
             $token = new AccessToken(['access_token' => $accessToken]);
             $user = $this->provider->getResourceOwner($token);
+            $userInfo = $user->toArray();
 
-            return $user->toArray();
+            // Get the extra data from the JWT token payload, including roles.
+            $tokenPayload = $this->parseJwtPayload($accessToken);
+            $userInfo = array_merge($userInfo, $tokenPayload);
+
+            return $userInfo;
         } catch (Exception $e) {
             throw new AuthenticationException(
                 'Failed to get user info: ' . $e->getMessage(),
@@ -248,5 +253,42 @@ class KeycloakUserRepository implements UserRepositoryInterface
             . $this->config->getRealm()
             . '/protocol/openid-connect/userinfo'
         ;
+    }
+
+    /**
+     * Parses the JWT token payload to extract roles and other claims.
+     *
+     * @param string $jwt The JWT token.
+     * @return array<string, mixed> The parsed payload.
+     * @throws AuthenticationException If JWT parsing fails.
+     */
+    private function parseJwtPayload(string $jwt): array
+    {
+        try {
+            // Split JWT into parts (header.payload.signature)
+            $parts = explode('.', $jwt);
+            if (count($parts) !== 3) {
+                throw new AuthenticationException('Invalid JWT token format.');
+            }
+
+            // Decode the payload (second part)
+            $payload = base64_decode(strtr($parts[1], '-_', '+/'));
+            if ($payload === false) {
+                throw new AuthenticationException('Failed to decode JWT payload.');
+            }
+
+            $decoded = json_decode($payload, true);
+            if ($decoded === null) {
+                throw new AuthenticationException('Failed to parse JWT payload JSON.');
+            }
+
+            return $decoded;
+        } catch (Exception $e) {
+            throw new AuthenticationException(
+                'Failed to parse JWT token: ' . $e->getMessage(),
+                0,
+                $e
+            );
+        }
     }
 }
