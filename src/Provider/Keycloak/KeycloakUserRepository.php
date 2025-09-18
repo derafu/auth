@@ -273,7 +273,7 @@ class KeycloakUserRepository implements UserRepositoryInterface
 
             // Decode the payload (second part)
             $payload = base64_decode(strtr($parts[1], '-_', '+/'));
-            if ($payload === false) {
+            if (!$payload) {
                 throw new AuthenticationException('Failed to decode JWT payload.');
             }
 
