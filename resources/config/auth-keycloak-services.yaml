@@ -1,20 +1,12 @@
+imports:
+    - session-services.yaml
+
 services:
 
     _defaults:
         autowire: true
         autoconfigure: true
         public: false
-
-    # Session configuration.
-    Mezzio\Session\SessionMiddleware:
-        arguments:
-            $persistence: '@Mezzio\Session\SessionPersistenceInterface'
-
-    Mezzio\Session\SessionPersistenceInterface:
-        class: Mezzio\Session\Ext\PhpSessionPersistence
-
-    # Flash messages configuration.
-    Mezzio\Flash\FlashMessageMiddleware: ~
 
     # Authentication configuration.
     Mezzio\Authentication\AuthenticationMiddleware: ~
