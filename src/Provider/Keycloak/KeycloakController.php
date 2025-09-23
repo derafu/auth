@@ -54,18 +54,28 @@ class KeycloakController implements RequestHandlerInterface
             throw new AuthenticationException($queryParams['error_description'], 400);
         }
 
-        // Verify state parameter.
-        $state = $queryParams['state'] ?? '';
+        // Verify session.
         $session = $request->getAttribute(SessionMiddleware::SESSION_ATTRIBUTE);
-
         if (!$session instanceof SessionInterface) {
             throw new AuthenticationException('Session not available.', 500);
         }
 
+        // Verify state parameter in session.
         $storedState = $this->sessionManager->getState($session);
+        if (!$storedState) {
+            throw new AuthenticationException(
+                'No state parameter found in the session.',
+                400
+            );
+        }
 
-        if (!$storedState || $state !== $storedState) {
-            throw new AuthenticationException('Invalid state parameter.', 400);
+        // Verify state parameter in query params.
+        $state = $queryParams['state'] ?? '';
+        if ($state !== $storedState) {
+            throw new AuthenticationException(
+                'State parameter does not match the stored state in the session.',
+                400
+            );
         }
 
         // Get authorization code.
