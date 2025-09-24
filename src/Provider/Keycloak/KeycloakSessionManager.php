@@ -12,6 +12,8 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Provider\Keycloak;
 
+use Derafu\Auth\Contract\SessionManagerInterface;
+use Derafu\Auth\SessionManager;
 use Mezzio\Session\SessionInterface;
 
 /**
@@ -19,8 +21,29 @@ use Mezzio\Session\SessionInterface;
  *
  * Handles OAuth2 session data storage and retrieval for Keycloak.
  */
-class KeycloakSessionManager
+class KeycloakSessionManager extends SessionManager implements SessionManagerInterface
 {
+    /**
+     * {@inheritDoc}
+     */
+    public function hasAuthInfo(SessionInterface $session): bool
+    {
+        return $session->has('oauth2_token');
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function clearSession(SessionInterface $session): void
+    {
+        $session->unset('oauth2_token');
+        $session->unset('oauth2_refresh_token');
+        $session->unset('oauth2_expiry');
+        $session->unset('oauth2_state');
+        $this->clearUserInfo($session);
+        $this->clearRedirectUrl($session);
+    }
+
     /**
      * Stores authentication information in the session.
      *
@@ -36,39 +59,6 @@ class KeycloakSessionManager
         if (isset($tokenInfo['expires'])) {
             $session->set('oauth2_expiry', $tokenInfo['expires']);
         }
-    }
-
-    /**
-     * Stores user information in the session.
-     *
-     * @param SessionInterface $session The session to store the info in.
-     * @param array<string, mixed> $userInfo The user information to store.
-     */
-    public function storeUserInfo(SessionInterface $session, array $userInfo): void
-    {
-        $session->set('user', $userInfo);
-    }
-
-    /**
-     * Gets the stored user information from the session.
-     *
-     * @param SessionInterface $session The session to get the info from.
-     * @return array<string, mixed>|null The user information or null if not found.
-     */
-    public function getUserInfo(SessionInterface $session): ?array
-    {
-        return $session->get('user');
-    }
-
-    /**
-     * Checks if authentication information exists in the session.
-     *
-     * @param SessionInterface $session The session to check.
-     * @return bool True if auth info exists, false otherwise.
-     */
-    public function hasAuthInfo(SessionInterface $session): bool
-    {
-        return $session->has('oauth2_token');
     }
 
     /**
@@ -123,42 +113,5 @@ class KeycloakSessionManager
     public function clearState(SessionInterface $session): void
     {
         $session->unset('oauth2_state');
-    }
-
-    /**
-     * Stores the redirect URL for after authentication.
-     *
-     * @param SessionInterface $session The session to store the URL in.
-     * @param string $url The redirect URL to store.
-     */
-    public function storeRedirectUrl(SessionInterface $session, string $url): void
-    {
-        $session->set('auth_redirect', $url);
-    }
-
-    /**
-     * Gets the stored redirect URL.
-     *
-     * @param SessionInterface $session The session to get the URL from.
-     * @return string|null The redirect URL or null if not found.
-     */
-    public function getRedirectUrl(SessionInterface $session): ?string
-    {
-        return $session->get('auth_redirect');
-    }
-
-    /**
-     * Clears all authentication information from the session.
-     *
-     * @param SessionInterface $session The session to clear.
-     */
-    public function clearSession(SessionInterface $session): void
-    {
-        $session->unset('oauth2_token');
-        $session->unset('oauth2_refresh_token');
-        $session->unset('oauth2_expiry');
-        $session->unset('user');
-        $session->unset('oauth2_state');
-        $session->unset('auth_redirect');
     }
 }

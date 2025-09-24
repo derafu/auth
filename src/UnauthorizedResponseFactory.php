@@ -10,15 +10,15 @@ declare(strict_types=1);
  * See LICENSE file for more details.
  */
 
-namespace Derafu\Auth\Provider\Keycloak;
+namespace Derafu\Auth;
 
 use Laminas\Diactoros\Response\JsonResponse;
 use Psr\Http\Message\ResponseInterface as PsrResponseInterface;
 
 /**
- * Keycloak response factory for unauthorized responses.
+ * Unauthorized response factory.
  */
-class KeycloakResponseFactory
+class UnauthorizedResponseFactory
 {
     public function __invoke(): PsrResponseInterface
     {

@@ -12,45 +12,74 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Provider\Keycloak;
 
+use Derafu\Auth\Abstract\AbstractProviderConfiguration;
 use Derafu\Auth\Contract\ConfigurationInterface;
 use Derafu\Auth\Exception\ConfigurationException;
 
 /**
  * Configuration class for Keycloak authentication settings.
  */
-class KeycloakConfiguration implements ConfigurationInterface
+class KeycloakConfiguration extends AbstractProviderConfiguration implements ConfigurationInterface
 {
-    private string $keycloakUrl;
+    /**
+     * The Keycloak URL.
+     *
+     * @var string
+     */
+    private string $keycloakUrl = '';
 
-    private string $realm;
+    /**
+     * The Keycloak realm.
+     *
+     * @var string
+     */
+    private string $realm = 'master';
 
-    private string $clientId;
+    /**
+     * The Keycloak client ID.
+     *
+     * @var string
+     */
+    private string $clientId = '';
 
-    private string $clientSecret;
+    /**
+     * The Keycloak client secret.
+     *
+     * @var string
+     */
+    private string $clientSecret = '';
 
-    private string $redirectUri;
+    /**
+     * The Keycloak redirect URI.
+     *
+     * @var string
+     */
+    private string $redirectUri = '';
 
-    private array $scopes;
+    /**
+     * The Keycloak scopes.
+     *
+     * @var array
+     */
+    private array $scopes = ['openid', 'profile', 'email'];
 
-    private array $protectedRoutes;
+    /**
+     * The Keycloak callback route.
+     *
+     * @var string
+     */
+    private string $callbackRoute = '/auth/callback';
 
-    private string $callbackRoute;
-
-    private string $logoutRoute;
-
-    private string $loginRedirectRoute;
-
-    private string $logoutRedirectRoute;
-
-    private string $unauthorizedRedirectRoute;
-
-    private int $sessionLifetime;
-
-    private bool $secureCookies;
-
-    private array $httpClientOptions;
-
-    private bool $enabled;
+    /**
+     * The Keycloak HTTP client options.
+     *
+     * @var array
+     */
+    private array $httpClientOptions = [
+        'timeout' => 30,
+        'connect_timeout' => 30,
+        'verify' => false,
+    ];
 
     /**
      * Creates a new Keycloak configuration.
@@ -59,81 +88,31 @@ class KeycloakConfiguration implements ConfigurationInterface
      */
     public function __construct(array $config)
     {
+        parent::__construct($config);
+
         $this->keycloakUrl = $config['keycloak_url']
-            ?? $config['keycloakUrl']
-            ?? ''
+            ?? $this->keycloakUrl
         ;
         $this->realm = $config['realm']
-            ?? 'master'
+            ?? $this->realm
         ;
         $this->clientId = $config['client_id']
-            ?? $config['clientId']
-            ?? ''
+            ?? $this->clientId
         ;
         $this->clientSecret = $config['client_secret']
-            ?? $config['clientSecret']
-            ?? ''
+            ?? $this->clientSecret
         ;
         $this->redirectUri = $config['redirect_uri']
-            ?? $config['redirectUri']
-            ?? ''
+            ?? $this->redirectUri
         ;
         $this->scopes = $config['scopes']
-            ?? ['openid', 'profile', 'email']
+            ?? $this->scopes
         ;
-        $protectedRoutes = $config['protected_routes']
-            ?? $config['protectedRoutes']
-            ?? []
-        ;
-        foreach ($protectedRoutes as $key => $value) {
-            if (is_int($key)) {
-                $route = $value;
-                $roles = [];
-            } else {
-                $route = $key;
-                $roles = is_array($value) ? $value : [$value];
-            }
-            $this->protectedRoutes[$route] = $roles;
-        }
         $this->callbackRoute = $config['callback_route']
-            ?? $config['callbackRoute']
-            ?? '/auth/callback'
-        ;
-        $this->logoutRoute = $config['logout_route']
-            ?? $config['logoutRoute']
-            ?? '/auth/logout'
-        ;
-        $this->loginRedirectRoute = $config['login_redirect_route']
-            ?? $config['loginRedirectRoute']
-            ?? '/'
-        ;
-        $this->logoutRedirectRoute = $config['logout_redirect_route']
-            ?? $config['logoutRedirectRoute']
-            ?? '/'
-        ;
-        $this->unauthorizedRedirectRoute = $config['unauthorized_redirect_route']
-            ?? $config['unauthorizedRedirectRoute']
-            ?? '/'
-        ;
-        $this->sessionLifetime = $config['session_lifetime']
-            ?? $config['sessionLifetime']
-            ?? 3600
-        ;
-        $this->secureCookies = $config['secure_cookies']
-            ?? $config['secureCookies']
-            ?? false
+            ?? $this->callbackRoute
         ;
         $this->httpClientOptions = $config['http_client_options']
-            ?? $config['httpClientOptions']
-            ?? [
-                'timeout' => 30,
-                'connect_timeout' => 30,
-                'verify' => false,
-            ]
-        ;
-        $this->enabled = $config['enabled']
-            ?? $config['enabled']
-            ?? true
+            ?? $this->httpClientOptions
         ;
     }
 
@@ -168,23 +147,20 @@ class KeycloakConfiguration implements ConfigurationInterface
      */
     public function get(string $key, mixed $default = null): mixed
     {
+        $value = parent::get($key, $default);
+        if ($value !== null) {
+            return $value;
+        }
+
         return match ($key) {
-            'keycloak_url', 'keycloakUrl' => $this->keycloakUrl,
-            'realm' => $this->realm,
-            'client_id', 'clientId' => $this->clientId,
-            'client_secret', 'clientSecret' => $this->clientSecret,
-            'redirect_uri', 'redirectUri' => $this->redirectUri,
-            'scopes' => $this->scopes,
-            'protected_routes', 'protectedRoutes' => $this->protectedRoutes,
-            'callback_route', 'callbackRoute' => $this->callbackRoute,
-            'logout_route', 'logoutRoute' => $this->logoutRoute,
-            'login_redirect_route', 'loginRedirectRoute' => $this->loginRedirectRoute,
-            'logout_redirect_route', 'logoutRedirectRoute' => $this->logoutRedirectRoute,
-            'unauthorized_redirect_route', 'unauthorizedRedirectRoute' => $this->unauthorizedRedirectRoute,
-            'session_lifetime', 'sessionLifetime' => $this->sessionLifetime,
-            'secure_cookies', 'secureCookies' => $this->secureCookies,
-            'http_client_options', 'httpClientOptions' => $this->httpClientOptions,
-            'enabled' => $this->enabled,
+            'keycloak_url' => $this->getKeycloakUrl(),
+            'realm' => $this->getRealm(),
+            'client_id' => $this->getClientId(),
+            'client_secret' => $this->clientSecret,
+            'redirect_uri' => $this->getRedirectUri(),
+            'scopes' => $this->getScopes(),
+            'callback_route' => $this->getCallbackRoute(),
+            'http_client_options' => $this->getHttpClientOptions(),
             default => $default,
         };
     }
@@ -194,153 +170,105 @@ class KeycloakConfiguration implements ConfigurationInterface
      */
     public function toArray(): array
     {
-        return [
-            'keycloak_url' => $this->keycloakUrl,
-            'realm' => $this->realm,
-            'client_id' => $this->clientId,
-            'client_secret' => $this->clientSecret,
-            'redirect_uri' => $this->redirectUri,
-            'scopes' => $this->scopes,
-            'protected_routes' => $this->protectedRoutes,
-            'callback_route' => $this->callbackRoute,
-            'logout_route' => $this->logoutRoute,
-            'login_redirect_route' => $this->loginRedirectRoute,
-            'logout_redirect_route' => $this->logoutRedirectRoute,
-            'unauthorized_redirect_route' => $this->unauthorizedRedirectRoute,
-            'session_lifetime' => $this->sessionLifetime,
-            'secure_cookies' => $this->secureCookies,
-            'http_client_options' => $this->httpClientOptions,
-            'enabled' => $this->enabled,
-        ];
+        $array = parent::toArray();
+
+        return array_merge($array, [
+            'keycloak_url' => $this->getKeycloakUrl(),
+            'realm' => $this->getRealm(),
+            'client_id' => $this->getClientId(),
+            'client_secret' => $this->getClientSecret(),
+            'redirect_uri' => $this->getRedirectUri(),
+            'scopes' => $this->getScopes(),
+            'callback_route' => $this->getCallbackRoute(),
+            'http_client_options' => $this->getHttpClientOptions(),
+        ]);
     }
 
+    /**
+     * Gets the Keycloak URL.
+     *
+     * @return string The Keycloak URL.
+     */
     public function getKeycloakUrl(): string
     {
         return $this->keycloakUrl;
     }
 
+    /**
+     * Gets the Keycloak realm.
+     *
+     * @return string The Keycloak realm.
+     */
     public function getRealm(): string
     {
         return $this->realm;
     }
 
+    /**
+     * Gets the Keycloak client ID.
+     *
+     * @return string The Keycloak client ID.
+     */
     public function getClientId(): string
     {
         return $this->clientId;
     }
 
+    /**
+     * Gets the Keycloak client secret.
+     *
+     * @return string The Keycloak client secret.
+     */
     public function getClientSecret(): string
     {
         return $this->clientSecret;
     }
 
+    /**
+     * Gets the Keycloak redirect URI.
+     *
+     * @return string The Keycloak redirect URI.
+     */
     public function getRedirectUri(): string
     {
         return $this->redirectUri;
     }
 
+    /**
+     * Gets the Keycloak scopes.
+     *
+     * @return array The Keycloak scopes.
+     */
     public function getScopes(): array
     {
         return $this->scopes;
     }
 
-    public function getProtectedRoutes(): array
-    {
-        return $this->protectedRoutes;
-    }
-
+    /**
+     * Gets the Keycloak callback route.
+     *
+     * @return string The Keycloak callback route.
+     */
     public function getCallbackRoute(): string
     {
         return $this->callbackRoute;
     }
 
-    public function getLogoutRoute(): string
-    {
-        return $this->logoutRoute;
-    }
-
-    public function getLoginRedirectRoute(): string
-    {
-        return $this->loginRedirectRoute;
-    }
-
-    public function getLogoutRedirectRoute(): string
-    {
-        return $this->logoutRedirectRoute;
-    }
-
-    public function getUnauthorizedRedirectRoute(): string
-    {
-        return $this->unauthorizedRedirectRoute;
-    }
-
-    public function getSessionLifetime(): int
-    {
-        return $this->sessionLifetime;
-    }
-
-    public function getSecureCookies(): bool
-    {
-        return $this->secureCookies;
-    }
-
+    /**
+     * Gets the Keycloak HTTP client options.
+     *
+     * @return array The Keycloak HTTP client options.
+     */
     public function getHttpClientOptions(): array
     {
         return $this->httpClientOptions;
     }
 
-    public function isEnabled(): bool
-    {
-        return $this->enabled;
-    }
-
     /**
-     * Gets the allowed roles for the given path.
-     *
-     * @param string $path The path to check.
-     * @return array<string> The required roles.
+     * {@inheritDoc}
      */
-    public function allowedRoles(string $path): array
+    public function getLoginPath(): string
     {
-        // If the authentication is not enabled, return false.
-        if (!$this->isEnabled()) {
-            return [];
-        }
-
-        // Check if path is in protected paths.
-        $protectedRoutes = $this->getProtectedRoutes();
-        foreach ($protectedRoutes as $route => $roles) {
-            if (str_starts_with($path, $route)) { // Simple route match.
-                return $roles;
-            }
-        }
-
-        // If no route is matched, return all roles.
-        return [];
-    }
-
-    /**
-     * Checks if the given path requires authentication.
-     *
-     * @param string $path The path to check.
-     * @return bool True if authentication is required, false otherwise.
-     */
-    public function requiresAuth(string $path): bool
-    {
-        // If the authentication is not enabled, return false.
-        if (!$this->isEnabled()) {
-            return false;
-        }
-
-        // Check if path is in protected paths.
-        $protectedRoutes = $this->getProtectedRoutes();
-        foreach ($protectedRoutes as $route => $roles) {
-            if (str_starts_with($path, $route)) { // Simple route match.
-                return true;
-            }
-        }
-
-        // If no route is matched, no authentication is required.
-        return false;
+        return $this->getCallbackRoute();
     }
 }

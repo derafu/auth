@@ -10,31 +10,30 @@ declare(strict_types=1);
  * See LICENSE file for more details.
  */
 
-namespace Derafu\Auth\Provider\Keycloak;
+namespace Derafu\Auth;
 
 use Derafu\Auth\Contract\AuthorizationInterface;
-use Mezzio\Authentication\UserInterface;
+use Derafu\Auth\Contract\ConfigurationInterface;
+use Derafu\Auth\Contract\UserInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
- * Keycloak authorization implementation.
- *
- * This class handles role-based authorization using Keycloak user roles.
+ * Authorization implementation.
  */
-class KeycloakAuthorization implements AuthorizationInterface
+final class Authorization implements AuthorizationInterface
 {
     /**
      * The attribute name used to store the matched route.
      */
-    public const ROUTE_ATTRIBUTE = 'derafu.route';
+    protected const ROUTE_ATTRIBUTE = 'derafu.route';
 
     /**
-     * Creates a new Keycloak authorization implementation.
+     * Creates a new authorization implementation.
      *
-     * @param KeycloakConfiguration $config The configuration.
+     * @param ConfigurationInterface $config The configuration.
      */
     public function __construct(
-        private readonly KeycloakConfiguration $config,
+        private readonly ConfigurationInterface $config,
         private readonly string $routeAttribute = self::ROUTE_ATTRIBUTE
     ) {
     }
@@ -61,6 +60,9 @@ class KeycloakAuthorization implements AuthorizationInterface
             return true; // If no route is matched, the user is granted.
         }
 
+        // Delegate to the route to check if the role is granted.
+        // This assumes that the route has a method isGranted($userRole) that
+        // returns a boolean when the role is granted to access the route.
         return $route->isGranted($userRole);
     }
 
@@ -81,7 +83,7 @@ class KeycloakAuthorization implements AuthorizationInterface
 
         $user = $this->getUserFromRequest($request);
 
-        if (!$user || !$user instanceof KeycloakUser) {
+        if (!$user || !$user instanceof UserInterface) {
             return false;
         }
 
@@ -105,7 +107,7 @@ class KeycloakAuthorization implements AuthorizationInterface
 
         $user = $this->getUserFromRequest($request);
 
-        if (!$user || !$user instanceof KeycloakUser) {
+        if (!$user || !$user instanceof UserInterface) {
             return false;
         }
 
@@ -118,7 +120,7 @@ class KeycloakAuthorization implements AuthorizationInterface
      * @param ServerRequestInterface $request The request.
      * @return UserInterface|null The user or null if not found.
      */
-    private function getUserFromRequest(ServerRequestInterface $request): ?UserInterface
+    protected function getUserFromRequest(ServerRequestInterface $request): ?UserInterface
     {
         $user = $request->getAttribute(UserInterface::class);
 

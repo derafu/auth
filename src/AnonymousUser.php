@@ -20,38 +20,14 @@ use Derafu\Auth\Contract\UserInterface;
  * This class represents an anonymous user and implements our UserInterface
  * to provide user information to the application.
  */
-class AnonymousUser implements UserInterface
+class AnonymousUser extends User implements UserInterface
 {
     /**
-     * {@inheritDoc}
+     * Creates a new anonymous user.
      */
-    public function getIdentity(): string
+    public function __construct()
     {
-        return 'anonymous';
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function getRoles(): iterable
-    {
-        return ['anonymous'];
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function getDetail(string $name, $default = null)
-    {
-        return $default;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function getDetails(): array
-    {
-        return [];
+        parent::__construct('anonymous', ['anonymous']);
     }
 
     /**

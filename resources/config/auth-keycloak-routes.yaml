@@ -1,3 +1,7 @@
 auth_callback:
     path: /auth/callback
     handler: Derafu\Auth\Provider\Keycloak\KeycloakController::handle
+
+auth_logout:
+    path: /auth/logout
+    handler: Derafu\Auth\Provider\Keycloak\KeycloakController::logout

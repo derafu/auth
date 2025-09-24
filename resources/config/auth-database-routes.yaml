@@ -1,0 +1,7 @@
+auth_login:
+    path: /auth/login
+    handler: Derafu\Auth\Provider\Database\DatabaseController::login
+
+auth_logout:
+    path: /auth/logout
+    handler: Derafu\Auth\Provider\Database\DatabaseController::logout

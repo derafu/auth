@@ -44,4 +44,79 @@ interface ConfigurationInterface
      * @return array<string, mixed> The configuration data.
      */
     public function toArray(): array;
+
+    /**
+     * Gets the protected paths.
+     *
+     * @return array<string, array<string>> The protected paths.
+     */
+    public function getProtectedPaths(): array;
+
+    /**
+     * Gets the login path.
+     *
+     * Must match the logout route in the routing configuration.
+     *
+     * @return string The login path.
+     */
+    public function getLoginPath(): string;
+
+    /**
+     * Gets the logout path.
+     *
+     * Must match the logout route in the routing configuration.
+     *
+     * @return string The logout path.
+     */
+    public function getLogoutPath(): string;
+
+    /**
+     * Gets the login redirect route.
+     *
+     * Where the user will be redirected after login.
+     *
+     * @return string The login redirect route.
+     */
+    public function getLoginRedirectRoute(): string;
+
+    /**
+     * Gets the logout redirect route.
+     *
+     * Where the user will be redirected after logout.
+     *
+     * @return string The logout redirect route.
+     */
+    public function getLogoutRedirectRoute(): string;
+
+    /**
+     * Gets the unauthorized redirect route.
+     *
+     * Where the user will be redirected if they are unauthorized.
+     *
+     * @return string The unauthorized redirect route.
+     */
+    public function getUnauthorizedRedirectRoute(): string;
+
+    /**
+     * Gets whether the authentication is enabled.
+     *
+     * @return bool Whether the authentication is enabled.
+     */
+    public function isEnabled(): bool;
+
+    /**
+     * Gets the allowed roles for the given path.
+     *
+     * @param string $path The path to check.
+     * @return array<string> The required roles.
+     */
+    public function allowedRoles(string $path): array;
+
+    /**
+     * Checks if the given path requires authentication.
+     *
+     * @param string $path The path to check.
+     * @return bool True if authentication is required, false otherwise.
+     */
+    public function requiresAuth(string $path): bool;
 }

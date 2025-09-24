@@ -1,0 +1,53 @@
+imports:
+    - session-services.yaml
+
+services:
+
+    _defaults:
+        autowire: true
+        autoconfigure: true
+        public: false
+
+    # Authentication configuration.
+    Mezzio\Authentication\AuthenticationMiddleware: ~
+    Mezzio\Authentication\AuthenticationInterface:
+        class: Derafu\Auth\Provider\Database\DatabaseAuthentication
+
+    # Authorization configuration.
+    Mezzio\Authorization\AuthorizationMiddleware:
+        arguments:
+            $responseFactory: '@Derafu\Auth\UnauthorizedResponseFactory'
+    Mezzio\Authorization\AuthorizationInterface:
+        class: Derafu\Auth\Authorization
+    Derafu\Auth\UnauthorizedResponseFactory: ~
+
+    # Database configuration.
+    Derafu\Auth\Contract\ConfigurationInterface:
+        alias: Derafu\Auth\Provider\Database\DatabaseConfiguration
+    Derafu\Auth\Provider\Database\DatabaseUserRepository: ~
+    Derafu\Auth\Provider\Database\DatabaseSessionManager: ~
+    Derafu\Auth\Provider\Database\DatabaseConfiguration:
+        arguments:
+            $config:
+                # Configuration of database authentication provider.
+                database_url: '%env(default::string:DATABASE_URL)%'
+                project_dir: '%kernel.project_dir%' # For replacing %kernel.project_dir% in the database URL (useful with SQLite).
+                user_repository:
+                    table: '%env(default::string:AUTH_USER_TABLE)%'
+                    field:
+                        identity: '%env(default::string:AUTH_USER_FIELD_IDENTITY)%'
+                        password: '%env(default::string:AUTH_USER_FIELD_PASSWORD)%'
+                    sql_get_roles: '%env(default::string:AUTH_USER_SQL_GET_ROLES)%'
+                    sql_get_details: '%env(default::string:AUTH_USER_SQL_GET_DETAILS)%'
+
+                # Base configuration for all providers.
+                protected_paths: '%env(default::json:AUTH_PROTECTED_PATHS)%'
+                logout_path: '%env(default::string:AUTH_LOGOUT_PATH)%'
+                login_redirect_route: '%env(default::string:AUTH_LOGIN_REDIRECT_ROUTE)%'
+                logout_redirect_route: '%env(default::string:AUTH_LOGOUT_REDIRECT_ROUTE)%'
+                unauthorized_redirect_route: '%env(default::string:AUTH_UNAUTHORIZED_REDIRECT_ROUTE)%'
+                enabled: '%env(default::bool:AUTH_ENABLED)%'
+
+    # Database controller.
+    Derafu\Auth\Provider\Database\DatabaseController:
+        public: true

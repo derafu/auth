@@ -14,6 +14,7 @@ namespace Derafu\Auth\Provider\Keycloak;
 
 use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Exception\AuthenticationException;
+use Derafu\Auth\User;
 
 /**
  * Keycloak user implementation.
@@ -21,57 +22,36 @@ use Derafu\Auth\Exception\AuthenticationException;
  * This class represents a user authenticated through Keycloak and implements
  * our UserInterface to provide user information to the application.
  */
-class KeycloakUser implements UserInterface
+class KeycloakUser extends User implements UserInterface
 {
-    /**
-     * The user roles.
-     *
-     * @var array<string>
-     */
-    private array $roles;
-
     /**
      * Creates a new Keycloak user.
      *
      * @param array<string, mixed> $userInfo The user information from Keycloak.
      */
-    public function __construct(
-        private readonly array $userInfo
-    ) {
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function getIdentity(): string
+    public function __construct(array $userInfo)
     {
-        return $this->userInfo['sub']
-            ?? throw new AuthenticationException('User identity not found in keycloak user info.')
-        ;
-    }
+        $identity = $userInfo['sub']
+            ?? throw new AuthenticationException('User identity not found in keycloak user info.');
 
-    /**
-     * {@inheritDoc}
-     */
-    public function getRoles(): iterable
-    {
-        if (!isset($this->roles)) {
-            $this->roles = $this->extractRoles();
-        }
-
-        return $this->roles;
+        parent::__construct(
+            identity: $identity,
+            roles: $this->extractRoles($userInfo),
+            details: $userInfo,
+        );
     }
 
     /**
      * Extracts the user roles from the user information.
      *
+     * @param array<string, mixed> $userInfo The user information from Keycloak.
      * @return array<string> The user roles.
      */
-    private function extractRoles(): array
+    private function extractRoles(array $userInfo): array
     {
-        $roles = $this->userInfo['roles'] ?? [];
-        $realmAccess = $this->userInfo['realm_access'] ?? [];
-        $resourceAccess = $this->userInfo['resource_access'] ?? [];
+        $roles = $userInfo['roles'] ?? [];
+        $realmAccess = $userInfo['realm_access'] ?? [];
+        $resourceAccess = $userInfo['resource_access'] ?? [];
 
         // Add realm roles.
         if (isset($realmAccess['roles']) && is_array($realmAccess['roles'])) {
@@ -91,30 +71,6 @@ class KeycloakUser implements UserInterface
     }
 
     /**
-     * {@inheritDoc}
-     */
-    public function getDetail(string $name, $default = null)
-    {
-        return $this->userInfo[$name] ?? $default;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function getDetails(): array
-    {
-        return $this->userInfo;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function isAnonymous(): bool
-    {
-        return false; // Keycloak users are always authenticated, never anonymous.
-    }
-
-    /**
      * Gets the user's name.
      *
      * @return string|null The name or null if not available.
@@ -122,8 +78,8 @@ class KeycloakUser implements UserInterface
     public function getName(): ?string
     {
         return
-            $this->userInfo['name']
-            ?? $this->userInfo['preferred_username']
+            $this->getDetail('name')
+            ?? $this->getDetail('preferred_username')
             ?? null
         ;
     }
@@ -135,7 +91,7 @@ class KeycloakUser implements UserInterface
      */
     public function getGivenName(): ?string
     {
-        return $this->userInfo['given_name'] ?? null;
+        return $this->getDetail('given_name') ?? null;
     }
 
     /**
@@ -145,7 +101,7 @@ class KeycloakUser implements UserInterface
      */
     public function getFamilyName(): ?string
     {
-        return $this->userInfo['family_name'] ?? null;
+        return $this->getDetail('family_name') ?? null;
     }
 
     /**
@@ -155,7 +111,7 @@ class KeycloakUser implements UserInterface
      */
     public function getEmail(): ?string
     {
-        return $this->userInfo['email'] ?? null;
+        return $this->getDetail('email') ?? null;
     }
 
     /**
@@ -165,7 +121,7 @@ class KeycloakUser implements UserInterface
      */
     public function isEmailVerified(): bool
     {
-        return $this->userInfo['email_verified'] ?? false;
+        return $this->getDetail('email_verified') ?? false;
     }
 
     /**
@@ -175,7 +131,7 @@ class KeycloakUser implements UserInterface
      */
     public function getUsername(): ?string
     {
-        return $this->userInfo['preferred_username'] ?? $this->getEmail();
+        return $this->getDetail('preferred_username') ?? $this->getEmail();
     }
 
     /**
@@ -185,46 +141,6 @@ class KeycloakUser implements UserInterface
      */
     public function getLocale(): ?string
     {
-        return $this->userInfo['locale'] ?? null;
-    }
-
-    /**
-     * Checks if the user has a specific role.
-     *
-     * @param string $role The role to check.
-     * @return bool True if the user has the role, false otherwise.
-     */
-    public function hasRole(string $role): bool
-    {
-        return in_array($role, $this->getRoles(), true);
-    }
-
-    /**
-     * Checks if the user has any of the specified roles.
-     *
-     * @param array<string> $roles The roles to check.
-     * @return bool True if the user has any of the roles, false otherwise.
-     */
-    public function hasAnyRole(array $roles): bool
-    {
-        $userRoles = $this->getRoles();
-        foreach ($roles as $role) {
-            if (in_array($role, $userRoles, true)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Checks if the user has all of the specified roles.
-     *
-     * @param array<string> $roles The roles to check.
-     * @return bool True if the user has all of the roles, false otherwise.
-     */
-    public function hasAllRoles(array $roles): bool
-    {
-        return count(array_intersect($roles, $this->getRoles())) === count($roles);
+        return $this->getDetail('locale') ?? null;
     }
 }

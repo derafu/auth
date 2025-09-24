@@ -16,35 +16,39 @@ services:
     # Authorization configuration.
     Mezzio\Authorization\AuthorizationMiddleware:
         arguments:
-            $responseFactory: '@Derafu\Auth\Provider\Keycloak\KeycloakResponseFactory'
+            $responseFactory: '@Derafu\Auth\UnauthorizedResponseFactory'
     Mezzio\Authorization\AuthorizationInterface:
-        class: Derafu\Auth\Provider\Keycloak\KeycloakAuthorization
-    Derafu\Auth\Provider\Keycloak\KeycloakResponseFactory: ~
+        class: Derafu\Auth\Authorization
+    Derafu\Auth\UnauthorizedResponseFactory: ~
 
     # Keycloak configuration.
+    Derafu\Auth\Contract\ConfigurationInterface:
+        alias: Derafu\Auth\Provider\Keycloak\KeycloakConfiguration
     Derafu\Auth\Provider\Keycloak\KeycloakUserRepository: ~
     Derafu\Auth\Provider\Keycloak\KeycloakSessionManager: ~
     Derafu\Auth\Provider\Keycloak\KeycloakConfiguration:
         arguments:
             $config:
+                # Configuration of keycloak authentication provider.
                 keycloak_url: '%env(default::string:KEYCLOAK_URL)%'
                 realm: '%env(default::string:KEYCLOAK_REALM)%'
                 client_id: '%env(default::string:KEYCLOAK_CLIENT_ID)%'
                 client_secret: '%env(default::string:KEYCLOAK_CLIENT_SECRET)%'
                 redirect_uri: '%env(default::string:KEYCLOAK_REDIRECT_URI)%'
                 scopes: '%env(default::json:KEYCLOAK_SCOPES)%'
-                protected_routes: '%env(default::json:KEYCLOAK_PROTECTED_ROUTES)%'
                 callback_route: '%env(default::string:KEYCLOAK_CALLBACK_ROUTE)%'
-                logout_route: '%env(default::string:KEYCLOAK_LOGOUT_ROUTE)%'
-                logout_redirect_route: '%env(default::string:KEYCLOAK_LOGOUT_REDIRECT_ROUTE)%'
-                unauthorized_redirect_route: '%env(default::string:KEYCLOAK_UNAUTHORIZED_REDIRECT_ROUTE)%'
-                session_lifetime: '%env(default::int:KEYCLOAK_SESSION_LIFETIME)%'
-                secure_cookies: '%env(default::bool:KEYCLOAK_SECURE_COOKIES)%'
                 http_client_options:
                     timeout: '%env(default::int:KEYCLOAK_HTTP_TIMEOUT)%'
                     connect_timeout: '%env(default::int:KEYCLOAK_HTTP_CONNECT_TIMEOUT)%'
                     verify: '%env(default::bool:KEYCLOAK_HTTP_VERIFY)%'
-                enabled: '%env(default::bool:KEYCLOAK_ENABLED)%'
+
+                # Base configuration for all providers.
+                protected_paths: '%env(default::json:AUTH_PROTECTED_PATHS)%'
+                logout_path: '%env(default::string:AUTH_LOGOUT_PATH)%'
+                login_redirect_route: '%env(default::string:AUTH_LOGIN_REDIRECT_ROUTE)%'
+                logout_redirect_route: '%env(default::string:AUTH_LOGOUT_REDIRECT_ROUTE)%'
+                unauthorized_redirect_route: '%env(default::string:AUTH_UNAUTHORIZED_REDIRECT_ROUTE)%'
+                enabled: '%env(default::bool:AUTH_ENABLED)%'
 
     # Keycloak controller.
     Derafu\Auth\Provider\Keycloak\KeycloakController:

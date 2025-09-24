@@ -117,4 +117,21 @@ class KeycloakController implements RequestHandlerInterface
             );
         }
     }
+
+    /**
+     * Handle the Keycloak logout request.
+     *
+     * @param ServerRequestInterface $request
+     * @return ResponseInterface
+     */
+    public function logout(ServerRequestInterface $request): ResponseInterface
+    {
+        $session = $request->getAttribute(SessionMiddleware::SESSION_ATTRIBUTE);
+
+        if ($session instanceof SessionInterface) {
+            $this->sessionManager->clearSession($session);
+        }
+
+        return new RedirectResponse($this->config->getLogoutRedirectRoute());
+    }
 }
