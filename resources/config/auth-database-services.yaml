@@ -1,6 +1,11 @@
 imports:
     - session-services.yaml
 
+parameters:
+    env(AUTH_LOGIN_REDIRECT_ROUTE): '/'
+    env(AUTH_LOGOUT_REDIRECT_ROUTE): '/auth/login'
+    env(AUTH_UNAUTHORIZED_REDIRECT_ROUTE): '/auth/login'
+
 services:
 
     _defaults:
@@ -21,11 +26,18 @@ services:
         class: Derafu\Auth\Authorization
     Derafu\Auth\UnauthorizedResponseFactory: ~
 
+    # Session manager configuration for database provider.
+    Derafu\Auth\Contract\SessionManagerInterface:
+        class: Derafu\Auth\SessionManager
+
+    # Form manager configuration.
+    Derafu\Auth\Contract\FormManagerInterface:
+        class: Derafu\Auth\FormManager
+
     # Database configuration.
     Derafu\Auth\Contract\ConfigurationInterface:
         alias: Derafu\Auth\Provider\Database\DatabaseConfiguration
     Derafu\Auth\Provider\Database\DatabaseUserRepository: ~
-    Derafu\Auth\Provider\Database\DatabaseSessionManager: ~
     Derafu\Auth\Provider\Database\DatabaseConfiguration:
         arguments:
             $config:

@@ -98,13 +98,11 @@ class KeycloakController implements RequestHandlerInterface
             // Clear state.
             $this->sessionManager->clearState($session);
 
-            // Redirect to dashboard or stored URL.
+            // Redirect to stored URL or login redirect route.
             $redirectUrl = $this->sessionManager->getRedirectUrl($session)
                 ?: $this->config->getLoginRedirectRoute()
             ;
-
             return new RedirectResponse($redirectUrl);
-
         } catch (Exception $e) {
             if ($e instanceof AuthenticationException) {
                 throw $e;

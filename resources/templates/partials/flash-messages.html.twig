@@ -1,0 +1,13 @@
+{% if flashMessages %}
+    {% for type, message in flashMessages.getFlashes() %}
+        {% if type == 'error' %}
+            <twig:block-alert class="mb-4" type="danger" content="{{ message }}" :dismissible="true" />
+        {% elseif type == 'success' %}
+            <twig:block-alert class="mb-4" type="success" content="{{ message }}" :dismissible="true" />
+        {% elseif type == 'warning' %}
+            <twig:block-alert class="mb-4" type="warning" content="{{ message }}" :dismissible="true" />
+        {% elseif type == 'info' %}
+            <twig:block-alert class="mb-4" type="info" content="{{ message }}" :dismissible="true" />
+        {% endif %}
+    {% endfor %}
+{% endif %}

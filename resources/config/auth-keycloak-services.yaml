@@ -21,11 +21,15 @@ services:
         class: Derafu\Auth\Authorization
     Derafu\Auth\UnauthorizedResponseFactory: ~
 
+    # Session manager configuration for keycloak provider.
+    Derafu\Auth\Provider\Keycloak\KeycloakSessionManager: ~
+    Derafu\Auth\Contract\SessionManagerInterface:
+        alias: Derafu\Auth\Provider\Keycloak\KeycloakSessionManager
+
     # Keycloak configuration.
     Derafu\Auth\Contract\ConfigurationInterface:
         alias: Derafu\Auth\Provider\Keycloak\KeycloakConfiguration
     Derafu\Auth\Provider\Keycloak\KeycloakUserRepository: ~
-    Derafu\Auth\Provider\Keycloak\KeycloakSessionManager: ~
     Derafu\Auth\Provider\Keycloak\KeycloakConfiguration:
         arguments:
             $config:

@@ -37,7 +37,9 @@
         "mezzio/mezzio-session": "^1.16",
         "mezzio/mezzio-csrf": "^1.10",
         "mezzio/mezzio-flash": "^1.9",
-        "mezzio/mezzio-session-ext": "^1.20"
+        "mezzio/mezzio-session-ext": "^1.20",
+        "derafu/renderer": "dev-main",
+        "derafu/form": "dev-main"
     },
     "require-dev": {
         "ext-xdebug": "*",

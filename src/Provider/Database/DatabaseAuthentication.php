@@ -15,8 +15,11 @@ namespace Derafu\Auth\Provider\Database;
 use Derafu\Auth\Abstract\AbstractProviderAuthentication;
 use Derafu\Auth\AnonymousUser;
 use Derafu\Auth\Contract\AuthenticationInterface;
+use Derafu\Auth\Contract\FormManagerInterface;
 use Derafu\Auth\Contract\SessionManagerInterface;
 use Derafu\Auth\Contract\UserInterface;
+use Derafu\Auth\Exception\FormException;
+use Derafu\Auth\Provider\Database\Form\LoginForm;
 use Derafu\Auth\User;
 use Mezzio\Session\SessionInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -41,7 +44,8 @@ class DatabaseAuthentication extends AbstractProviderAuthentication implements A
         private readonly DatabaseUserRepository $userRepository,
         private readonly DatabaseConfiguration $config,
         private readonly SessionManagerInterface $sessionManager,
-        UserInterface $anonymousUser = new AnonymousUser()
+        private readonly FormManagerInterface $formManager,
+        private readonly UserInterface $anonymousUser = new AnonymousUser()
     ) {
         parent::__construct(
             config: $config,
@@ -53,29 +57,77 @@ class DatabaseAuthentication extends AbstractProviderAuthentication implements A
     /**
      * {@inheritDoc}
      */
+    public function authenticate(ServerRequestInterface $request): ?UserInterface
+    {
+        // Get the path, session and user from the request.
+        $path = $request->getUri()->getPath();
+        $session = $this->getSessionFromRequest($request);
+        $user = $this->getUserFromSession($session);
+
+        // Handle logout.
+        if ($this->isLogoutPath($path)) {
+            if ($session) {
+                $this->logout($session);
+            }
+            // Must be null to trigger unauthorized response and handle logout.
+            return null;
+        }
+
+        // Handle login.
+        if ($this->isLoginPath($path) && $session) {
+            $user = $this->handleLogin($request, $session) ?? $this->anonymousUser;
+        }
+
+        // If the path is not protected, return the user (authenticated or
+        // anonymous).
+        if (!$this->config->requiresAuth($path)) {
+            return $user;
+        }
+
+        // If the path is protected, the user must be authenticated.
+        if ($user->isAnonymous()) {
+            // Must be null to trigger unauthorized response and give an error
+            // message.
+            return null;
+        }
+
+        // The user is authenticated, is not the logout path and is not the
+        // login path, so return the user.
+        return $user;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
     protected function handleLogin(
         ServerRequestInterface $request,
         SessionInterface $session
     ): ?UserInterface {
-        $body = $request->getParsedBody();
-
-        // Check if it's a POST request with credentials.
-        if ($request->getMethod() !== 'POST' || !is_array($body)) {
+        // Check if it's a POST request.
+        if ($request->getMethod() !== 'POST') {
             return null;
         }
-        $identity = $body[$this->config->getUserIdentityField()] ?? '';
-        $password = $body[$this->config->getUserPasswordField()] ?? '';
 
-        // Validate input.
-        if (empty($identity) || empty($password)) {
-            $this->addErrorFlash($request, 'Identity and password are required.');
+        // Get the form and process it.
+        try {
+            $result = $this->formManager->processForm(
+                LoginForm::class,
+                $request->getParsedBody()
+            );
+        } catch (FormException $e) {
+            $this->addErrorFlash($request, $e->getMessage(), true);
             return null;
         }
+
+        // Get the identity and password.
+        $data = $result->getProcessedData();
+        $identity = $data[$this->config->getUserIdentityField()];
+        $password = $data[$this->config->getUserPasswordField()];
 
         // Attempt authentication.
         $user = $this->userRepository->authenticate($identity, $password);
         if ($user === null) {
-            $this->addErrorFlash($request, 'Invalid identity or password.');
+            $this->addErrorFlash($request, 'Invalid identity or password.', true);
             return null;
         }
 

@@ -22,20 +22,6 @@ use Derafu\Auth\Exception\ConfigurationException;
 class DatabaseConfiguration extends AbstractProviderConfiguration implements ConfigurationInterface
 {
     /**
-     * The default user identity field.
-     *
-     * @var string
-     */
-    private const DEFAULT_USER_IDENTITY_FIELD = 'username';
-
-    /**
-     * The default user password field.
-     *
-     * @var string
-     */
-    private const DEFAULT_USER_PASSWORD_FIELD = 'password';
-
-    /**
      * The database URL.
      *
      * @var string
@@ -142,9 +128,7 @@ class DatabaseConfiguration extends AbstractProviderConfiguration implements Con
      */
     public function getUserIdentityField(): string
     {
-        return $this->userRepository['field']['identity']
-            ?? self::DEFAULT_USER_IDENTITY_FIELD
-        ;
+        return $this->userRepository['field']['identity'];
     }
 
     /**
@@ -154,9 +138,7 @@ class DatabaseConfiguration extends AbstractProviderConfiguration implements Con
      */
     public function getUserPasswordField(): string
     {
-        return $this->userRepository['field']['password']
-            ?? self::DEFAULT_USER_PASSWORD_FIELD
-        ;
+        return $this->userRepository['field']['password'];
     }
 
     /**
@@ -166,22 +148,31 @@ class DatabaseConfiguration extends AbstractProviderConfiguration implements Con
      */
     private function createUserRepositoryConfig(array $config): array
     {
-        return [
+        $userRepositoryConfig = [
             'table' => $config['table'] ?? 'user',
             'field' => [
-                'identity' => $config['field']['identity']
-                    ?? self::DEFAULT_USER_IDENTITY_FIELD
-                ,
-                'password' => $config['field']['password']
-                    ?? self::DEFAULT_USER_PASSWORD_FIELD
-                ,
+                'identity' => $config['field']['identity'] ?? 'email',
+                'password' => $config['field']['password'] ?? 'password',
             ],
-            'sql_get_roles' => $config['sql_get_roles']
-                ?? 'SELECT role FROM user_role WHERE user_id = :identity'
-            ,
-            'sql_get_details' => $config['sql_get_details']
-                ?? 'SELECT * FROM user WHERE id = :identity'
-            ,
         ];
+
+        $userRepositoryConfig['sql_get_roles'] = $config['sql_get_roles']
+            ?? sprintf(
+                'SELECT r.role FROM %s_role AS r JOIN %s AS u ON r.user_id = u.id WHERE u.%s = :identity',
+                $userRepositoryConfig['table'],
+                $userRepositoryConfig['table'],
+                $userRepositoryConfig['field']['identity']
+            )
+        ;
+
+        $userRepositoryConfig['sql_get_details'] = $config['sql_get_details']
+            ?? sprintf(
+                'SELECT * FROM %s WHERE %s = :identity',
+                $userRepositoryConfig['table'],
+                $userRepositoryConfig['field']['identity']
+            )
+        ;
+
+        return $userRepositoryConfig;
     }
 }

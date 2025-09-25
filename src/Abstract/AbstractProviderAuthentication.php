@@ -47,7 +47,7 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
     /**
      * {@inheritDoc}
      */
-    final public function authenticate(ServerRequestInterface $request): ?UserInterface
+    public function authenticate(ServerRequestInterface $request): ?UserInterface
     {
         // Get the path, session and user from the request.
         $path = $request->getUri()->getPath();
@@ -89,7 +89,7 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
     /**
      * {@inheritDoc}
      */
-    final public function unauthorizedResponse(
+    public function unauthorizedResponse(
         ServerRequestInterface $request
     ): PsrResponseInterface {
         // Get the path and session from the request.
@@ -126,12 +126,24 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
      *
      * @param ServerRequestInterface $request The request.
      * @param string $message The error message.
+     * @param bool $now Whether to add the flash message immediately.
      */
-    protected function addErrorFlash(ServerRequestInterface $request, string $message): void
-    {
+    protected function addErrorFlash(
+        ServerRequestInterface $request,
+        string $message,
+        bool $now = false
+    ): void {
         $flash = $this->getFlashFromRequest($request);
-        if ($flash && method_exists($flash, 'flash')) {
-            $flash->flash('error', $message);
+        if ($flash) {
+            if ($now) {
+                if (method_exists($flash, 'flashNow')) {
+                    $flash->flashNow('error', $message, 0);
+                }
+            } else {
+                if (method_exists($flash, 'flash')) {
+                    $flash->flash('error', $message);
+                }
+            }
         }
     }
 
@@ -140,12 +152,24 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
      *
      * @param ServerRequestInterface $request The request.
      * @param string $message The success message.
+     * @param bool $now Whether to add the flash message immediately.
      */
-    protected function addSuccessFlash(ServerRequestInterface $request, string $message): void
-    {
+    protected function addSuccessFlash(
+        ServerRequestInterface $request,
+        string $message,
+        bool $now = false
+    ): void {
         $flash = $this->getFlashFromRequest($request);
-        if ($flash && method_exists($flash, 'flash')) {
-            $flash->flash('success', $message);
+        if ($flash) {
+            if ($now) {
+                if (method_exists($flash, 'addFlashNow')) {
+                    $flash->addFlashNow('success', $message, 0);
+                }
+            } else {
+                if (method_exists($flash, 'flash')) {
+                    $flash->flash('success', $message);
+                }
+            }
         }
     }
 
@@ -241,10 +265,10 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
         SessionInterface $session
     ): PsrResponseInterface {
         // Add flash message for authentication requirement.
-        $flash = $this->getFlashFromRequest($request);
-        if ($flash && method_exists($flash, 'flash')) {
-            $flash->flash('error', 'You must be logged in to access the requested page.');
-        }
+        $this->addErrorFlash($request, sprintf(
+            'You must be logged in to access the requested page %s',
+            $request->getUri()->getPath()
+        ));
 
         return $this->createUnauthorizedResponse($request, $session);
     }
@@ -264,10 +288,10 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
             return new JsonResponse(['error' => 'Unauthorized.'], 401);
         }
 
-        $flash = $this->getFlashFromRequest($request);
-        if ($flash && method_exists($flash, 'flash')) {
-            $flash->flash('error', 'You must be logged in to access the requested page.');
-        }
+        $this->addErrorFlash($request, sprintf(
+            'You must be logged in to access the requested page %s',
+            $request->getUri()->getPath()
+        ));
 
         return new RedirectResponse((string) $this->config->getUnauthorizedRedirectRoute());
     }

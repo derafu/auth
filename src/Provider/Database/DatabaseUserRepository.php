@@ -16,6 +16,7 @@ use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Contract\UserRepositoryInterface;
 use Derafu\Auth\User;
 use Derafu\Auth\UserFactory;
+use Derafu\Support\Factory;
 use Mezzio\Authentication\UserRepository\PdoDatabase;
 use PDO;
 
@@ -26,6 +27,20 @@ use PDO;
  */
 class DatabaseUserRepository implements UserRepositoryInterface
 {
+    /**
+     * The PDO instance.
+     *
+     * @var PDO
+     */
+    private PDO $pdo;
+
+    /**
+     * The user factory.
+     *
+     * @var UserFactory
+     */
+    private UserFactory $authUserFactory;
+
     /**
      * The provider.
      *
@@ -44,7 +59,10 @@ class DatabaseUserRepository implements UserRepositoryInterface
     public function __construct(
         private readonly DatabaseConfiguration $config
     ) {
-        $this->initializeProvider();
+        $this->pdo = new PDO($this->config->getDatabaseUrl());
+        $config = $this->config->getUserRepository();
+        $this->authUserFactory = new UserFactory();
+        $this->provider = new PdoDatabase($this->pdo, $config, $this->authUserFactory);
     }
 
     /**
@@ -62,17 +80,5 @@ class DatabaseUserRepository implements UserRepositoryInterface
             $mezzioUser->getRoles(),
             $mezzioUser->getDetails()
         );
-    }
-
-    /**
-     * Initializes the provider using Mezzio's PdoDatabase.
-     */
-    private function initializeProvider(): void
-    {
-        $pdo = new PDO($this->config->getDatabaseUrl());
-        $config = $this->config->getUserRepository();
-        $userFactory = new UserFactory();
-
-        $this->provider = new PdoDatabase($pdo, $config, $userFactory);
     }
 }

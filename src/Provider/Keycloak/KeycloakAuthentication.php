@@ -136,13 +136,10 @@ class KeycloakAuthentication extends AbstractProviderAuthentication implements A
     /**
      * {@inheritDoc}
      */
-    protected function createUnauthorizedResponse(
+    protected function handleUnauthorized(
         ServerRequestInterface $request,
         SessionInterface $session
     ): PsrResponseInterface {
-        // Add flash message for authentication requirement.
-        $this->addErrorFlash($request, 'You must be logged in to access the requested page.');
-
         // Store current URL for redirect after authentication.
         $this->sessionManager->storeRedirectUrl($session, (string) $request->getUri());
 

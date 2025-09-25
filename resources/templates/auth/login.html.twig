@@ -1,0 +1,17 @@
+{% extends 'layouts/default.html.twig' %}
+
+{% block content %}
+<div class="my-5 container">
+    <h1 class="border-bottom mb-4">{% block title %}Login{% endblock %}</h1>
+    {% include 'partials/flash-messages.html.twig' %}
+    {{ form_start(form, {'attr': {'action': path('auth_login')}}) }}
+        {{ form_element(form.uiSchema, form) }}
+        {{ form_csrf(form) }}
+        {% if captchaSiteKey %}
+            <div class="h-captcha mt-2 mb-4" data-sitekey="{{ captchaSiteKey }}"></div>
+            <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
+        {% endif %}
+        <button type="submit" class="btn btn-primary w-100">Login</button>
+    {{ form_end(form) }}
+</div>
+{% endblock %}
