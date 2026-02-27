@@ -109,7 +109,6 @@ class KeycloakUserRepositoryTest extends TestCase
         // Use reflection to access the private provider property
         $reflection = new ReflectionClass($this->repository);
         $providerProperty = $reflection->getProperty('provider');
-        $providerProperty->setAccessible(true);
 
         /** @var GenericProvider $provider */
         $provider = $providerProperty->getValue($this->repository);
@@ -120,11 +119,8 @@ class KeycloakUserRepositoryTest extends TestCase
         // Use reflection to check provider configuration
         $providerReflection = new ReflectionClass($provider);
         $urlAuthorizeProperty = $providerReflection->getProperty('urlAuthorize');
-        $urlAuthorizeProperty->setAccessible(true);
         $urlAccessTokenProperty = $providerReflection->getProperty('urlAccessToken');
-        $urlAccessTokenProperty->setAccessible(true);
         $urlResourceOwnerDetailsProperty = $providerReflection->getProperty('urlResourceOwnerDetails');
-        $urlResourceOwnerDetailsProperty->setAccessible(true);
 
         $this->assertSame(
             'https://auth.example.com/realms/test-realm/protocol/openid-connect/auth',

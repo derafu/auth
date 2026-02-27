@@ -285,7 +285,14 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
         $path = $request->getUri()->getPath();
 
         if (str_starts_with($path, '/api')) {
-            return new JsonResponse(['error' => 'Unauthorized.'], 401);
+            return new JsonResponse(
+                [
+                    'status' => 401,
+                    'title' => 'Unauthorized',
+                    'detail' => 'You need to send valid credentials to access this resource.',
+                ],
+                401
+            );
         }
 
         $this->addErrorFlash($request, sprintf(

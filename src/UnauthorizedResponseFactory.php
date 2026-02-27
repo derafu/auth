@@ -22,6 +22,13 @@ class UnauthorizedResponseFactory
 {
     public function __invoke(): PsrResponseInterface
     {
-        return new JsonResponse(['detail' => 'Unauthorized.'], 401);
+        return new JsonResponse(
+            [
+                'status' => 401,
+                'title' => 'Unauthorized',
+                'detail' => 'The user is not authorized to access this resource.',
+            ],
+            401
+        );
     }
 }

@@ -156,9 +156,17 @@ class DatabaseConfiguration extends AbstractProviderConfiguration implements Con
             ],
         ];
 
+        $sqlGetRoles = '
+            SELECT r.name
+            FROM
+                role as r
+                JOIN %s_role as ur ON r.id = ur.role_id
+                JOIN %s AS u ON ur.user_id = u.id
+            WHERE u.%s = :identity
+        ';
         $userRepositoryConfig['sql_get_roles'] = $config['sql_get_roles']
             ?? sprintf(
-                'SELECT r.role FROM %s_role AS r JOIN %s AS u ON r.user_id = u.id WHERE u.%s = :identity',
+                $sqlGetRoles,
                 $userRepositoryConfig['table'],
                 $userRepositoryConfig['table'],
                 $userRepositoryConfig['field']['identity']

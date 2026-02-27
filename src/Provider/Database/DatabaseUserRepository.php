@@ -12,11 +12,11 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Provider\Database;
 
+use Closure;
 use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Contract\UserRepositoryInterface;
 use Derafu\Auth\User;
 use Derafu\Auth\UserFactory;
-use Derafu\Support\Factory;
 use Mezzio\Authentication\UserRepository\PdoDatabase;
 use PDO;
 
@@ -37,9 +37,9 @@ class DatabaseUserRepository implements UserRepositoryInterface
     /**
      * The user factory.
      *
-     * @var UserFactory
+     * @var Closure
      */
-    private UserFactory $authUserFactory;
+    private Closure $authUserFactory;
 
     /**
      * The provider.
@@ -61,7 +61,7 @@ class DatabaseUserRepository implements UserRepositoryInterface
     ) {
         $this->pdo = new PDO($this->config->getDatabaseUrl());
         $config = $this->config->getUserRepository();
-        $this->authUserFactory = new UserFactory();
+        $this->authUserFactory = (new UserFactory())();
         $this->provider = new PdoDatabase($this->pdo, $config, $this->authUserFactory);
     }
 

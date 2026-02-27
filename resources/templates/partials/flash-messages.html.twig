@@ -1,5 +1,5 @@
-{% if flashMessages %}
-    {% for type, message in flashMessages.getFlashes() %}
+{% if app.flashes %}
+    {% for type, message in app.flashes %}
         {% if type == 'error' %}
             <twig:block-alert class="mb-4" type="danger" content="{{ message }}" :dismissible="true" />
         {% elseif type == 'success' %}
