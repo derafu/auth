@@ -1,5 +1,6 @@
 imports:
     - session-services.yaml
+    - auth-services.yaml
 
 parameters:
     env(AUTH_LOGIN_REDIRECT_ROUTE): '/'

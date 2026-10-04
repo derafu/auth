@@ -51,7 +51,10 @@ class KeycloakController implements RequestHandlerInterface
 
         // Check for errors.
         if (!empty($queryParams['error_description'])) {
-            throw new AuthenticationException($queryParams['error_description'], 400);
+            throw new AuthenticationException(
+                ['{description}', 'description' => $queryParams['error_description']],
+                400
+            );
         }
 
         // Verify session.
@@ -109,7 +112,7 @@ class KeycloakController implements RequestHandlerInterface
             }
 
             throw new AuthenticationException(
-                sprintf('Authentication failed: %s', $e->getMessage()),
+                ['Authentication failed: {error}', 'error' => $e->getMessage()],
                 400,
                 $e
             );

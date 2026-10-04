@@ -83,7 +83,7 @@ final class Authorization implements AuthorizationInterface
 
         $user = $this->getUserFromRequest($request);
 
-        if (!$user || !$user instanceof UserInterface) {
+        if (!$user) {
             return false;
         }
 
@@ -107,7 +107,7 @@ final class Authorization implements AuthorizationInterface
 
         $user = $this->getUserFromRequest($request);
 
-        if (!$user || !$user instanceof UserInterface) {
+        if (!$user) {
             return false;
         }
 

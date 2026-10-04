@@ -160,7 +160,5 @@ class KeycloakUserRepositoryTest extends TestCase
         $this->assertNotEmpty($state1);
         $this->assertNotEmpty($state2);
         $this->assertNotSame($state1, $state2);
-        $this->assertIsString($state1);
-        $this->assertIsString($state2);
     }
 }

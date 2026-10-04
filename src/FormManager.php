@@ -117,6 +117,9 @@ class FormManager implements FormManagerInterface
      * @return void
      * @throws FormException If the captcha is invalid.
      */
+    // The captcha is not validated yet, so the method does nothing and throws
+    // nothing: the ignore goes away with the implementation.
+    // @phpstan-ignore throws.unusedType, void.pure
     private function validateCaptcha(array $data): void
     {
         // If the captcha is not configured, skip validation.

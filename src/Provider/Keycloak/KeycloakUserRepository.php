@@ -77,7 +77,7 @@ class KeycloakUserRepository implements UserRepositoryInterface
             return $userInfo;
         } catch (Exception $e) {
             throw new AuthenticationException(
-                'Failed to get user info: ' . $e->getMessage(),
+                ['Failed to get user info: {error}', 'error' => $e->getMessage()],
                 0,
                 $e
             );
@@ -106,7 +106,7 @@ class KeycloakUserRepository implements UserRepositoryInterface
             ];
         } catch (Exception $e) {
             throw new AuthenticationException(
-                'Failed to exchange code for token: ' . $e->getMessage(),
+                ['Failed to exchange code for token: {error}', 'error' => $e->getMessage()],
                 0,
                 $e
             );
@@ -135,7 +135,7 @@ class KeycloakUserRepository implements UserRepositoryInterface
             ];
         } catch (Exception $e) {
             throw new AuthenticationException(
-                'Failed to refresh token: ' . $e->getMessage(),
+                ['Failed to refresh token: {error}', 'error' => $e->getMessage()],
                 0,
                 $e
             );
@@ -285,7 +285,7 @@ class KeycloakUserRepository implements UserRepositoryInterface
             return $decoded;
         } catch (Exception $e) {
             throw new AuthenticationException(
-                'Failed to parse JWT token: ' . $e->getMessage(),
+                ['Failed to parse JWT token: {error}', 'error' => $e->getMessage()],
                 0,
                 $e
             );

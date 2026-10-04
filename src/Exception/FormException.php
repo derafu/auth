@@ -12,22 +12,28 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Exception;
 
+use Derafu\Translation\Contract\TranslatableInterface;
+use Derafu\Translation\Exception\Core\TranslatableException;
 use Exception;
 
 /**
  * Exception thrown when form fails.
  */
-class FormException extends Exception
+class FormException extends TranslatableException
 {
     /**
      * Creates a new form exception.
      *
-     * @param string $message The exception message.
+     * @param string|array|TranslatableInterface $message The exception message:
+     *   - string: Will be used as both message and translation key.
+     *   - array: First element must be string (message), remaining elements are
+     *     parameters.
+     *   - TranslatableInterface: Will be used directly.
      * @param int $code The exception code.
      * @param Exception|null $previous The previous exception.
      */
     public function __construct(
-        string $message = '',
+        string|array|TranslatableInterface $message = '',
         int $code = 0,
         ?Exception $previous = null
     ) {

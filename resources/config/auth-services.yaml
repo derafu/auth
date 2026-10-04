@@ -1,0 +1,20 @@
+# Optional wiring for apps using symfony/dependency-injection.
+# Import it from your own services.yaml:
+#
+#   imports:
+#       - { resource: '../vendor/derafu/auth/resources/config/auth-services.yaml' }
+
+services:
+
+    _defaults:
+        autowire: true
+        autoconfigure: true
+        public: false
+
+    # Feeds resources/translations into the consuming app's Translator (the
+    # app must pass $resourceProviders: !tagged_iterator
+    # derafu_translation.resource_provider to TranslatorFactory::create(),
+    # see derafu/translation's translation-services.yaml). The tag is
+    # explicit because _instanceof does not propagate across imported files.
+    Derafu\Auth\Translation\AuthTranslationResourceProvider:
+        tags: ['derafu_translation.resource_provider']
