@@ -1,13 +1,26 @@
+{#
+    The flash messages of this package are messages as data (id, parameters and domain): they are translated here, when they are shown.
+
+    The text of a message (its translation) is written by whoever develops and translates the application, so it is trusted and can have HTML (a link, a list, a line break). The parameters are data, and they can come from a user: they are escaped before they are put in the text.
+
+    A text that another part of the application put in the session is data too: it is escaped, and its line breaks are kept.
+#}
 {% if app.flashes %}
     {% for type, message in app.flashes %}
+        {% if message.message is defined %}
+            {% set parameters = (message.parameters ?? {})|map(value => value is iterable ? value : value|e) %}
+            {% set text = message.message|trans(parameters, message.domain ?? null) %}
+        {% else %}
+            {% set text = (message is iterable ? '' : message)|nl2br %}
+        {% endif %}
         {% if type == 'error' %}
-            <twig:block-alert class="mb-4" type="danger" content="{{ message }}" :dismissible="true" />
+            <twig:block-alert class="mb-4" type="danger" content="{{ text }}" :dismissible="true" />
         {% elseif type == 'success' %}
-            <twig:block-alert class="mb-4" type="success" content="{{ message }}" :dismissible="true" />
+            <twig:block-alert class="mb-4" type="success" content="{{ text }}" :dismissible="true" />
         {% elseif type == 'warning' %}
-            <twig:block-alert class="mb-4" type="warning" content="{{ message }}" :dismissible="true" />
+            <twig:block-alert class="mb-4" type="warning" content="{{ text }}" :dismissible="true" />
         {% elseif type == 'info' %}
-            <twig:block-alert class="mb-4" type="info" content="{{ message }}" :dismissible="true" />
+            <twig:block-alert class="mb-4" type="info" content="{{ text }}" :dismissible="true" />
         {% endif %}
     {% endfor %}
 {% endif %}

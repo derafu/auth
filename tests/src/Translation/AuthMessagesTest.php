@@ -12,86 +12,86 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth\Translation;
 
+use Derafu\Auth\Abstract\AbstractProviderAuthentication;
 use Derafu\Auth\Translation\AuthTranslationResourceProvider;
+use Derafu\Translation\Lint\MessageMethod;
 use Derafu\Translation\Lint\MessageReference;
-use Derafu\Translation\Lint\MessageReferenceScanner;
-use Derafu\Translation\TranslatorFactory;
+use Derafu\Twig\Lint\TwigTranslationAudit;
+use Derafu\Twig\Service\TwigService;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Translation\MessageCatalogueInterface;
+use Twig\Extension\AbstractExtension;
+use Twig\TwigFunction;
 
 /**
- * Every message of the package has a Spanish translation, and the catalogue has
- * nothing the code does not use.
+ * The package is translated: every message of its code and of its templates has
+ * its Spanish translation, the catalogue has nothing that they do not use, every
+ * text of the templates goes through the translation, and every exception that
+ * the package throws is translatable.
  *
- * The messages are found by reading the code, so a new message without an entry
- * in the catalogue fails here, instead of showing in the original language when
- * the error happens.
+ * It is found by reading the code and the templates, so a new message without an
+ * entry in the catalogue fails here, instead of showing in the original language
+ * when it is shown.
+ *
+ * Two messages can not be literals, by nature, and they are fixed here by their
+ * function and their whole call, so any other message that is not a literal makes
+ * this test fail:
+ *
+ *   - The flash message of a form that is not valid is the message of the
+ *     exception of the form: it is given as it is, and it is audited where the
+ *     exception is thrown.
+ *   - The partial of the flash messages translates the message that it is given
+ *     (its id, parameters and domain are data of the session).
  */
 #[CoversClass(AuthTranslationResourceProvider::class)]
 final class AuthMessagesTest extends TestCase
 {
-    private function catalogue(): MessageCatalogueInterface
+    public function testThePackageIsTranslated(): void
     {
-        return TranslatorFactory::create('es', [], [new AuthTranslationResourceProvider()])
-            ->getCatalogue('es')
-        ;
-    }
+        $root = dirname(__DIR__, 3);
 
-    /**
-     * @return list<MessageReference>
-     */
-    private function references(): array
-    {
-        $references = (new MessageReferenceScanner())->scanDirectory(dirname(__DIR__, 3) . '/src');
+        // The templates are written for an application that has routes, forms
+        // and a layout: the functions that they use are only declared here.
+        $application = new class () extends AbstractExtension {
+            public function getFunctions(): array
+            {
+                return array_map(
+                    fn (string $name) => new TwigFunction($name, fn () => ''),
+                    ['path', 'form_start', 'form_element', 'form_csrf', 'form_end']
+                );
+            }
+        };
 
-        $references = array_values(array_filter($references, fn (MessageReference $r) => $r->id !== ''));
-
-        // Finding nothing would look like a clean result.
-        $this->assertNotEmpty($references);
-
-        return $references;
-    }
-
-    public function testEveryMessageIsALiteralThatCanBeChecked(): void
-    {
-        $dynamic = array_map(
-            fn (MessageReference $r) => sprintf('%s:%d', $r->file, $r->line),
-            array_filter($this->references(), fn (MessageReference $r) => $r->isDynamic())
+        $report = (new TwigTranslationAudit())->audit(
+            $root . '/src',
+            $root . '/resources/templates',
+            new AuthTranslationResourceProvider(),
+            (new TwigService([
+                'extra' => false,
+                'paths' => [$root . '/resources/templates', $root . '/vendor/derafu/twig/resources/templates'],
+                'extensions' => [$application],
+            ]))->getTwig(),
+            messageMethods: [
+                new MessageMethod(AbstractProviderAuthentication::class, 'addErrorFlash', domain: 'auth', id: 1),
+                new MessageMethod(AbstractProviderAuthentication::class, 'addSuccessFlash', domain: 'auth', id: 1),
+            ]
         );
 
-        $this->assertSame([], array_values($dynamic));
-    }
+        // Finding nothing would look like a clean result.
+        $this->assertFalse($report->nothingFound);
+        $this->assertSame([], $report->describe($report->missingTranslations));
+        $this->assertSame([], $report->describe($report->notUsedBySources));
+        $this->assertSame([], $report->describe($report->notTranslatable));
+        $this->assertSame([], $report->describe($report->untranslatedTexts));
 
-    public function testEveryMessageHasATranslation(): void
-    {
-        $catalogue = $this->catalogue();
-
-        $missing = [];
-        foreach ($this->references() as $reference) {
-            if (!$reference->isDynamic() && !$catalogue->has((string) $reference->id, (string) $reference->domain)) {
-                $missing[] = sprintf('%s [%s] (%s:%d)', $reference->id, $reference->domain, basename($reference->file), $reference->line);
-            }
-        }
-
-        $this->assertSame([], $missing);
-    }
-
-    public function testTheCatalogueHasNoMessageThatTheCodeDoesNotUse(): void
-    {
-        $used = [];
-        foreach ($this->references() as $reference) {
-            $used[$reference->domain][] = $reference->id;
-        }
-
-        $catalogue = $this->catalogue();
-        $unused = [];
-        foreach ($catalogue->getDomains() as $domain) {
-            foreach (array_diff(array_keys($catalogue->all($domain)), $used[$domain] ?? []) as $id) {
-                $unused[] = sprintf('%s [%s]', $id, $domain);
-            }
-        }
-
-        $this->assertSame([], $unused);
+        $this->assertSame(
+            [
+                'Derafu\\Auth\\Provider\\Database\\DatabaseAuthentication::handleLogin: '
+                    . '$this->addErrorFlash($request, $e->getTranslatableMessage(), now: true)',
+                'partials/flash-messages.html.twig: '
+                    . '{% set text = message.message|trans(parameters, message.domain ?? null) %}',
+            ],
+            array_map(fn (MessageReference $reference) => $reference->identity(), $report->dynamicMessages)
+        );
     }
 }

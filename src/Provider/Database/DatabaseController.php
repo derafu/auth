@@ -51,7 +51,6 @@ class DatabaseController
 
         return $this->renderer->render('auth/login', [
             'form' => $form,
-            'captchaSiteKey' => $this->formManager->getCaptchaSiteKey(),
             'app' => [
                 'flashes' => $this->getFlashMessages($request)->getFlashes(),
             ],

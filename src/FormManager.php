@@ -20,7 +20,6 @@ use Derafu\Form\Contract\Factory\FormFactoryInterface;
 use Derafu\Form\Contract\FormInterface;
 use Derafu\Form\Contract\Processor\FormDataProcessorInterface;
 use Derafu\Form\Contract\Processor\ProcessResultInterface;
-use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
 /**
  * Form manager implementation.
@@ -35,37 +34,17 @@ class FormManager implements FormManagerInterface
     private array $forms = [];
 
     /**
-     * Captcha site key.
-     *
-     * @var string|null
-     */
-    private ?string $captchaSiteKey = null;
-
-    /**
-     * Captcha secret key.
-     *
-     * @var string|null
-     */
-    private ?string $captchaSecretKey = null;
-
-    /**
      * Creates a new form manager.
      *
      * @param FormFactoryInterface $formFactory The form factory.
      * @param FormDataProcessorInterface $formDataProcessor The form data processor.
-     * @param ParameterBagInterface $parameterBag The parameter bag.
+     * @param ConfigurationInterface $configuration The configuration.
      */
     public function __construct(
         private readonly FormFactoryInterface $formFactory,
         private readonly FormDataProcessorInterface $formDataProcessor,
         private readonly ConfigurationInterface $configuration,
-        ParameterBagInterface $parameterBag,
     ) {
-        // Load the captcha configuration.
-        if ($parameterBag->has('captcha.site_key') && $parameterBag->has('captcha.secret_key')) {
-            $this->captchaSiteKey = $parameterBag->get('captcha.site_key');
-            $this->captchaSecretKey = $parameterBag->get('captcha.secret_key');
-        }
     }
 
     /**
@@ -97,38 +76,7 @@ class FormManager implements FormManagerInterface
             throw new FormException('Invalid form data.', 400);
         }
 
-        $this->validateCaptcha($result->getProcessedData());
-
         return $result;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function getCaptchaSiteKey(): ?string
-    {
-        return $this->captchaSiteKey;
-    }
-
-    /**
-     * Validate the captcha.
-     *
-     * @param array $data
-     * @return void
-     * @throws FormException If the captcha is invalid.
-     */
-    // The captcha is not validated yet, so the method does nothing and throws
-    // nothing: the ignore goes away with the implementation.
-    // @phpstan-ignore throws.unusedType, void.pure
-    private function validateCaptcha(array $data): void
-    {
-        // If the captcha is not configured, skip validation.
-        if (!$this->captchaSiteKey || !$this->captchaSecretKey) {
-            return;
-        }
-
-        // Validate the captcha.
-        // TODO: Implement captcha validation and throw an exception if it fails.
     }
 
     /**

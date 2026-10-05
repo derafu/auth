@@ -48,8 +48,8 @@ return [
         'No se pudo interpretar el token JWT: {error}',
 
     // Keycloak callback. The description comes from Keycloak: it is shown as is.
-    '{description}' =>
-        '{description}',
+    '{message}' =>
+        '{message}',
     'Session not available.' =>
         'La sesión no está disponible.',
     'No state parameter found in the session.' =>

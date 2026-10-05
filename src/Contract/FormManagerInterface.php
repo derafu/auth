@@ -41,11 +41,4 @@ interface FormManagerInterface
      * @return ProcessResultInterface The form result.
      */
     public function processForm(string $formType, array $data = []): ProcessResultInterface;
-
-    /**
-     * Get the captcha site key.
-     *
-     * @return string|null
-     */
-    public function getCaptchaSiteKey(): ?string;
 }

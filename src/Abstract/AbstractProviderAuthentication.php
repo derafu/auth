@@ -17,6 +17,8 @@ use Derafu\Auth\Contract\AuthenticationInterface;
 use Derafu\Auth\Contract\ConfigurationInterface;
 use Derafu\Auth\Contract\SessionManagerInterface;
 use Derafu\Auth\Contract\UserInterface;
+use Derafu\Translation\Contract\TranslatableMessageInterface;
+use Derafu\Translation\TranslatableMessage;
 use Laminas\Diactoros\Response\JsonResponse;
 use Laminas\Diactoros\Response\RedirectResponse;
 use Mezzio\Flash\FlashMessageMiddleware;
@@ -24,6 +26,7 @@ use Mezzio\Session\SessionInterface;
 use Mezzio\Session\SessionMiddleware;
 use Psr\Http\Message\ResponseInterface as PsrResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
  * Abstract provider authentication.
@@ -36,11 +39,15 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
      * @param ConfigurationInterface $config The configuration.
      * @param SessionManagerInterface $sessionManager The session manager.
      * @param UserInterface $anonymousUser The anonymous user.
+     * @param TranslatorInterface|null $translator Translates the title and the
+     * detail of the response of an unauthenticated request to the API, in the
+     * language of the translator. Without it they are in English.
      */
     public function __construct(
         private readonly ConfigurationInterface $config,
         private readonly SessionManagerInterface $sessionManager,
-        private readonly UserInterface $anonymousUser = new AnonymousUser()
+        private readonly UserInterface $anonymousUser = new AnonymousUser(),
+        private readonly ?TranslatorInterface $translator = null
     ) {
     }
 
@@ -124,17 +131,31 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
     /**
      * Adds an error flash message.
      *
+     * The flash message is the message as data (its id, its parameters and its
+     * domain), not a text: it is translated when it is shown, in the language of
+     * whoever sees it (see `partials/flash-messages.html.twig`). A session that
+     * keeps JSON, like the one of Mezzio, can keep it.
+     *
      * @param ServerRequestInterface $request The request.
-     * @param string $message The error message.
+     * @param string|TranslatableMessageInterface $message The message: its text
+     * in English, which is its translation id, or a message already made (the
+     * one of an exception, for example).
+     * @param array<string, mixed> $parameters The parameters of the text. A
+     * message that is already made has its own.
      * @param bool $now Whether to add the flash message immediately.
      */
     protected function addErrorFlash(
         ServerRequestInterface $request,
-        string $message,
+        string|TranslatableMessageInterface $message,
+        array $parameters = [],
         bool $now = false
     ): void {
         $flash = $this->getFlashFromRequest($request);
         if ($flash) {
+            $message = $message instanceof TranslatableMessageInterface
+                ? $message
+                : new TranslatableMessage($message, $parameters, 'auth');
+
             if ($now) {
                 if (method_exists($flash, 'flashNow')) {
                     $flash->flashNow('error', $message, 0);
@@ -150,17 +171,27 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
     /**
      * Adds a success flash message.
      *
+     * It is a message as data, like the one of `addErrorFlash()`.
+     *
      * @param ServerRequestInterface $request The request.
-     * @param string $message The success message.
+     * @param string|TranslatableMessageInterface $message The message: its text
+     * in English, which is its translation id, or a message already made.
+     * @param array<string, mixed> $parameters The parameters of the text. A
+     * message that is already made has its own.
      * @param bool $now Whether to add the flash message immediately.
      */
     protected function addSuccessFlash(
         ServerRequestInterface $request,
-        string $message,
+        string|TranslatableMessageInterface $message,
+        array $parameters = [],
         bool $now = false
     ): void {
         $flash = $this->getFlashFromRequest($request);
         if ($flash) {
+            $message = $message instanceof TranslatableMessageInterface
+                ? $message
+                : new TranslatableMessage($message, $parameters, 'auth');
+
             if ($now) {
                 if (method_exists($flash, 'addFlashNow')) {
                     $flash->addFlashNow('success', $message, 0);
@@ -265,10 +296,11 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
         SessionInterface $session
     ): PsrResponseInterface {
         // Add flash message for authentication requirement.
-        $this->addErrorFlash($request, sprintf(
-            'You must be logged in to access the requested page %s',
-            $request->getUri()->getPath()
-        ));
+        $this->addErrorFlash(
+            $request,
+            'You must be logged in to access the requested page {path}',
+            ['path' => $request->getUri()->getPath()]
+        );
 
         return $this->createUnauthorizedResponse($request, $session);
     }
@@ -288,19 +320,30 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
             return new JsonResponse(
                 [
                     'status' => 401,
-                    'title' => 'Unauthorized',
-                    'detail' => 'You need to send valid credentials to access this resource.',
+                    'title' => $this->translate(new TranslatableMessage('Unauthorized', [], 'auth')),
+                    'detail' => $this->translate(new TranslatableMessage('You need to send valid credentials to access this resource.', [], 'auth')),
                 ],
                 401
             );
         }
 
-        $this->addErrorFlash($request, sprintf(
-            'You must be logged in to access the requested page %s',
-            $request->getUri()->getPath()
-        ));
+        $this->addErrorFlash(
+            $request,
+            'You must be logged in to access the requested page {path}',
+            ['path' => $request->getUri()->getPath()]
+        );
 
         return new RedirectResponse((string) $this->config->getUnauthorizedRedirectRoute());
+    }
+
+    /**
+     * Translates a message with the translator, if there is one.
+     */
+    private function translate(TranslatableMessage $message): string
+    {
+        return $this->translator !== null
+            ? $message->trans($this->translator)
+            : (string) $message;
     }
 
     /**

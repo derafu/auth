@@ -23,6 +23,7 @@ use Derafu\Auth\Provider\Database\Form\LoginForm;
 use Derafu\Auth\User;
 use Mezzio\Session\SessionInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
  * Database authentication implementation for Mezzio.
@@ -39,18 +40,22 @@ class DatabaseAuthentication extends AbstractProviderAuthentication implements A
      * @param DatabaseConfiguration $config The configuration.
      * @param SessionManagerInterface $sessionManager The session manager.
      * @param UserInterface $anonymousUser The anonymous user.
+     * @param TranslatorInterface|null $translator Translates the response of an
+     * unauthenticated request to the API.
      */
     public function __construct(
         private readonly DatabaseUserRepository $userRepository,
         private readonly DatabaseConfiguration $config,
         private readonly SessionManagerInterface $sessionManager,
         private readonly FormManagerInterface $formManager,
-        private readonly UserInterface $anonymousUser = new AnonymousUser()
+        private readonly UserInterface $anonymousUser = new AnonymousUser(),
+        ?TranslatorInterface $translator = null
     ) {
         parent::__construct(
             config: $config,
             sessionManager: $sessionManager,
-            anonymousUser: $anonymousUser
+            anonymousUser: $anonymousUser,
+            translator: $translator
         );
     }
 
@@ -115,7 +120,7 @@ class DatabaseAuthentication extends AbstractProviderAuthentication implements A
                 $request->getParsedBody()
             );
         } catch (FormException $e) {
-            $this->addErrorFlash($request, $e->getMessage(), true);
+            $this->addErrorFlash($request, $e->getTranslatableMessage(), now: true);
             return null;
         }
 
@@ -127,7 +132,7 @@ class DatabaseAuthentication extends AbstractProviderAuthentication implements A
         // Attempt authentication.
         $user = $this->userRepository->authenticate($identity, $password);
         if ($user === null) {
-            $this->addErrorFlash($request, 'Invalid identity or password.', true);
+            $this->addErrorFlash($request, 'Invalid identity or password.', now: true);
             return null;
         }
 

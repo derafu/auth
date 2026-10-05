@@ -52,7 +52,7 @@ class KeycloakController implements RequestHandlerInterface
         // Check for errors.
         if (!empty($queryParams['error_description'])) {
             throw new AuthenticationException(
-                ['{description}', 'description' => $queryParams['error_description']],
+                ['{message}', 'message' => $queryParams['error_description']],
                 400
             );
         }

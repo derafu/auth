@@ -21,6 +21,7 @@ use Laminas\Diactoros\Response\RedirectResponse;
 use Mezzio\Session\SessionInterface;
 use Psr\Http\Message\ResponseInterface as PsrResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
  * Keycloak authentication implementation for Mezzio.
@@ -37,17 +38,21 @@ class KeycloakAuthentication extends AbstractProviderAuthentication implements A
      * @param KeycloakConfiguration $config The configuration.
      * @param KeycloakSessionManager $sessionManager The session manager.
      * @param UserInterface $anonymousUser The anonymous user.
+     * @param TranslatorInterface|null $translator Translates the response of an
+     * unauthenticated request to the API.
      */
     public function __construct(
         private readonly KeycloakUserRepository $userRepository,
         KeycloakConfiguration $config,
         private readonly KeycloakSessionManager $sessionManager,
-        private readonly UserInterface $anonymousUser = new AnonymousUser()
+        private readonly UserInterface $anonymousUser = new AnonymousUser(),
+        ?TranslatorInterface $translator = null
     ) {
         parent::__construct(
             config: $config,
             sessionManager: $sessionManager,
-            anonymousUser: $anonymousUser
+            anonymousUser: $anonymousUser,
+            translator: $translator
         );
     }
 
