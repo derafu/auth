@@ -15,7 +15,9 @@ namespace Derafu\Auth\Translation;
 use Derafu\Translation\Contract\TranslationResourceProviderInterface;
 
 /**
- * Provides the translations of this package: the messages of its exceptions.
+ * Provides the translations of this package: the messages of its exceptions
+ * (domain `errors`), and its flash messages, its login page and form and its
+ * answers to the API (domain `auth`).
  */
 final class AuthTranslationResourceProvider implements TranslationResourceProviderInterface
 {

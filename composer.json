@@ -26,31 +26,45 @@
     },
     "require": {
         "php": "^8.5",
-        "league/oauth2-client": "^2.9",
-        "guzzlehttp/guzzle": "^7.10",
-        "psr/http-message": "^2.0",
-        "psr/http-server-middleware": "^1.0",
-        "psr/http-server-handler": "^1.0",
+        "derafu/form": "dev-main",
+        "derafu/renderer": "dev-main",
+        "derafu/routing": "dev-main",
+        "derafu/translation": "dev-main",
         "laminas/laminas-diactoros": "^3.8",
         "mezzio/mezzio-authentication": "^1.13",
         "mezzio/mezzio-authorization": "^1.11",
-        "mezzio/mezzio-session": "^1.17",
-        "mezzio/mezzio-csrf": "^1.11",
         "mezzio/mezzio-flash": "^1.10",
-        "mezzio/mezzio-session-ext": "^1.21",
-        "derafu/renderer": "dev-main",
-        "derafu/form": "dev-main",
-        "derafu/translation": "dev-main"
+        "mezzio/mezzio-session": "^1.17",
+        "psr/cache": "^3.0",
+        "psr/http-client": "^1.0",
+        "psr/http-factory": "^1.0",
+        "psr/http-message": "^2.0",
+        "psr/http-server-handler": "^1.0",
+        "psr/http-server-middleware": "^1.0"
     },
     "require-dev": {
         "ext-xdebug": "*",
         "friendsofphp/php-cs-fixer": "^3.95",
         "phpstan/phpstan": "^2.2",
         "phpunit/phpunit": "^13.4",
-        "nikic/php-parser": "^5.9"
+        "nikic/php-parser": "^5.9",
+        "derafu/data-processor": "dev-main",
+        "firebase/php-jwt": "^7.2",
+        "league/oauth2-client": "^2.9",
+        "guzzlehttp/guzzle": "^7.10",
+        "symfony/cache": "^8.1",
+        "symfony/dependency-injection": "^8.1",
+        "symfony/config": "^8.1",
+        "symfony/yaml": "^8.1",
+        "derafu/csrf": "dev-main"
     },
     "suggest": {
-        "nikic/php-parser": "Required by the tests of the messages of the package (Derafu\\Translation\\Lint reads the code)."
+        "derafu/csrf": "A CSRF token manager over the session of Mezzio, which the login form of the database provider needs (its form is protected with a CSRF token).",
+        "derafu/session": "The services of the session and of the flash messages of Mezzio (the middlewares and the variables SESSION_*), which the application needs in its pipeline before the authentication.",
+        "nikic/php-parser": "Required by the tests of the messages of the package (Derafu\\Translation\\Lint reads the code).",
+        "firebase/php-jwt": "Required by the Keycloak provider (Derafu\\Auth\\Provider\\Keycloak\\KeycloakTokenVerifier verifies the tokens with it). The database provider does not need it.",
+        "league/oauth2-client": "Required by the Keycloak provider (OAuth2 authorization code flow). It brings guzzlehttp/guzzle, which the provider uses to read the keys of the realm.",
+        "symfony/cache": "A PSR-6 cache pool (any other works) for the keys of the realm of the Keycloak provider (Psr\\Cache\\CacheItemPoolInterface): without it they are read in every request that verifies a token."
     },
     "scripts": {
         "docs": "php tools/phpdocumentor run --config=phpdoc.xml",

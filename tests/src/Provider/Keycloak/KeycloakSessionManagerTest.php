@@ -135,6 +135,42 @@ class KeycloakSessionManagerTest extends TestCase
     }
 
     #[Test]
+    public function testLoginInProgressManagement(): void
+    {
+        $session = new Session([]);
+
+        $this->sessionManager->storeState($session, 'state-1');
+        $this->sessionManager->storeLogin($session, 'nonce-1', 'pkce-code-1');
+
+        $this->assertSame('nonce-1', $this->sessionManager->getNonce($session));
+        $this->assertSame('pkce-code-1', $this->sessionManager->getPkceCode($session));
+
+        // The state, the nonce and the PKCE code are of the login that is in
+        // progress: they go together.
+        $this->sessionManager->clearState($session);
+
+        $this->assertNull($this->sessionManager->getState($session));
+        $this->assertNull($this->sessionManager->getNonce($session));
+        $this->assertNull($this->sessionManager->getPkceCode($session));
+    }
+
+    #[Test]
+    public function testIdTokenIsStoredWithTheAuthInfoAndCleared(): void
+    {
+        $session = new Session([]);
+
+        $this->sessionManager->storeAuthInfo($session, ['access_token' => 'token', 'id_token' => 'id-token']);
+        $this->assertSame('id-token', $this->sessionManager->getIdToken($session));
+
+        // A token response without an ID token does not remove the one that is.
+        $this->sessionManager->storeAuthInfo($session, ['access_token' => 'token-2']);
+        $this->assertSame('id-token', $this->sessionManager->getIdToken($session));
+
+        $this->sessionManager->clearSession($session);
+        $this->assertNull($this->sessionManager->getIdToken($session));
+    }
+
+    #[Test]
     public function testRedirectUrlManagement(): void
     {
         $session = new Session([]);

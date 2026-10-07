@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Contract;
 
+use Derafu\Auth\Exception\AuthenticationException;
 use Mezzio\Session\SessionInterface;
 
 /**
@@ -59,6 +60,20 @@ interface SessionManagerInterface
      * @param SessionInterface $session The session to clear.
      */
     public function clearSession(SessionInterface $session): void;
+
+    /**
+     * Renews the identifier of the session, keeping its data.
+     *
+     * It must be done when the user logs in and when the user logs out, so an
+     * identifier that was known before is of no use after: it is what prevents
+     * session fixation. The new identifier is given to the client when the
+     * session is persisted, at the end of the request.
+     *
+     * @param SessionInterface $session The session of the request.
+     * @throws AuthenticationException If the session can not be renewed in
+     * place.
+     */
+    public function regenerate(SessionInterface $session): void;
 
     /**
      * Stores the redirect URL for after authentication.

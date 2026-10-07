@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Derafu\Auth;
 
 use Derafu\Auth\Contract\SessionManagerInterface;
+use Derafu\Auth\Exception\AuthenticationException;
 use Mezzio\Session\SessionInterface;
 
 /**
@@ -35,6 +36,25 @@ class SessionManager implements SessionManagerInterface
     {
         $this->clearUserInfo($session);
         $this->clearRedirectUrl($session);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * The session of `Mezzio\Session\SessionMiddleware` (`LazySession`) is
+     * renewed in place and persisted with its new identifier. A session that
+     * answers with another instance (`Mezzio\Session\Session` does, it is
+     * immutable) would not be renewed for the request that is being handled, and
+     * that must not go unnoticed.
+     */
+    public function regenerate(SessionInterface $session): void
+    {
+        if ($session->regenerate() !== $session) {
+            throw new AuthenticationException(
+                'The session can not be renewed in place: use the session of Mezzio\\Session\\SessionMiddleware.',
+                500
+            );
+        }
     }
 
     /**

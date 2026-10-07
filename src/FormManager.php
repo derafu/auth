@@ -73,6 +73,14 @@ class FormManager implements FormManagerInterface
         $result = $this->formDataProcessor->process($form, $data);
 
         if (!$result->isValid()) {
+            // An error of the form as a whole (for example a CSRF token that is
+            // not valid) says more than the generic message: the form already
+            // has its text, translated if the processor has a translator.
+            $formError = $result->getFormErrors()[0] ?? null;
+            if ($formError !== null) {
+                throw new FormException($formError, 400);
+            }
+
             throw new FormException('Invalid form data.', 400);
         }
 

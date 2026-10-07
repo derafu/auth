@@ -18,6 +18,7 @@ use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
 use League\OAuth2\Client\Provider\GenericProvider;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 
@@ -25,6 +26,7 @@ use ReflectionClass;
  * Tests for KeycloakUserRepository.
  */
 #[CoversClass(KeycloakUserRepository::class)]
+#[UsesClass(\Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier::class)]
 #[CoversClass(KeycloakConfiguration::class)]
 #[CoversClass(AuthenticationException::class)]
 class KeycloakUserRepositoryTest extends TestCase

@@ -38,26 +38,42 @@ return [
         'No se pudo intercambiar el código por un token: {error}',
     'Failed to refresh token: {error}' =>
         'No se pudo renovar el token: {error}',
-    'Invalid JWT token format.' =>
-        'Formato de token JWT inválido.',
-    'Failed to decode JWT payload.' =>
-        'No se pudo decodificar el contenido del token JWT.',
-    'Failed to parse JWT payload JSON.' =>
-        'No se pudo interpretar el JSON del contenido del token JWT.',
-    'Failed to parse JWT token: {error}' =>
-        'No se pudo interpretar el token JWT: {error}',
 
     // Keycloak callback. The description comes from Keycloak: it is shown as is.
     '{message}' =>
         '{message}',
-    'Session not available.' =>
-        'La sesión no está disponible.',
     'No state parameter found in the session.' =>
         'No se encontró el parámetro state en la sesión.',
     'State parameter does not match the stored state in the session.' =>
         'El parámetro state no coincide con el almacenado en la sesión.',
+    'The login was not completed.' =>
+        'El inicio de sesión no se completó.',
+    'The Keycloak provider requires "league/oauth2-client". Run: composer require league/oauth2-client' =>
+        'El proveedor de Keycloak requiere "league/oauth2-client". Ejecuta: composer require league/oauth2-client',
+    'The Keycloak provider requires "firebase/php-jwt". Run: composer require firebase/php-jwt' =>
+        'El proveedor de Keycloak requiere "firebase/php-jwt". Ejecuta: composer require firebase/php-jwt',
+    'Failed to validate the token: {error}' =>
+        'No se pudo validar el token: {error}',
+    'The audience of the token is not this client.' =>
+        'La audiencia del token no es este cliente.',
+    'The nonce of the token is not the one of the login.' =>
+        'El nonce del token no es el del inicio de sesión.',
+    'The token was not given to this client.' =>
+        'El token no fue entregado a este cliente.',
+    'The issuer of the token is not the realm.' =>
+        'El emisor del token no es el realm.',
+    'The user of the user info is not the user of the token.' =>
+        'El usuario de la información de usuario no es el usuario del token.',
+    'The ID token was not received.' =>
+        'No se recibió el token de identidad.',
+    'The user of the ID token is not the user of the access token.' =>
+        'El usuario del token de identidad no es el usuario del token de acceso.',
+    'The name "{name}" is not valid for a table or a column.' =>
+        'El nombre "{name}" no es válido para una tabla o una columna.',
     'No authorization code received.' =>
         'No se recibió el código de autorización.',
     'Authentication failed: {error}' =>
         'La autenticación falló: {error}',
+    'The session can not be renewed in place: use the session of Mezzio\\Session\\SessionMiddleware.' =>
+        'La sesión no se puede renovar en el lugar: usa la sesión de Mezzio\\Session\\SessionMiddleware.',
 ];

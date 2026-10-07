@@ -4,4 +4,5 @@ auth_login:
 
 auth_logout:
     path: /auth/logout
+    methods: [POST]
     handler: Derafu\Auth\Provider\Database\DatabaseController::logout

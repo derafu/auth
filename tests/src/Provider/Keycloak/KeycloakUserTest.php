@@ -72,13 +72,31 @@ class KeycloakUserTest extends TestCase
             ],
         ];
 
-        $user = new KeycloakUser($userInfo);
+        $user = new KeycloakUser($userInfo, 'client-1');
         $roles = iterator_to_array($user->getRoles());
 
+        // Only the roles of the client of the application: what the user can do
+        // in another client says nothing about this one.
         $this->assertContains('client1-role-a', $roles);
         $this->assertContains('client1-role-b', $roles);
-        $this->assertContains('client2-role-a', $roles);
-        $this->assertCount(3, $roles);
+        $this->assertNotContains('client2-role-a', $roles);
+        $this->assertCount(2, $roles);
+    }
+
+    #[Test]
+    public function testRolesOfOtherClientsAreNotTheRolesOfTheUser(): void
+    {
+        $userInfo = [
+            'sub' => 'user-123',
+            'resource_access' => [
+                'account' => ['roles' => ['manage-account', 'view-profile']],
+                'my-client' => ['roles' => ['viewer']],
+            ],
+        ];
+
+        $this->assertSame(['viewer'], (new KeycloakUser($userInfo, 'my-client'))->getRoles());
+        $this->assertSame([], (new KeycloakUser($userInfo, 'another-client'))->getRoles());
+        $this->assertSame([], (new KeycloakUser($userInfo))->getRoles());
     }
 
     #[Test]
@@ -96,7 +114,7 @@ class KeycloakUserTest extends TestCase
             ],
         ];
 
-        $user = new KeycloakUser($userInfo);
+        $user = new KeycloakUser($userInfo, 'my-client');
         $roles = iterator_to_array($user->getRoles());
 
         // Should have all roles from both realm and resource access
@@ -122,7 +140,7 @@ class KeycloakUserTest extends TestCase
             ],
         ];
 
-        $user = new KeycloakUser($userInfo);
+        $user = new KeycloakUser($userInfo, 'client-1');
         $roles = iterator_to_array($user->getRoles());
 
         // Should have unique roles only
@@ -160,11 +178,9 @@ class KeycloakUserTest extends TestCase
             ],
         ];
 
-        $user = new KeycloakUser($userInfo);
-        $roles = iterator_to_array($user->getRoles());
-
-        // Should handle malformed data gracefully
-        $this->assertEmpty($roles);
+        foreach (['client-1', 'client-2'] as $client) {
+            $this->assertEmpty(iterator_to_array((new KeycloakUser($userInfo, $client))->getRoles()));
+        }
     }
 
     #[Test]

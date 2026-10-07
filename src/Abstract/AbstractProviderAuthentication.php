@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Derafu\Auth\Abstract;
 
 use Derafu\Auth\AnonymousUser;
+use Derafu\Auth\Authorization;
 use Derafu\Auth\Contract\AuthenticationInterface;
 use Derafu\Auth\Contract\ConfigurationInterface;
 use Derafu\Auth\Contract\SessionManagerInterface;
@@ -61,35 +62,44 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
         $session = $this->getSessionFromRequest($request);
         $user = $this->getUserFromSession($session);
 
-        // If the path is not protected, return the user (authenticated or
-        // anonymous).
-        if (!$this->config->requiresAuth($path)) {
+        // The logout and the login are done before looking at what is
+        // protected: they are the way out and the way in, so a protected path
+        // that includes them must not turn them away.
+
+        // Handle logout. It is null to trigger the unauthorized response, that
+        // closes the session (see handleLogout()). Only a logout request does
+        // it: anything else to that path is not a logout, and it goes on to the
+        // controller of the route, that sends the user away.
+        if ($this->isLogoutPath($path)) {
+            return $this->isLogoutRequest($request) ? null : $user;
+        }
+
+        // Handle login. The login path is public: the user is the one that the
+        // login gives, or the one that the session already had.
+        if ($this->isLoginPath($path)) {
+            if ($session) {
+                $user = $this->handleLogin($request, $session) ?? $user;
+            }
+
             return $user;
         }
 
-        // If the path is protected, the user must be authenticated.
+        // If the path is not protected and its route does not declare roles,
+        // return the user (authenticated or anonymous). A route that declares
+        // roles is protected, even when the site did not list its path.
+        if (
+            !$this->config->requiresAuth($path)
+            && empty(Authorization::routeRoles($request))
+        ) {
+            return $user;
+        }
+
+        // If the path is protected, the user must be authenticated. Null
+        // triggers the unauthorized response.
         if ($user->isAnonymous()) {
-            // Must be null to trigger unauthorized response and give an error
-            // message.
             return null;
         }
 
-        // Handle logout.
-        if ($this->isLogoutPath($path)) {
-            if ($session) {
-                $this->logout($session);
-            }
-            // Must be null to trigger unauthorized response and handle logout.
-            return null;
-        }
-
-        // Handle login.
-        if ($this->isLoginPath($path) && $session) {
-            return $this->handleLogin($request, $session);
-        }
-
-        // The user is authenticated, is not the logout path and is not the
-        // login path, so return the user.
         return $user;
     }
 
@@ -106,6 +116,13 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
         // Handle logout.
         if ($this->isLogoutPath($path)) {
             return $this->handleLogout($request);
+        }
+
+        // Handle an unauthorized request to the API: a client of the API gets
+        // the answer, with a session or without it (the session middleware gives
+        // one to every request), not a redirect to a login that it can not use.
+        if (str_starts_with($path, '/api')) {
+            return $this->handleUnauthorizedApi();
         }
 
         // Handle unauthorized request (with session).
@@ -272,6 +289,52 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
     }
 
     /**
+     * Checks if a request to the logout path is a logout.
+     *
+     * A logout is a POST that comes from the same origin: a logout that a link
+     * or an image of another site could trigger (a GET, or a POST from another
+     * site) is a cross-site request forgery. The origin is what the browser says
+     * in `Sec-Fetch-Site` or in `Origin`; a request that has neither is not made
+     * by a browser, and a browser always sends one of them in a POST.
+     *
+     * @param ServerRequestInterface $request The request.
+     * @return bool True if it is a logout.
+     */
+    protected function isLogoutRequest(ServerRequestInterface $request): bool
+    {
+        return strtoupper($request->getMethod()) === 'POST' && $this->isSameOrigin($request);
+    }
+
+    /**
+     * Checks if a request comes from the same origin, by what the browser says.
+     *
+     * @param ServerRequestInterface $request The request.
+     * @return bool True if it does, or if it does not say (it is not a browser).
+     */
+    protected function isSameOrigin(ServerRequestInterface $request): bool
+    {
+        $site = $request->getHeaderLine('Sec-Fetch-Site');
+        if ($site !== '') {
+            return in_array($site, ['same-origin', 'none'], true);
+        }
+
+        $origin = $request->getHeaderLine('Origin');
+        if ($origin === '') {
+            return true;
+        }
+
+        $port = static fn (?string $scheme, ?int $port): ?int => $port
+            ?? ['http' => 80, 'https' => 443][strtolower((string) $scheme)] ?? null;
+
+        $from = parse_url($origin);
+        $uri = $request->getUri();
+
+        return strtolower((string) ($from['scheme'] ?? '')) === strtolower($uri->getScheme())
+            && strtolower((string) ($from['host'] ?? '')) === strtolower($uri->getHost())
+            && $port($from['scheme'] ?? null, $from['port'] ?? null) === $port($uri->getScheme(), $uri->getPort());
+    }
+
+    /**
      * Handles the logout.
      *
      * @param ServerRequestInterface $request The request.
@@ -279,6 +342,11 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
      */
     protected function handleLogout(ServerRequestInterface $request): PsrResponseInterface
     {
+        $session = $this->getSessionFromRequest($request);
+        if ($session) {
+            $this->logout($session);
+        }
+
         $this->addSuccessFlash($request, 'The session has been closed successfully.');
 
         return new RedirectResponse((string) $this->config->getLogoutRedirectRoute());
@@ -314,19 +382,6 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
     protected function handleUnauthenticated(
         ServerRequestInterface $request
     ): PsrResponseInterface {
-        $path = $request->getUri()->getPath();
-
-        if (str_starts_with($path, '/api')) {
-            return new JsonResponse(
-                [
-                    'status' => 401,
-                    'title' => $this->translate(new TranslatableMessage('Unauthorized', [], 'auth')),
-                    'detail' => $this->translate(new TranslatableMessage('You need to send valid credentials to access this resource.', [], 'auth')),
-                ],
-                401
-            );
-        }
-
         $this->addErrorFlash(
             $request,
             'You must be logged in to access the requested page {path}',
@@ -334,6 +389,25 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
         );
 
         return new RedirectResponse((string) $this->config->getUnauthorizedRedirectRoute());
+    }
+
+    /**
+     * Handles the unauthorized request to the API (a path that starts with
+     * `/api`): a JSON response with the status 401, in the language of the
+     * translator.
+     *
+     * @return PsrResponseInterface The response.
+     */
+    protected function handleUnauthorizedApi(): PsrResponseInterface
+    {
+        return new JsonResponse(
+            [
+                'status' => 401,
+                'title' => $this->translate(new TranslatableMessage('Unauthorized', [], 'auth')),
+                'detail' => $this->translate(new TranslatableMessage('You need to send valid credentials to access this resource.', [], 'auth')),
+            ],
+            401
+        );
     }
 
     /**
@@ -374,6 +448,29 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
     protected function logout(SessionInterface $session): void
     {
         $this->sessionManager->clearSession($session);
+
+        // The identifier that the session had must be of no use after logout.
+        $this->sessionManager->regenerate($session);
+    }
+
+    /**
+     * Remembers the current page, for the redirect after the authentication.
+     *
+     * Only its path and query are stored, so what is stored never takes the user
+     * to another site (the host of a request is not to be trusted).
+     */
+    protected function rememberPage(ServerRequestInterface $request, SessionInterface $session): void
+    {
+        $uri = $request->getUri();
+
+        // A path that starts with two slashes (or a slash and a backslash) is
+        // not a path for a browser, it is another site: it is made one.
+        $path = '/' . ltrim($uri->getPath(), '/\\');
+
+        $this->sessionManager->storeRedirectUrl(
+            $session,
+            $path . ($uri->getQuery() !== '' ? '?' . $uri->getQuery() : '')
+        );
     }
 
     /**
@@ -383,8 +480,7 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
         ServerRequestInterface $request,
         SessionInterface $session
     ): PsrResponseInterface {
-        // Store current URL for redirect after authentication.
-        $this->sessionManager->storeRedirectUrl($session, (string) $request->getUri());
+        $this->rememberPage($request, $session);
 
         // Redirect to login page.
         return new RedirectResponse((string) $this->config->getUnauthorizedRedirectRoute());

@@ -1,5 +1,4 @@
 imports:
-    - session-services.yaml
     - auth-services.yaml
 
 services:
@@ -30,6 +29,14 @@ services:
     # Keycloak configuration.
     Derafu\Auth\Contract\ConfigurationInterface:
         alias: Derafu\Auth\Provider\Keycloak\KeycloakConfiguration
+    # Verifies the tokens with the keys of the realm. The keys are cached in the
+    # PSR-6 pool of the application if it has one (Psr\Cache\CacheItemPoolInterface).
+    # The client that reads them is made from the options of the configuration
+    # (verification of the certificate, timeouts), not the one of the application.
+    Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier:
+        arguments:
+            $http: ~
+            $requestFactory: ~
     Derafu\Auth\Provider\Keycloak\KeycloakUserRepository: ~
     Derafu\Auth\Provider\Keycloak\KeycloakConfiguration:
         arguments:
@@ -42,6 +49,9 @@ services:
                 redirect_uri: '%env(default::string:KEYCLOAK_REDIRECT_URI)%'
                 scopes: '%env(default::json:KEYCLOAK_SCOPES)%'
                 callback_route: '%env(default::string:KEYCLOAK_CALLBACK_ROUTE)%'
+                issuer: '%env(default::string:KEYCLOAK_ISSUER)%'
+                end_session: '%env(default::bool:KEYCLOAK_END_SESSION)%'
+                post_logout_redirect_uri: '%env(default::string:KEYCLOAK_POST_LOGOUT_REDIRECT_URI)%'
                 http_client_options:
                     timeout: '%env(default::int:KEYCLOAK_HTTP_TIMEOUT)%'
                     connect_timeout: '%env(default::int:KEYCLOAK_HTTP_CONNECT_TIMEOUT)%'

@@ -105,10 +105,11 @@ interface ConfigurationInterface
     public function isEnabled(): bool;
 
     /**
-     * Gets the allowed roles for the given path.
+     * Gets the roles that the protected path that matches the given path needs.
      *
      * @param string $path The path to check.
-     * @return array<string> The required roles.
+     * @return array<string> The roles, empty if the path is not protected or
+     * the protected path asks only for a user.
      */
     public function allowedRoles(string $path): array;
 

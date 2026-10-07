@@ -1,0 +1,72 @@
+{
+  "realm": "test",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "roles": {
+    "realm": [
+      {
+        "name": "admin"
+      },
+      {
+        "name": "editor"
+      }
+    ],
+    "client": {
+      "derafu-auth": [
+        {
+          "name": "app-editor"
+        }
+      ]
+    }
+  },
+  "clients": [
+    {
+      "clientId": "derafu-auth",
+      "name": "Derafu Auth tests",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "test-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "https://app.test/auth/callback"
+      ],
+      "webOrigins": [],
+      "attributes": {
+        "post.logout.redirect.uris": "https://app.test/bye",
+        "pkce.code.challenge.method": "S256"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "ana",
+      "email": "ana@example.com",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Ana",
+      "lastName": "Perez",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "secret",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "admin"
+      ],
+      "clientRoles": {
+        "derafu-auth": [
+          "app-editor"
+        ],
+        "account": [
+          "view-profile"
+        ]
+      }
+    }
+  ]
+}

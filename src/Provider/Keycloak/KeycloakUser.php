@@ -29,14 +29,14 @@ class KeycloakUser extends User implements UserInterface
      *
      * @param array<string, mixed> $userInfo The user information from Keycloak.
      */
-    public function __construct(array $userInfo)
+    public function __construct(array $userInfo, ?string $clientId = null)
     {
         $identity = $userInfo['sub']
             ?? throw new AuthenticationException('User identity not found in keycloak user info.');
 
         parent::__construct(
             identity: $identity,
-            roles: $this->extractRoles($userInfo),
+            roles: $this->extractRoles($userInfo, $clientId),
             details: $userInfo,
         );
     }
@@ -44,10 +44,16 @@ class KeycloakUser extends User implements UserInterface
     /**
      * Extracts the user roles from the user information.
      *
+     * They are the roles of the realm, and the ones of the client (the
+     * application) in `resource_access`: the roles that the user has in other
+     * clients of the realm say nothing about this application.
+     *
      * @param array<string, mixed> $userInfo The user information from Keycloak.
+     * @param string|null $clientId The client of the application. Without it
+     * there are no roles of a client.
      * @return array<string> The user roles.
      */
-    private function extractRoles(array $userInfo): array
+    private function extractRoles(array $userInfo, ?string $clientId): array
     {
         $roles = $userInfo['roles'] ?? [];
         $realmAccess = $userInfo['realm_access'] ?? [];
@@ -58,16 +64,13 @@ class KeycloakUser extends User implements UserInterface
             $roles = array_merge($roles, $realmAccess['roles']);
         }
 
-        // Add resource roles.
-        if (is_array($resourceAccess)) {
-            foreach ($resourceAccess as $resource => $access) {
-                if (is_array($access) && isset($access['roles']) && is_array($access['roles'])) {
-                    $roles = array_merge($roles, $access['roles']);
-                }
-            }
+        // Add the roles of the client.
+        $access = is_array($resourceAccess) && $clientId !== null ? ($resourceAccess[$clientId] ?? null) : null;
+        if (is_array($access) && isset($access['roles']) && is_array($access['roles'])) {
+            $roles = array_merge($roles, $access['roles']);
         }
 
-        return array_unique($roles);
+        return array_values(array_unique($roles));
     }
 
     /**

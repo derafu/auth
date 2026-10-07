@@ -12,9 +12,10 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Provider\Keycloak;
 
+use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Exception\AuthenticationException;
-use Exception;
 use Laminas\Diactoros\Response\RedirectResponse;
+use Mezzio\Authentication\UserInterface as MezzioUserInterface;
 use Mezzio\Session\SessionInterface;
 use Mezzio\Session\SessionMiddleware;
 use Psr\Http\Message\ResponseInterface;
@@ -22,117 +23,68 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * Minimal callback controller for Keycloak flow.
+ * Controller of the routes of Keycloak: the callback and the logout.
+ *
+ * The login and the logout are done by `KeycloakAuthentication`, before a
+ * request gets here, whether the paths are protected or not: the authentication
+ * exchanges the code and renews the session, and closes the session. What is
+ * left for the controller is the redirect.
  */
 class KeycloakController implements RequestHandlerInterface
 {
     /**
      * Constructor of the Keycloak controller.
      *
-     * @param KeycloakUserRepository $userRepository The user repository.
+     * @param KeycloakConfiguration $config The configuration.
      * @param KeycloakSessionManager $sessionManager The session manager.
      */
     public function __construct(
         private readonly KeycloakConfiguration $config,
-        private readonly KeycloakUserRepository $userRepository,
         private readonly KeycloakSessionManager $sessionManager,
     ) {
     }
 
     /**
-     * Handle the Keycloak callback request.
+     * Handles the callback of Keycloak, after the login was done: the user goes
+     * to the page that was requested before the login, or to the page that
+     * follows the login.
      *
      * @param ServerRequestInterface $request
      * @return ResponseInterface
+     * @throws AuthenticationException If the request is not the one of a user
+     * that logged in.
      */
     public function handle(ServerRequestInterface $request): ResponseInterface
     {
-        $queryParams = $request->getQueryParams();
-
-        // Check for errors.
-        if (!empty($queryParams['error_description'])) {
-            throw new AuthenticationException(
-                ['{message}', 'message' => $queryParams['error_description']],
-                400
-            );
-        }
-
-        // Verify session.
+        $user = $request->getAttribute(MezzioUserInterface::class);
         $session = $request->getAttribute(SessionMiddleware::SESSION_ATTRIBUTE);
-        if (!$session instanceof SessionInterface) {
-            throw new AuthenticationException('Session not available.', 500);
+
+        if (
+            !$user instanceof UserInterface
+            || $user->isAnonymous()
+            || !$session instanceof SessionInterface
+        ) {
+            throw new AuthenticationException('The login was not completed.', 400);
         }
 
-        // Verify state parameter in session.
-        $storedState = $this->sessionManager->getState($session);
-        if (!$storedState) {
-            throw new AuthenticationException(
-                'No state parameter found in the session.',
-                400
-            );
-        }
+        $redirectUrl = $this->sessionManager->getRedirectUrl($session)
+            ?: $this->config->getLoginRedirectRoute()
+        ;
+        $this->sessionManager->clearRedirectUrl($session);
 
-        // Verify state parameter in query params.
-        $state = $queryParams['state'] ?? '';
-        if ($state !== $storedState) {
-            throw new AuthenticationException(
-                'State parameter does not match the stored state in the session.',
-                400
-            );
-        }
-
-        // Get authorization code.
-        $code = $queryParams['code'] ?? '';
-        if (empty($code)) {
-            throw new AuthenticationException('No authorization code received.', 400);
-        }
-
-        try {
-            // Exchange code for tokens.
-            $tokens = $this->userRepository->exchangeCodeForToken($code);
-
-            // Store authentication info.
-            $this->sessionManager->storeAuthInfo($session, $tokens);
-
-            // Get user info.
-            $userInfo = $this->userRepository->getUserInfoFromToken($tokens['access_token']);
-            $this->sessionManager->storeUserInfo($session, $userInfo);
-
-            // Clear state.
-            $this->sessionManager->clearState($session);
-
-            // Redirect to stored URL or login redirect route.
-            $redirectUrl = $this->sessionManager->getRedirectUrl($session)
-                ?: $this->config->getLoginRedirectRoute()
-            ;
-            return new RedirectResponse($redirectUrl);
-        } catch (Exception $e) {
-            if ($e instanceof AuthenticationException) {
-                throw $e;
-            }
-
-            throw new AuthenticationException(
-                ['Authentication failed: {error}', 'error' => $e->getMessage()],
-                400,
-                $e
-            );
-        }
+        return new RedirectResponse($redirectUrl);
     }
 
     /**
-     * Handle the Keycloak logout request.
+     * Handles the logout request that the authentication did not handle (it
+     * does it before this, when it is on the pipeline): the user goes to the
+     * page that follows the logout.
      *
      * @param ServerRequestInterface $request
      * @return ResponseInterface
      */
     public function logout(ServerRequestInterface $request): ResponseInterface
     {
-        $session = $request->getAttribute(SessionMiddleware::SESSION_ATTRIBUTE);
-
-        if ($session instanceof SessionInterface) {
-            $this->sessionManager->clearSession($session);
-        }
-
         return new RedirectResponse($this->config->getLogoutRedirectRoute());
     }
 }

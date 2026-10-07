@@ -19,6 +19,11 @@ use Derafu\Auth\Provider\Database\DatabaseConfiguration;
  * Login form.
  *
  * This form is used to login a user using a database.
+ *
+ * The names of its fields are the columns of the user table that are configured
+ * (they are what `DatabaseAuthentication` reads), but their titles are fixed
+ * texts, in English, in the domain `auth`: they are translated when the form is
+ * created, and they do not depend on how the columns are named.
  */
 class LoginForm implements FormInterface
 {
@@ -62,17 +67,19 @@ class LoginForm implements FormInterface
         $passwordField = $this->config->getUserPasswordField();
 
         return [
+            'translationDomain' => 'auth',
             'schema' => [
+                'name' => 'login',
                 'type' => 'object',
                 'properties' => [
                     $identityField => [
                         'type' => 'string',
-                        'title' => ucfirst($identityField),
+                        'title' => 'Username',
                         'minLength' => 1,
                     ],
                     $passwordField => [
                         'type' => 'string',
-                        'title' => ucfirst($passwordField),
+                        'title' => 'Password',
                         'minLength' => 1,
                     ],
                 ],

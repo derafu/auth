@@ -4,4 +4,5 @@ auth_callback:
 
 auth_logout:
     path: /auth/logout
+    methods: [POST]
     handler: Derafu\Auth\Provider\Keycloak\KeycloakController::logout

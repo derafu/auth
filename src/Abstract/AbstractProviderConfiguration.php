@@ -224,7 +224,7 @@ abstract class AbstractProviderConfiguration implements ConfigurationInterface
      */
     public function allowedRoles(string $path): array
     {
-        // If the authentication is not enabled, return false.
+        // If the authentication is not enabled, no role is needed.
         if (!$this->isEnabled()) {
             return [];
         }
@@ -237,7 +237,7 @@ abstract class AbstractProviderConfiguration implements ConfigurationInterface
             }
         }
 
-        // If no route is matched, return all roles.
+        // If no protected path matches, no role is needed.
         return [];
     }
 

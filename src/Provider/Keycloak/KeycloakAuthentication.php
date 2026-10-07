@@ -17,6 +17,7 @@ use Derafu\Auth\AnonymousUser;
 use Derafu\Auth\Contract\AuthenticationInterface;
 use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Exception\AuthenticationException;
+use Exception;
 use Laminas\Diactoros\Response\RedirectResponse;
 use Mezzio\Session\SessionInterface;
 use Psr\Http\Message\ResponseInterface as PsrResponseInterface;
@@ -43,7 +44,7 @@ class KeycloakAuthentication extends AbstractProviderAuthentication implements A
      */
     public function __construct(
         private readonly KeycloakUserRepository $userRepository,
-        KeycloakConfiguration $config,
+        private readonly KeycloakConfiguration $config,
         private readonly KeycloakSessionManager $sessionManager,
         private readonly UserInterface $anonymousUser = new AnonymousUser(),
         ?TranslatorInterface $translator = null
@@ -58,44 +59,96 @@ class KeycloakAuthentication extends AbstractProviderAuthentication implements A
 
     /**
      * {@inheritDoc}
+     *
+     * It is the callback of Keycloak: the user comes back from Keycloak with a
+     * code, that is exchanged for the tokens, and the session is renewed. It is
+     * done here, and only here, because the code can be used once.
+     *
+     * @throws AuthenticationException If Keycloak answers with an error or the
+     * callback is not the one of a login that this session started.
      */
     protected function handleLogin(
         ServerRequestInterface $request,
         SessionInterface $session
     ): ?UserInterface {
         $queryParams = $request->getQueryParams();
-        $savedState = $this->sessionManager->getState($session);
 
-        // Verify state parameter for CSRF protection.
-        if (!isset($queryParams['state']) || $savedState !== $queryParams['state']) {
-            $this->sessionManager->clearState($session);
-            return null;
+        // Keycloak says why the user is not logged in (the user said no, for
+        // example).
+        $error = $queryParams['error_description'] ?? $queryParams['error'] ?? '';
+        if (is_string($error) && $error !== '') {
+            throw new AuthenticationException(['{message}', 'message' => $error], 400);
         }
 
-        // Process authorization code.
-        if (!isset($queryParams['code'])) {
-            return null;
+        // The login must be one that this session started.
+        $storedState = $this->sessionManager->getState($session);
+        if (!$storedState) {
+            throw new AuthenticationException('No state parameter found in the session.', 400);
+        }
+
+        $state = $queryParams['state'] ?? '';
+        if (!is_string($state) || !hash_equals($storedState, $state)) {
+            throw new AuthenticationException(
+                'State parameter does not match the stored state in the session.',
+                400
+            );
+        }
+
+        $code = $queryParams['code'] ?? '';
+        if (!is_string($code) || $code === '') {
+            throw new AuthenticationException('No authorization code received.', 400);
         }
 
         try {
-            // Exchange code for token.
-            $tokenInfo = $this->userRepository->exchangeCodeForToken($queryParams['code']);
+            // Exchange the code for the tokens (with the PKCE code of this
+            // login), and verify the ID token: it is the one of this login (its
+            // nonce) and it was given by the realm to this client.
+            $tokenInfo = $this->userRepository->exchangeCodeForToken(
+                $code,
+                $this->sessionManager->getPkceCode($session)
+            );
 
-            // Store authentication information.
-            $this->sessionManager->storeAuthInfo($session, $tokenInfo);
+            if (empty($tokenInfo['id_token'])) {
+                throw new AuthenticationException('The ID token was not received.', 400);
+            }
 
-            // Get and store user information.
+            $idToken = $this->userRepository->verifyIdToken(
+                $tokenInfo['id_token'],
+                (string) $this->sessionManager->getNonce($session)
+            );
+
+            // Get the user (the access token is verified) and check that it is
+            // the user of the ID token.
             $userInfo = $this->userRepository->getUserInfoFromToken($tokenInfo['access_token']);
+            if (($idToken['sub'] ?? null) !== ($userInfo['sub'] ?? null)) {
+                throw new AuthenticationException(
+                    'The user of the ID token is not the user of the access token.',
+                    400
+                );
+            }
+
+            $this->sessionManager->storeAuthInfo($session, $tokenInfo);
             $this->sessionManager->storeUserInfo($session, $userInfo);
-
-            // Clear state.
-            $this->sessionManager->clearState($session);
-
-            return new KeycloakUser($userInfo);
-
-        } catch (AuthenticationException) {
-            return null;
+        } catch (AuthenticationException $e) {
+            throw $e;
+        } catch (Exception $e) {
+            throw new AuthenticationException(
+                ['Authentication failed: {error}', 'error' => $e->getMessage()],
+                400,
+                $e
+            );
         }
+
+        // The state is used once.
+        $this->sessionManager->clearState($session);
+
+        // The identifier that the session had before the login must be of no use
+        // after it (session fixation).
+        $this->sessionManager->regenerate($session);
+
+        $this->addSuccessFlash($request, 'Successfully logged in.');
+
+        return new KeycloakUser($userInfo, $this->config->getClientId());
     }
 
     /**
@@ -117,7 +170,7 @@ class KeycloakAuthentication extends AbstractProviderAuthentication implements A
                     );
                     $this->sessionManager->storeUserInfo($session, $userInfo);
 
-                    return new KeycloakUser($userInfo);
+                    return new KeycloakUser($userInfo, $this->config->getClientId());
                 } catch (AuthenticationException) {
                     $this->sessionManager->clearSession($session);
                     return $this->anonymousUser;
@@ -131,11 +184,35 @@ class KeycloakAuthentication extends AbstractProviderAuthentication implements A
         // Return existing user.
         $userInfo = $this->sessionManager->getUserInfo($session);
         if ($userInfo) {
-            return new KeycloakUser($userInfo);
+            return new KeycloakUser($userInfo, $this->config->getClientId());
         }
 
         // If the user info is not found, return null.
         return null;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * The session of the application is closed, and the user is sent to Keycloak
+     * to end its session there too (OpenID Connect RP-Initiated Logout), which
+     * sends the user back to the page that follows the logout. Otherwise the user
+     * would still have a session in Keycloak, and the next login would not ask
+     * for the password. Without an ID token in the session, or if it is not
+     * wanted (`end_session`), the user goes straight to that page.
+     */
+    protected function handleLogout(ServerRequestInterface $request): PsrResponseInterface
+    {
+        $session = $this->getSessionFromRequest($request);
+        $idToken = $session ? $this->sessionManager->getIdToken($session) : null;
+
+        $response = parent::handleLogout($request);
+
+        if (!$this->config->isEndSession() || $idToken === null) {
+            return $response;
+        }
+
+        return new RedirectResponse($this->userRepository->getLogoutUrl($idToken));
     }
 
     /**
@@ -145,15 +222,19 @@ class KeycloakAuthentication extends AbstractProviderAuthentication implements A
         ServerRequestInterface $request,
         SessionInterface $session
     ): PsrResponseInterface {
-        // Store current URL for redirect after authentication.
-        $this->sessionManager->storeRedirectUrl($session, (string) $request->getUri());
+        $this->rememberPage($request, $session);
 
         // Generate authorization URL.
         $authUrl = $this->userRepository->createAuthorizationUrl();
 
-        // Store state for CSRF protection.
-        $state = $this->userRepository->getState();
-        $this->sessionManager->storeState($session, $state);
+        // Store what the login needs when the user comes back: the state (CSRF),
+        // the nonce of the ID token and the PKCE code.
+        $this->sessionManager->storeState($session, $this->userRepository->getState());
+        $this->sessionManager->storeLogin(
+            $session,
+            $this->userRepository->getNonce(),
+            $this->userRepository->getPkceCode()
+        );
 
         return new RedirectResponse($authUrl);
     }

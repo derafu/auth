@@ -42,6 +42,8 @@ class DatabaseAuthentication extends AbstractProviderAuthentication implements A
      * @param UserInterface $anonymousUser The anonymous user.
      * @param TranslatorInterface|null $translator Translates the response of an
      * unauthenticated request to the API.
+     * @param LoginThrottle|null $throttle Limits the failed attempts to log in.
+     * Without it the attempts are not limited.
      */
     public function __construct(
         private readonly DatabaseUserRepository $userRepository,
@@ -49,7 +51,8 @@ class DatabaseAuthentication extends AbstractProviderAuthentication implements A
         private readonly SessionManagerInterface $sessionManager,
         private readonly FormManagerInterface $formManager,
         private readonly UserInterface $anonymousUser = new AnonymousUser(),
-        ?TranslatorInterface $translator = null
+        ?TranslatorInterface $translator = null,
+        private readonly ?LoginThrottle $throttle = null
     ) {
         parent::__construct(
             config: $config,
@@ -57,48 +60,6 @@ class DatabaseAuthentication extends AbstractProviderAuthentication implements A
             anonymousUser: $anonymousUser,
             translator: $translator
         );
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function authenticate(ServerRequestInterface $request): ?UserInterface
-    {
-        // Get the path, session and user from the request.
-        $path = $request->getUri()->getPath();
-        $session = $this->getSessionFromRequest($request);
-        $user = $this->getUserFromSession($session);
-
-        // Handle logout.
-        if ($this->isLogoutPath($path)) {
-            if ($session) {
-                $this->logout($session);
-            }
-            // Must be null to trigger unauthorized response and handle logout.
-            return null;
-        }
-
-        // Handle login.
-        if ($this->isLoginPath($path) && $session) {
-            $user = $this->handleLogin($request, $session) ?? $this->anonymousUser;
-        }
-
-        // If the path is not protected, return the user (authenticated or
-        // anonymous).
-        if (!$this->config->requiresAuth($path)) {
-            return $user;
-        }
-
-        // If the path is protected, the user must be authenticated.
-        if ($user->isAnonymous()) {
-            // Must be null to trigger unauthorized response and give an error
-            // message.
-            return null;
-        }
-
-        // The user is authenticated, is not the logout path and is not the
-        // login path, so return the user.
-        return $user;
     }
 
     /**
@@ -113,11 +74,13 @@ class DatabaseAuthentication extends AbstractProviderAuthentication implements A
             return null;
         }
 
-        // Get the form and process it.
+        // Get the form and process it. A request without a body (it is null in
+        // some PSR-7 implementations) is a form without data.
+        $body = $request->getParsedBody();
         try {
             $result = $this->formManager->processForm(
                 LoginForm::class,
-                $request->getParsedBody()
+                is_array($body) ? $body : []
             );
         } catch (FormException $e) {
             $this->addErrorFlash($request, $e->getTranslatableMessage(), now: true);
@@ -128,13 +91,32 @@ class DatabaseAuthentication extends AbstractProviderAuthentication implements A
         $data = $result->getProcessedData();
         $identity = $data[$this->config->getUserIdentityField()];
         $password = $data[$this->config->getUserPasswordField()];
+        $address = (string) ($request->getServerParams()['REMOTE_ADDR'] ?? 'unknown');
+
+        // Too many failed attempts: the credentials are not even checked, so a
+        // password that is guessed in the window is of no use.
+        $seconds = $this->throttle?->retryAfter($identity, $address) ?? 0;
+        if ($seconds > 0) {
+            $this->addErrorFlash(
+                $request,
+                'Too many failed login attempts. Try again in {minutes, plural, one {# minute} other {# minutes}}.',
+                ['minutes' => (int) ceil($seconds / 60)],
+                now: true
+            );
+
+            return null;
+        }
 
         // Attempt authentication.
         $user = $this->userRepository->authenticate($identity, $password);
         if ($user === null) {
+            $this->throttle?->hit($identity, $address);
             $this->addErrorFlash($request, 'Invalid identity or password.', now: true);
+
             return null;
         }
+
+        $this->throttle?->clear($identity, $address);
 
         // Store user information in session.
         $userInfo = [
@@ -143,6 +125,10 @@ class DatabaseAuthentication extends AbstractProviderAuthentication implements A
             'details' => $user->getDetails(),
         ];
         $this->sessionManager->storeUserInfo($session, $userInfo);
+
+        // The identifier that the session had before the login must be of no
+        // use after it (session fixation).
+        $this->sessionManager->regenerate($session);
 
         // Add success flash message.
         $this->addSuccessFlash($request, 'Successfully logged in.');

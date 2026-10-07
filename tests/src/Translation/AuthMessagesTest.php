@@ -14,6 +14,7 @@ namespace Derafu\TestsAuth\Translation;
 
 use Derafu\Auth\Abstract\AbstractProviderAuthentication;
 use Derafu\Auth\Translation\AuthTranslationResourceProvider;
+use Derafu\Form\Lint\FormTranslationAudit;
 use Derafu\Translation\Lint\MessageMethod;
 use Derafu\Translation\Lint\MessageReference;
 use Derafu\Twig\Lint\TwigTranslationAudit;
@@ -40,6 +41,9 @@ use Twig\TwigFunction;
  *   - The flash message of a form that is not valid is the message of the
  *     exception of the form: it is given as it is, and it is audited where the
  *     exception is thrown.
+ *   - When the form has an error of its own (a CSRF token that is not valid),
+ *     the exception has the text of that error: it is audited in derafu/form,
+ *     where it is written.
  *   - The partial of the flash messages translates the message that it is given
  *     (its id, parameters and domain are data of the session).
  */
@@ -80,12 +84,37 @@ final class AuthMessagesTest extends TestCase
         // Finding nothing would look like a clean result.
         $this->assertFalse($report->nothingFound);
         $this->assertSame([], $report->describe($report->missingTranslations));
-        $this->assertSame([], $report->describe($report->notUsedBySources));
+
+        // The texts of the login form are in the same domain as the ones of the
+        // templates, so the audit of the templates sees them as not used: they
+        // are the ones that the audit of the form finds.
+        $forms = (new FormTranslationAudit())->audit(
+            $root . '/src/Provider/Database/Form',
+            new AuthTranslationResourceProvider()
+        );
+        $this->assertFalse($forms->nothingFound);
+        $this->assertSame([], $forms->describe($forms->dynamicTexts));
+        $this->assertSame([], $forms->describe($forms->withoutDomain));
+        $this->assertSame([], $forms->describe($forms->missingTranslations));
+
+        $usedByTheForms = array_map(
+            fn ($text) => ['domain' => (string) $text->domain, 'id' => (string) $text->id],
+            $forms->texts
+        );
+        $this->assertSame(
+            [],
+            $report->describe(array_values(array_filter(
+                $report->notUsedBySources,
+                fn (array $entry) => !in_array($entry, $usedByTheForms, true)
+            )))
+        );
         $this->assertSame([], $report->describe($report->notTranslatable));
         $this->assertSame([], $report->describe($report->untranslatedTexts));
 
         $this->assertSame(
             [
+                'Derafu\\Auth\\FormManager::processForm: '
+                    . 'new \\Derafu\\Auth\\Exception\\FormException($formError, 400)',
                 'Derafu\\Auth\\Provider\\Database\\DatabaseAuthentication::handleLogin: '
                     . '$this->addErrorFlash($request, $e->getTranslatableMessage(), now: true)',
                 'partials/flash-messages.html.twig: '

@@ -156,6 +156,21 @@ class DatabaseConfiguration extends AbstractProviderConfiguration implements Con
             ],
         ];
 
+        // They are put in the queries as they are: only names are valid (a table,
+        // or a table of a schema, and columns).
+        foreach ([
+            $userRepositoryConfig['table'],
+            $userRepositoryConfig['field']['identity'],
+            $userRepositoryConfig['field']['password'],
+        ] as $name) {
+            if (!is_string($name) || !preg_match('/^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$/', $name)) {
+                throw new ConfigurationException([
+                    'The name "{name}" is not valid for a table or a column.',
+                    'name' => is_string($name) ? $name : get_debug_type($name),
+                ]);
+            }
+        }
+
         $sqlGetRoles = '
             SELECT r.name
             FROM

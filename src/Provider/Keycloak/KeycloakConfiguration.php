@@ -78,8 +78,33 @@ class KeycloakConfiguration extends AbstractProviderConfiguration implements Con
     private array $httpClientOptions = [
         'timeout' => 30,
         'connect_timeout' => 30,
-        'verify' => false,
+        'verify' => true,
     ];
+
+    /**
+     * The issuer of the tokens: the URL of the realm as the clients of Keycloak
+     * see it (the `iss` of its tokens). It is the URL of the realm unless
+     * Keycloak is reached by another URL than the one it publishes.
+     *
+     * @var string
+     */
+    private string $issuer = '';
+
+    /**
+     * Whether the logout also ends the session of the user in Keycloak.
+     *
+     * @var bool
+     */
+    private bool $endSession = true;
+
+    /**
+     * The URL where Keycloak sends the user after the logout. It must be one of
+     * the post logout redirect URIs of the client. If it is empty it is the page
+     * that follows the logout, in the site of the redirect URI.
+     *
+     * @var string
+     */
+    private string $postLogoutRedirectUri = '';
 
     /**
      * Creates a new Keycloak configuration.
@@ -111,8 +136,18 @@ class KeycloakConfiguration extends AbstractProviderConfiguration implements Con
         $this->callbackRoute = $config['callback_route']
             ?? $this->callbackRoute
         ;
-        $this->httpClientOptions = $config['http_client_options']
-            ?? $this->httpClientOptions
+        $this->httpClientOptions = array_filter(
+            $config['http_client_options'] ?? [],
+            fn (mixed $value) => $value !== null
+        ) + $this->httpClientOptions;
+        $this->issuer = $config['issuer']
+            ?? $this->issuer
+        ;
+        $this->endSession = $config['end_session']
+            ?? $this->endSession
+        ;
+        $this->postLogoutRedirectUri = $config['post_logout_redirect_uri']
+            ?? $this->postLogoutRedirectUri
         ;
     }
 
@@ -161,6 +196,9 @@ class KeycloakConfiguration extends AbstractProviderConfiguration implements Con
             'scopes' => $this->getScopes(),
             'callback_route' => $this->getCallbackRoute(),
             'http_client_options' => $this->getHttpClientOptions(),
+            'issuer' => $this->getIssuer(),
+            'end_session' => $this->isEndSession(),
+            'post_logout_redirect_uri' => $this->getPostLogoutRedirectUri(),
             default => $default,
         };
     }
@@ -181,6 +219,9 @@ class KeycloakConfiguration extends AbstractProviderConfiguration implements Con
             'scopes' => $this->getScopes(),
             'callback_route' => $this->getCallbackRoute(),
             'http_client_options' => $this->getHttpClientOptions(),
+            'issuer' => $this->getIssuer(),
+            'end_session' => $this->isEndSession(),
+            'post_logout_redirect_uri' => $this->getPostLogoutRedirectUri(),
         ]);
     }
 
@@ -262,6 +303,60 @@ class KeycloakConfiguration extends AbstractProviderConfiguration implements Con
     public function getHttpClientOptions(): array
     {
         return $this->httpClientOptions;
+    }
+
+    /**
+     * Gets the issuer of the tokens (their `iss`).
+     *
+     * @return string The URL of the realm, or the issuer that was configured.
+     */
+    public function getIssuer(): string
+    {
+        return $this->issuer !== '' ? $this->issuer : $this->getRealmUrl();
+    }
+
+    /**
+     * Gets the URL of the realm, where the endpoints of Keycloak are.
+     *
+     * @return string The URL of the realm.
+     */
+    public function getRealmUrl(): string
+    {
+        return rtrim($this->keycloakUrl, '/') . '/realms/' . $this->realm;
+    }
+
+    /**
+     * Whether the logout also ends the session of the user in Keycloak.
+     *
+     * @return bool True if it does.
+     */
+    public function isEndSession(): bool
+    {
+        return $this->endSession;
+    }
+
+    /**
+     * Gets the URL where Keycloak sends the user after the logout.
+     *
+     * @return string The URL: the one that was configured, or the page that
+     * follows the logout in the site of the redirect URI.
+     */
+    public function getPostLogoutRedirectUri(): string
+    {
+        if ($this->postLogoutRedirectUri !== '') {
+            return $this->postLogoutRedirectUri;
+        }
+
+        $route = $this->getLogoutRedirectRoute();
+        if (preg_match('#^https?://#', $route)) {
+            return $route;
+        }
+
+        $uri = parse_url($this->redirectUri);
+        $origin = ($uri['scheme'] ?? 'https') . '://' . ($uri['host'] ?? '')
+            . (isset($uri['port']) ? ':' . $uri['port'] : '');
+
+        return $origin . '/' . ltrim($route, '/');
     }
 
     /**
