@@ -67,7 +67,7 @@ class LoginForm implements FormInterface
         $passwordField = $this->config->getUserPasswordField();
 
         return [
-            'translationDomain' => 'auth',
+            'options' => ['translation_domain' => 'auth'],
             'schema' => [
                 'name' => 'login',
                 'type' => 'object',
