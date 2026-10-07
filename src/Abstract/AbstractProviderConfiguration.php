@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Derafu\Auth\Abstract;
 
 use Derafu\Auth\Contract\ConfigurationInterface;
+use Derafu\Auth\Exception\ConfigurationException;
 
 /**
  * Abstract provider configuration.
@@ -80,6 +81,8 @@ abstract class AbstractProviderConfiguration implements ConfigurationInterface
      */
     private bool $enabled = true;
 
+    private ?int $refreshInterval = null;
+
     /**
      * Creates a new abstract provider configuration.
      *
@@ -128,6 +131,17 @@ abstract class AbstractProviderConfiguration implements ConfigurationInterface
         $this->enabled = $config['enabled']
             ?? $this->enabled
         ;
+
+        // Every how many seconds the user of a session is asked to the provider
+        // again (its roles, that it still exists). 0 or not given: the provider
+        // decides (see `getRefreshInterval()`).
+        $refreshInterval = $config['refresh_interval'] ?? null;
+        if ($refreshInterval !== null && (!is_int($refreshInterval) || $refreshInterval < 0)) {
+            throw new ConfigurationException(
+                'The refresh interval must be a number of seconds, 0 or more.'
+            );
+        }
+        $this->refreshInterval = $refreshInterval === 0 ? null : $refreshInterval;
     }
 
     /**
@@ -143,6 +157,7 @@ abstract class AbstractProviderConfiguration implements ConfigurationInterface
             'logout_redirect_route' => $this->getLogoutRedirectRoute(),
             'unauthorized_redirect_route' => $this->getUnauthorizedRedirectRoute(),
             'enabled' => $this->isEnabled(),
+            'refresh_interval' => $this->getRefreshInterval(),
             default => $default,
         };
     }
@@ -160,6 +175,7 @@ abstract class AbstractProviderConfiguration implements ConfigurationInterface
             'logout_redirect_route' => $this->getLogoutRedirectRoute(),
             'unauthorized_redirect_route' => $this->getUnauthorizedRedirectRoute(),
             'enabled' => $this->isEnabled(),
+            'refresh_interval' => $this->getRefreshInterval(),
         ];
     }
 
@@ -217,6 +233,14 @@ abstract class AbstractProviderConfiguration implements ConfigurationInterface
     public function isEnabled(): bool
     {
         return $this->enabled;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function getRefreshInterval(): ?int
+    {
+        return $this->refreshInterval;
     }
 
     /**

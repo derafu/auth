@@ -28,6 +28,8 @@ return [
         'El secreto de cliente es obligatorio.',
     'Redirect URI is required.' =>
         'La URI de redirección es obligatoria.',
+    'The refresh interval must be a number of seconds, 0 or more.' =>
+        'El intervalo de actualización debe ser un número de segundos, 0 o más.',
 
     // Keycloak.
     'User identity not found in keycloak user info.' =>

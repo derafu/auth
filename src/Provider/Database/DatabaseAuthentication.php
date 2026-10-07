@@ -22,6 +22,7 @@ use Derafu\Auth\Exception\FormException;
 use Derafu\Auth\Provider\Database\Form\LoginForm;
 use Derafu\Auth\User;
 use Mezzio\Session\SessionInterface;
+use PDOException;
 use Psr\Http\Message\ServerRequestInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
@@ -138,6 +139,13 @@ class DatabaseAuthentication extends AbstractProviderAuthentication implements A
 
     /**
      * {@inheritDoc}
+     *
+     * The user of the session is a copy of what the database said when the user
+     * logged in, and the database is asked again every `refresh_interval`
+     * seconds, by the identity that the session has: the roles and the details
+     * are the ones of now, and a user that is not there anymore loses the
+     * session. If the database can not be asked nothing is thrown away and the
+     * user is not let in without being verified: the next request asks again.
      */
     protected function getAuthenticatedUserFromSession(SessionInterface $session): ?UserInterface
     {
@@ -145,6 +153,28 @@ class DatabaseAuthentication extends AbstractProviderAuthentication implements A
         $userInfo = $this->sessionManager->getUserInfo($session);
         if (!$userInfo) {
             return null;
+        }
+
+        if ($this->sessionManager->isRefreshDue($session, $this->config->getRefreshInterval())) {
+            try {
+                $user = $this->userRepository->find($userInfo['identity']);
+            } catch (PDOException) {
+                return null;
+            }
+
+            if ($user === null) {
+                $this->sessionManager->clearSession($session);
+
+                return $this->anonymousUser;
+            }
+
+            $this->sessionManager->storeUserInfo($session, [
+                'identity' => $user->getIdentity(),
+                'roles' => iterator_to_array($user->getRoles()),
+                'details' => $user->getDetails(),
+            ]);
+
+            return $user;
         }
 
         // Create user from session data.

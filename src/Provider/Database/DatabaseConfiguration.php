@@ -21,11 +21,6 @@ use Derafu\Auth\Exception\ConfigurationException;
  */
 class DatabaseConfiguration extends AbstractProviderConfiguration implements ConfigurationInterface
 {
-    /**
-     * The database URL.
-     *
-     * @var string
-     */
     private string $databaseUrl = '';
 
     /**
@@ -99,6 +94,18 @@ class DatabaseConfiguration extends AbstractProviderConfiguration implements Con
             'database_url' => $this->getDatabaseUrl(),
             'user_repository' => $this->getUserRepository(),
         ]);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * The database has no token that expires, so it asks again every
+     * `DEFAULT_REFRESH_INTERVAL` seconds unless the configuration says another
+     * number.
+     */
+    public function getRefreshInterval(): int
+    {
+        return parent::getRefreshInterval() ?? self::DEFAULT_REFRESH_INTERVAL;
     }
 
     /**

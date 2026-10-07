@@ -15,8 +15,10 @@ namespace Derafu\Auth\Provider\Keycloak;
 use Derafu\Auth\Contract\UserRepositoryInterface;
 use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\ConfigurationException;
+use Derafu\Auth\Exception\ProviderUnavailableException;
 use Exception;
 use GuzzleHttp\Client;
+use League\OAuth2\Client\Provider\Exception\IdentityProviderException;
 use League\OAuth2\Client\Provider\GenericProvider;
 use League\OAuth2\Client\Token\AccessToken;
 use Mezzio\Authentication\UserInterface;
@@ -97,11 +99,11 @@ class KeycloakUserRepository implements UserRepositoryInterface
             $user = $this->provider->getResourceOwner(new AccessToken(['access_token' => $accessToken]));
             $userInfo = $user->toArray();
         } catch (Exception $e) {
-            throw new AuthenticationException(
-                ['Failed to get user info: {error}', 'error' => $e->getMessage()],
-                0,
-                $e
-            );
+            if ($this->isRejection($e)) {
+                throw new AuthenticationException(['Failed to get user info: {error}', 'error' => $e->getMessage()], 0, $e);
+            }
+
+            throw new ProviderUnavailableException(['Failed to get user info: {error}', 'error' => $e->getMessage()], 0, $e);
         }
 
         if (($userInfo['sub'] ?? null) !== ($claims['sub'] ?? null)) {
@@ -168,11 +170,11 @@ class KeycloakUserRepository implements UserRepositoryInterface
                 'token_type' => $token->getValues()['token_type'] ?? 'Bearer',
             ];
         } catch (Exception $e) {
-            throw new AuthenticationException(
-                ['Failed to refresh token: {error}', 'error' => $e->getMessage()],
-                0,
-                $e
-            );
+            if ($this->isRejection($e)) {
+                throw new AuthenticationException(['Failed to refresh token: {error}', 'error' => $e->getMessage()], 0, $e);
+            }
+
+            throw new ProviderUnavailableException(['Failed to refresh token: {error}', 'error' => $e->getMessage()], 0, $e);
         }
     }
 
@@ -274,6 +276,25 @@ class KeycloakUserRepository implements UserRepositoryInterface
     }
 
     /**
+     * Tells whether a failure of a request that asks Keycloak about a session is
+     * Keycloak saying that the session is over.
+     *
+     * Keycloak saying that the refresh token or the access token is not valid
+     * (`invalid_grant`, `invalid_token`) is a rejection. Anything else (it does
+     * not answer, it is down or it fails, it does not know the application) says
+     * nothing about the session.
+     *
+     * @param Exception $e What failed.
+     */
+    private function isRejection(Exception $e): bool
+    {
+        $body = $e instanceof IdentityProviderException ? $e->getResponseBody() : null;
+        $error = is_array($body) ? ($body['error'] ?? null) : null;
+
+        return in_array($error, ['invalid_grant', 'invalid_token'], true);
+    }
+
+    /**
      * Gets the OAuth2 provider instance.
      *
      * @return GenericProvider The OAuth2 provider.
@@ -298,8 +319,12 @@ class KeycloakUserRepository implements UserRepositoryInterface
             'urlAccessToken' => $this->getTokenUrl(),
             'urlResourceOwnerDetails' => $this->getUserInfoUrl(),
             'scopes' => $this->config->getScopes(),
-            'httpClient' => $httpClient,
             'pkceMethod' => GenericProvider::PKCE_METHOD_S256,
+        ], [
+            // A collaborator, not an option: the provider takes the client from
+            // here, and makes one of its own (without the timeouts and the
+            // verification of the configuration) if it is not.
+            'httpClient' => $httpClient,
         ]);
     }
 

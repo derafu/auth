@@ -16,6 +16,7 @@ use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Contract\UserRepositoryInterface;
 use Derafu\Auth\User;
 use PDO;
+use PDOException;
 use PDOStatement;
 
 /**
@@ -93,17 +94,55 @@ class DatabaseUserRepository implements UserRepositoryInterface
             $this->rehash($credential, $password);
         }
 
+        return $this->userOf($credential);
+    }
+
+    /**
+     * Finds a user by its identity, with its roles and details as the database
+     * has them now.
+     *
+     * It is what a session does to know whether its user is still the same: the
+     * password is not asked (the user already logged in), and it is not read nor
+     * changed.
+     *
+     * @param string $identity The identity of the user.
+     * @return UserInterface|null The user, or null if there is no user with that
+     * identity (it was deleted).
+     * @throws PDOException If the database can not be asked.
+     */
+    public function find(string $identity): ?UserInterface
+    {
+        $repository = $this->config->getUserRepository();
+
+        $statement = $this->query(sprintf(
+            'SELECT %s FROM %s WHERE %s = :identity',
+            $this->config->getUserPasswordField(),
+            $repository['table'],
+            $this->config->getUserIdentityField()
+        ), $identity);
+
+        return $statement->fetch(PDO::FETCH_NUM) === false ? null : $this->userOf($identity);
+    }
+
+    /**
+     * The user with this identity, with the roles and the details that the
+     * queries of the configuration give.
+     */
+    private function userOf(string $identity): User
+    {
+        $repository = $this->config->getUserRepository();
+
         // The details are what the query gives, without the password.
-        $details = $this->query((string) $repository['sql_get_details'], $credential)->fetch(PDO::FETCH_ASSOC);
+        $details = $this->query((string) $repository['sql_get_details'], $identity)->fetch(PDO::FETCH_ASSOC);
         $details = is_array($details) ? $details : [];
-        unset($details[$passwordField]);
+        unset($details[$this->config->getUserPasswordField()]);
 
         $roles = [];
-        foreach ($this->query((string) $repository['sql_get_roles'], $credential)->fetchAll(PDO::FETCH_NUM) as $role) {
+        foreach ($this->query((string) $repository['sql_get_roles'], $identity)->fetchAll(PDO::FETCH_NUM) as $role) {
             $roles[] = (string) $role[0];
         }
 
-        return new User($credential, $roles, $details);
+        return new User($identity, $roles, $details);
     }
 
     /**

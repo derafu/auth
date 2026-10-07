@@ -279,4 +279,43 @@ final class DatabaseUserRepositoryTest extends TestCase
 
         $this->assertSame(['from-query'], $repository->authenticate('ana@example.com', 'secret')?->getRoles());
     }
+
+    #[Test]
+    public function aUserIsFoundByItsIdentityWithItsRolesAndDetailsAndWithoutThePassword(): void
+    {
+        $repository = $this->repository([
+            ['identity' => 'ana@example.com', 'password' => 'one', 'roles' => ['admin', 'editor']],
+            ['identity' => 'ben@example.com', 'password' => 'two', 'roles' => ['viewer']],
+        ]);
+
+        $user = $repository->find('ben@example.com');
+
+        $this->assertInstanceOf(User::class, $user);
+        $this->assertSame('ben@example.com', $user->getIdentity());
+        $this->assertSame(['viewer'], $user->getRoles());
+        $this->assertSame('User 2', $user->getDetails()['name']);
+        $this->assertArrayNotHasKey('password', $user->getDetails());
+    }
+
+    #[Test]
+    public function aUserThatIsNotThereIsNotFound(): void
+    {
+        $repository = $this->repository();
+
+        $this->assertNull($repository->find('nobody@example.com'));
+
+        $this->database?->delete('ana@example.com');
+        $this->assertNull($repository->find('ana@example.com'));
+    }
+
+    #[Test]
+    public function findingAUserDoesNotNeedItsPasswordAndDoesNotChangeIt(): void
+    {
+        $repository = $this->repository();
+        $hash = $this->database?->hash('ana@example.com');
+
+        $repository->find('ana@example.com');
+
+        $this->assertSame($hash, $this->database?->hash('ana@example.com'));
+    }
 }

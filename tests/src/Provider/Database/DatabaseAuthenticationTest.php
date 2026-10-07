@@ -136,7 +136,7 @@ final class DatabaseAuthenticationTest extends TestCase
 
         $this->assertNull($this->authenticate($request)['user']);
 
-        $this->app->persistence->store[SessionApp::KNOWN] = ['user' => ['identity' => 'ana@example.com']];
+        $this->app->persistence->store[SessionApp::KNOWN] = ['user' => ['identity' => 'ana@example.com'], 'auth_checked_at' => time()];
 
         $this->assertSame('ana@example.com', $this->identityOf($this->authenticate($request)));
     }
@@ -164,6 +164,7 @@ final class DatabaseAuthenticationTest extends TestCase
     {
         $this->app->persistence->store[SessionApp::KNOWN] = [
             'user' => ['identity' => 'ana@example.com', 'roles' => ['admin'], 'details' => ['name' => 'Ana']],
+            'auth_checked_at' => time(),
         ];
 
         $result = $this->authenticate($this->app->request('/private/page'));
@@ -178,7 +179,7 @@ final class DatabaseAuthenticationTest extends TestCase
     #[Test]
     public function aSessionUserWithoutRolesNorDetailsHasNone(): void
     {
-        $this->app->persistence->store[SessionApp::KNOWN] = ['user' => ['identity' => 'ana@example.com']];
+        $this->app->persistence->store[SessionApp::KNOWN] = ['user' => ['identity' => 'ana@example.com'], 'auth_checked_at' => time()];
 
         $user = $this->authenticate($this->app->request('/private/page'))['user'];
 
@@ -413,6 +414,7 @@ final class DatabaseAuthenticationTest extends TestCase
     {
         $this->app->persistence->store[SessionApp::KNOWN] = [
             'user' => ['identity' => 'ana@example.com', 'roles' => ['admin'], 'details' => []],
+            'auth_checked_at' => time(),
             'auth_redirect' => '/private/page',
         ];
 
@@ -473,6 +475,7 @@ final class DatabaseAuthenticationTest extends TestCase
     {
         $this->app->persistence->store[SessionApp::KNOWN] = [
             'user' => ['identity' => 'ana@example.com', 'roles' => ['admin'], 'details' => []],
+            'auth_checked_at' => time(),
         ];
 
         $user = $this->authenticate($this->app->request('/auth/login'))['user'];
@@ -485,6 +488,7 @@ final class DatabaseAuthenticationTest extends TestCase
     {
         $this->app->persistence->store[SessionApp::KNOWN] = [
             'user' => ['identity' => 'ana@example.com', 'roles' => [], 'details' => []],
+            'auth_checked_at' => time(),
         ];
 
         $this->assertNull($this->authenticate($this->app->request('/auth/logout', body: []))['user']);
@@ -527,6 +531,7 @@ final class DatabaseAuthenticationTest extends TestCase
     {
         $this->app->persistence->store[SessionApp::KNOWN] = [
             'user' => ['identity' => 'ana@example.com', 'roles' => [], 'details' => []],
+            'auth_checked_at' => time(),
         ];
         $request = $this->app->request('/auth/logout', body: $method === 'POST' ? [] : null, headers: $headers);
 

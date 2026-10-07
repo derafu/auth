@@ -17,6 +17,7 @@ use Derafu\Auth\AnonymousUser;
 use Derafu\Auth\Contract\AuthenticationInterface;
 use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Exception\AuthenticationException;
+use Derafu\Auth\Exception\ProviderUnavailableException;
 use Exception;
 use Laminas\Diactoros\Response\RedirectResponse;
 use Mezzio\Session\SessionInterface;
@@ -153,41 +154,70 @@ class KeycloakAuthentication extends AbstractProviderAuthentication implements A
 
     /**
      * {@inheritDoc}
+     *
+     * The user of the session is a copy made when the user logged in, and it is
+     * asked to Keycloak again when the token expires or, if it is before, every
+     * `refresh_interval` seconds: the roles may have changed, or Keycloak may
+     * have ended the session.
+     *
+     *   - Keycloak gives new tokens: the session and its user are renewed.
+     *   - Keycloak says that the refresh token is not valid (the session ended,
+     *     the user was disabled): the session is closed.
+     *   - Keycloak can not be asked (it does not answer, it fails, it refuses for
+     *     a reason that is not about the session): nothing is thrown away, and
+     *     the user is not let in without being verified. The next request asks
+     *     again, so the session goes on when Keycloak is back.
      */
     protected function getAuthenticatedUserFromSession(SessionInterface $session): ?UserInterface
     {
-        // Check if token has expired.
-        if ($this->sessionManager->isTokenExpired($session)) {
+        if ($this->sessionManager->isRefreshDue($session, $this->config->getRefreshInterval())) {
             $refreshToken = $this->sessionManager->getRefreshToken($session);
-            if ($refreshToken) {
-                try {
-                    $tokenInfo = $this->userRepository->refreshToken($refreshToken);
-                    $this->sessionManager->storeAuthInfo($session, $tokenInfo);
 
-                    // Get updated user info.
-                    $userInfo = $this->userRepository->getUserInfoFromToken(
-                        $tokenInfo['access_token']
-                    );
-                    $this->sessionManager->storeUserInfo($session, $userInfo);
-
-                    return new KeycloakUser($userInfo, $this->config->getClientId());
-                } catch (AuthenticationException) {
+            if ($refreshToken === null) {
+                // Nothing to ask with: a token that expired is the end of the
+                // session, one that did not goes on until it does.
+                if ($this->sessionManager->isTokenExpired($session)) {
                     $this->sessionManager->clearSession($session);
+
                     return $this->anonymousUser;
                 }
             } else {
-                $this->sessionManager->clearSession($session);
-                return $this->anonymousUser;
+                try {
+                    $tokenInfo = $this->userRepository->refreshToken($refreshToken);
+
+                    // The new tokens are kept at once: a refresh token that
+                    // Keycloak renews can not be used twice, so the one that was
+                    // given must not be lost if what follows fails.
+                    $this->sessionManager->storeAuthInfo($session, $tokenInfo);
+
+                    try {
+                        $userInfo = $this->userRepository->getUserInfoFromToken($tokenInfo['access_token']);
+                    } catch (ProviderUnavailableException) {
+                        // The next request asks again, with the new tokens.
+                        $this->sessionManager->forgetCheck($session);
+
+                        return null;
+                    }
+
+                    $this->sessionManager->storeUserInfo($session, $userInfo);
+
+                    return new KeycloakUser($userInfo, $this->config->getClientId());
+                } catch (ProviderUnavailableException) {
+                    return null;
+                } catch (AuthenticationException) {
+                    $this->sessionManager->clearSession($session);
+
+                    return $this->anonymousUser;
+                }
             }
         }
 
-        // Return existing user.
+        // The user that the session has.
         $userInfo = $this->sessionManager->getUserInfo($session);
         if ($userInfo) {
             return new KeycloakUser($userInfo, $this->config->getClientId());
         }
 
-        // If the user info is not found, return null.
         return null;
     }
 

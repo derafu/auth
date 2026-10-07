@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Tests\Provider\Keycloak;
 
+use Derafu\Auth\Contract\ConfigurationInterface;
 use Derafu\Auth\Provider\Keycloak\KeycloakSessionManager;
 use Mezzio\Session\Session;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -48,7 +49,8 @@ class KeycloakSessionManagerTest extends TestCase
         // Verify storage
         $this->assertTrue($this->sessionManager->hasAuthInfo($session));
         $this->assertSame('refresh-token-456', $this->sessionManager->getRefreshToken($session));
-        $this->assertFalse($this->sessionManager->isTokenExpired($session));
+        $this->sessionManager->storeUserInfo($session, ['sub' => 'user-1']);
+        $this->assertFalse($this->sessionManager->isRefreshDue($session, null));
     }
 
     #[Test]
@@ -66,34 +68,141 @@ class KeycloakSessionManagerTest extends TestCase
         $this->assertTrue($this->sessionManager->hasAuthInfo($session));
         $this->assertNull($this->sessionManager->getRefreshToken($session));
 
-        // Should not be expired if no expiry time is set
+        // Without an expiry the token never tells when to ask again, so the
+        // default interval does (it used to be never).
+        $this->sessionManager->storeUserInfo($session, ['sub' => 'user-1']);
+        $this->assertFalse($this->sessionManager->isRefreshDue($session, null));
+        $session->set('auth_checked_at', time() - ConfigurationInterface::DEFAULT_REFRESH_INTERVAL - 1);
+        $this->assertTrue($this->sessionManager->isRefreshDue($session, null));
+    }
+
+    #[Test]
+    public function aTokenThatExpiredIsDueAndOneThatDidNotIsNot(): void
+    {
+        $session = new Session([]);
+
+        $this->sessionManager->storeAuthInfo($session, ['access_token' => 'expired', 'expires' => time() - 3600]);
+        $this->assertTrue($this->sessionManager->isRefreshDue($session, null));
+
+        $this->sessionManager->storeAuthInfo($session, ['access_token' => 'valid', 'expires' => time() + 3600]);
+        $this->sessionManager->storeUserInfo($session, ['sub' => 'user-1']);
+        $this->assertFalse($this->sessionManager->isRefreshDue($session, null));
+    }
+
+    #[Test]
+    public function theIntervalAsksAgainBeforeTheTokenExpires(): void
+    {
+        $session = new Session([]);
+        $this->sessionManager->storeAuthInfo($session, ['access_token' => 'valid', 'expires' => time() + 3600]);
+        $this->sessionManager->storeUserInfo($session, ['sub' => 'user-1']);
+
+        // Checked 30 seconds ago, every 60: not yet. Checked 61 ago: due, and the
+        // token has 59 minutes left.
+        $session->set('auth_checked_at', time() - 30);
+        $this->assertFalse($this->sessionManager->isRefreshDue($session, 60));
+        $session->set('auth_checked_at', time() - 61);
+        $this->assertTrue($this->sessionManager->isRefreshDue($session, 60));
+    }
+
+    #[Test]
+    public function theTokenAsksAgainBeforeTheIntervalWhenItExpiresFirst(): void
+    {
+        $session = new Session([]);
+        $this->sessionManager->storeAuthInfo($session, ['access_token' => 'expired', 'expires' => time() - 1]);
+        $this->sessionManager->storeUserInfo($session, ['sub' => 'user-1']);
+
+        // The interval says one hour and it was checked just now: what happens
+        // first is the expiration.
+        $this->assertTrue($this->sessionManager->isRefreshDue($session, 3600));
+    }
+
+    #[Test]
+    public function withoutAnExpiryTheIntervalOrTheDefaultDecides(): void
+    {
+        $session = new Session([]);
+        $this->sessionManager->storeAuthInfo($session, ['access_token' => 'no-expiry']);
+        $this->sessionManager->storeUserInfo($session, ['sub' => 'user-1']);
+
+        $session->set('auth_checked_at', time() - 61);
+        $this->assertTrue($this->sessionManager->isRefreshDue($session, 60));
+        $this->assertFalse($this->sessionManager->isRefreshDue($session, null), 'The default is 5 minutes.');
+        $session->set('auth_checked_at', time() - 301);
+        $this->assertTrue($this->sessionManager->isRefreshDue($session, null));
+    }
+
+    #[Test]
+    public function aSessionWithoutTheTimeOfTheLastCheckIsDue(): void
+    {
+        // A session that was made before the time of the check was kept: it is
+        // asked once, and from then on it has the time.
+        $session = new Session([
+            'oauth2_token' => 'token',
+            'oauth2_refresh_token' => 'refresh',
+            'oauth2_expiry' => time() + 3600,
+            'user' => ['sub' => 'user-1'],
+        ]);
+
+        $this->assertTrue($this->sessionManager->isRefreshDue($session, 60));
+        $this->assertTrue($this->sessionManager->isRefreshDue($session, null));
+    }
+
+    #[Test]
+    public function aSessionThatForgetsTheCheckIsAskedAgainWhateverTheTokenAndTheIntervalSay(): void
+    {
+        $session = new Session([]);
+        $this->sessionManager->storeAuthInfo($session, ['access_token' => 'valid', 'expires' => time() + 3600]);
+        $this->sessionManager->storeUserInfo($session, ['sub' => 'user-1']);
+        $this->assertFalse($this->sessionManager->isRefreshDue($session, 600));
+
+        $this->sessionManager->forgetCheck($session);
+
+        $this->assertTrue($this->sessionManager->isRefreshDue($session, 600));
+        $this->assertTrue($this->sessionManager->isRefreshDue($session, null));
+    }
+
+    #[Test]
+    public function theTokenIsExpiredOnlyWhenItHasAnExpiryInThePast(): void
+    {
+        $session = new Session([]);
+        $this->assertFalse($this->sessionManager->isTokenExpired($session));
+
+        $this->sessionManager->storeAuthInfo($session, ['access_token' => 'no-expiry']);
+        $this->assertFalse($this->sessionManager->isTokenExpired($session));
+
+        $this->sessionManager->storeAuthInfo($session, ['access_token' => 'expired', 'expires' => time() - 1]);
+        $this->assertTrue($this->sessionManager->isTokenExpired($session));
+
+        $this->sessionManager->storeAuthInfo($session, ['access_token' => 'valid', 'expires' => time() + 60]);
         $this->assertFalse($this->sessionManager->isTokenExpired($session));
     }
 
     #[Test]
-    public function testTokenExpirationCheck(): void
+    public function aRefreshWithoutAnExpiryDoesNotKeepTheOldOne(): void
+    {
+        // The expiry of the first token is in the past. The response to the refresh
+        // has no expiry: the old one must not stay, or every request would ask
+        // again.
+        $session = new Session([]);
+        $this->sessionManager->storeAuthInfo($session, ['access_token' => 'first', 'expires' => time() - 10]);
+        $this->assertTrue($this->sessionManager->isRefreshDue($session, null));
+
+        $this->sessionManager->storeAuthInfo($session, ['access_token' => 'second']);
+        $this->sessionManager->storeUserInfo($session, ['sub' => 'user-1']);
+
+        $this->assertNull($session->get('oauth2_expiry'));
+        $this->assertFalse($this->sessionManager->isRefreshDue($session, null));
+    }
+
+    #[Test]
+    public function theTimeOfTheCheckIsKeptWithTheUserAndRemovedWithTheSession(): void
     {
         $session = new Session([]);
 
-        // Store expired token
-        $expiredTokenInfo = [
-            'access_token' => 'expired-token',
-            'expires' => time() - 3600, // 1 hour ago
-        ];
+        $this->sessionManager->storeUserInfo($session, ['sub' => 'user-1']);
+        $this->assertEqualsWithDelta(time(), $session->get('auth_checked_at'), 2);
 
-        $this->sessionManager->storeAuthInfo($session, $expiredTokenInfo);
-
-        $this->assertTrue($this->sessionManager->isTokenExpired($session));
-
-        // Store valid token
-        $validTokenInfo = [
-            'access_token' => 'valid-token',
-            'expires' => time() + 3600, // 1 hour from now
-        ];
-
-        $this->sessionManager->storeAuthInfo($session, $validTokenInfo);
-
-        $this->assertFalse($this->sessionManager->isTokenExpired($session));
+        $this->sessionManager->clearSession($session);
+        $this->assertNull($session->get('auth_checked_at'));
     }
 
     #[Test]
@@ -226,7 +335,6 @@ class KeycloakSessionManagerTest extends TestCase
 
         // All getters should return null or false for empty session
         $this->assertFalse($this->sessionManager->hasAuthInfo($session));
-        $this->assertFalse($this->sessionManager->isTokenExpired($session));
         $this->assertNull($this->sessionManager->getRefreshToken($session));
         $this->assertNull($this->sessionManager->getUserInfo($session));
         $this->assertNull($this->sessionManager->getState($session));
@@ -270,6 +378,6 @@ class KeycloakSessionManagerTest extends TestCase
         $this->assertSame($userInfo, $this->sessionManager->getUserInfo($session));
         $this->assertSame($redirectUrl, $this->sessionManager->getRedirectUrl($session));
         $this->assertNull($this->sessionManager->getState($session)); // Should be cleared
-        $this->assertFalse($this->sessionManager->isTokenExpired($session));
+        $this->assertFalse($this->sessionManager->isRefreshDue($session, null));
     }
 }

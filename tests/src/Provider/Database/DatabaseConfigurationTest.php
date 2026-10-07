@@ -254,4 +254,38 @@ final class DatabaseConfigurationTest extends TestCase
         $this->assertSame('/bye', $config->getLogoutRedirectRoute());
         $this->assertSame('/in', $config->getUnauthorizedRedirectRoute());
     }
+
+    #[Test]
+    public function theRefreshIntervalIsFiveMinutesByDefault(): void
+    {
+        $config = new DatabaseConfiguration(['database_url' => 'sqlite::memory:']);
+
+        $this->assertSame(300, $config->getRefreshInterval());
+        $this->assertSame(300, $config->get('refresh_interval'));
+        $this->assertSame(300, $config->toArray()['refresh_interval']);
+    }
+
+    #[Test]
+    public function theRefreshIntervalCanBeConfiguredAndZeroIsTheDefault(): void
+    {
+        $this->assertSame(
+            45,
+            (new DatabaseConfiguration(['database_url' => 'sqlite::memory:', 'refresh_interval' => 45]))
+                ->getRefreshInterval()
+        );
+        $this->assertSame(
+            300,
+            (new DatabaseConfiguration(['database_url' => 'sqlite::memory:', 'refresh_interval' => 0]))
+                ->getRefreshInterval()
+        );
+    }
+
+    #[Test]
+    public function aNegativeRefreshIntervalIsAConfigurationError(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('The refresh interval must be a number of seconds, 0 or more.');
+
+        new DatabaseConfiguration(['database_url' => 'sqlite::memory:', 'refresh_interval' => -1]);
+    }
 }

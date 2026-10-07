@@ -140,6 +140,7 @@ final class SessionRenewalTest extends TestCase
         $authentication = $this->database();
         $this->app->persistence->store[self::KNOWN] = [
             'user' => ['identity' => 'ana@example.com', 'roles' => [], 'details' => []],
+            'auth_checked_at' => time(),
         ];
 
         $response = $this->app->handleAuthenticated(

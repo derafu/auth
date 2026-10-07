@@ -64,6 +64,7 @@ services:
                 logout_redirect_route: '%env(default::string:AUTH_LOGOUT_REDIRECT_ROUTE)%'
                 unauthorized_redirect_route: '%env(default::string:AUTH_UNAUTHORIZED_REDIRECT_ROUTE)%'
                 enabled: '%env(default::bool:AUTH_ENABLED)%'
+                refresh_interval: '%env(default::int:AUTH_REFRESH_INTERVAL)%'
 
     # Keycloak controller.
     Derafu\Auth\Provider\Keycloak\KeycloakController:

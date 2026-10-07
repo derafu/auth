@@ -13,14 +13,22 @@ declare(strict_types=1);
 namespace Derafu\Auth\Tests\Provider\Keycloak;
 
 use Derafu\Auth\Exception\AuthenticationException;
+use Derafu\Auth\Exception\ProviderUnavailableException;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
+use GuzzleHttp\Exception\ConnectException;
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Psr7\Request;
+use GuzzleHttp\Psr7\Response;
 use League\OAuth2\Client\Provider\GenericProvider;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
+use Throwable;
 
 /**
  * Tests for KeycloakUserRepository.
@@ -162,5 +170,91 @@ class KeycloakUserRepositoryTest extends TestCase
         $this->assertNotEmpty($state1);
         $this->assertNotEmpty($state2);
         $this->assertNotSame($state1, $state2);
+    }
+
+    #[Test]
+    public function theHttpOptionsOfTheConfigurationAreTheOnesOfTheClientThatAsksTheTokens(): void
+    {
+        // They were given to a client that the provider threw away for one of its
+        // own, so a server that did not answer was waited for with no end, and a
+        // certificate that was not to be verified was verified.
+        $repository = new KeycloakUserRepository(new KeycloakConfiguration([
+            'keycloak_url' => 'https://auth.example.com',
+            'realm' => 'test-realm',
+            'client_id' => 'test-client',
+            'client_secret' => 'test-secret',
+            'redirect_uri' => 'https://app.example.com/auth/callback',
+            'http_client_options' => ['timeout' => 7, 'connect_timeout' => 3, 'verify' => false],
+        ]));
+
+        $client = $repository->getProvider()->getHttpClient();
+
+        $this->assertSame(7, $client->getConfig('timeout'));
+        $this->assertSame(3, $client->getConfig('connect_timeout'));
+        $this->assertFalse($client->getConfig('verify'));
+    }
+
+    /**
+     * A repository whose provider gets these answers, one for each request.
+     */
+    private function repositoryAnswering(Response|Throwable ...$answers): KeycloakUserRepository
+    {
+        return new KeycloakUserRepository(new KeycloakConfiguration([
+            'keycloak_url' => 'https://auth.example.com',
+            'realm' => 'test-realm',
+            'client_id' => 'test-client',
+            'client_secret' => 'test-secret',
+            'redirect_uri' => 'https://app.example.com/auth/callback',
+            'http_client_options' => ['handler' => HandlerStack::create(new MockHandler($answers))],
+        ]));
+    }
+
+    #[Test]
+    public function aRefreshTokenThatKeycloakRejectsIsARejectionOfTheSession(): void
+    {
+        $repository = $this->repositoryAnswering(new Response(400, [], json_encode([
+            'error' => 'invalid_grant',
+            'error_description' => 'Token is not active',
+        ])));
+
+        try {
+            $repository->refreshToken('a-refresh-token');
+            $this->fail('It should have failed.');
+        } catch (AuthenticationException $e) {
+            $this->assertNotInstanceOf(ProviderUnavailableException::class, $e);
+            $this->assertStringStartsWith('Failed to refresh token: ', $e->getMessage());
+        }
+    }
+
+    /**
+     * @return array<string, array{Response|Throwable}>
+     */
+    public static function failuresThatSayNothingOfTheSessionProvider(): array
+    {
+        return [
+            'the server does not answer' => [new ConnectException('Operation timed out', new Request('POST', '/'))],
+            'the server is down' => [new Response(503, ['Content-Type' => 'text/html'], '<html>Service Unavailable</html>')],
+            'the server fails' => [new Response(500, [], json_encode(['error' => 'unknown_error']))],
+            'the client is not known' => [new Response(401, [], json_encode([
+                'error' => 'unauthorized_client',
+                'error_description' => 'Invalid client or Invalid client credentials',
+            ]))],
+            'the answer is not a token' => [new Response(200, [], json_encode(['hello' => 'world']))],
+        ];
+    }
+
+    #[Test]
+    #[DataProvider('failuresThatSayNothingOfTheSessionProvider')]
+    public function whatIsNotAboutTheRefreshTokenIsNotARejectionOfTheSession(Response|Throwable $answer): void
+    {
+        $repository = $this->repositoryAnswering($answer);
+
+        try {
+            $repository->refreshToken('a-refresh-token');
+            $this->fail('It should have failed.');
+        } catch (ProviderUnavailableException $e) {
+            // The session may be as good as it was: it can not be known now.
+            $this->assertStringStartsWith('Failed to refresh token: ', $e->getMessage());
+        }
     }
 }

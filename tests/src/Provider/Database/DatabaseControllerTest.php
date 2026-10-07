@@ -280,6 +280,7 @@ final class DatabaseControllerTest extends TestCase
     {
         $this->app->persistence->store[SessionApp::KNOWN] = [
             'user' => ['identity' => 'ana@example.com', 'roles' => [], 'details' => []],
+            'auth_checked_at' => time(),
             'auth_redirect' => '/private/page?tab=2',
         ];
 
@@ -294,6 +295,7 @@ final class DatabaseControllerTest extends TestCase
     {
         $this->app->persistence->store[SessionApp::KNOWN] = [
             'user' => ['identity' => 'ana@example.com', 'roles' => [], 'details' => []],
+            'auth_checked_at' => time(),
         ];
 
         $response = $this->loginPageThroughTheAuthentication(SessionApp::KNOWN);
@@ -307,6 +309,7 @@ final class DatabaseControllerTest extends TestCase
     {
         $this->app->persistence->store[SessionApp::KNOWN] = [
             'user' => ['identity' => 'ana@example.com', 'roles' => [], 'details' => []],
+            'auth_checked_at' => time(),
             'auth_redirect' => '/private/page',
         ];
 

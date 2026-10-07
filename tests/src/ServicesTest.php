@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Derafu\TestsAuth;
 
 use Derafu\Auth\Provider\Database\DatabaseAuthentication;
+use Derafu\Auth\Provider\Database\DatabaseConfiguration;
 use Derafu\Auth\Provider\Database\LoginThrottle;
 use Derafu\Auth\Provider\Keycloak\KeycloakAuthentication;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
@@ -212,5 +213,35 @@ final class ServicesTest extends TestCase
 
         $this->assertSame(2, $this->property($throttle, 'maxAttempts'));
         $this->assertSame(60, $this->property($throttle, 'lockSeconds'));
+    }
+
+    #[Test]
+    public function theRefreshIntervalOfKeycloakIsAutomaticUnlessTheEnvironmentSaysAnother(): void
+    {
+        $container = $this->container('auth-keycloak-services.yaml', true);
+        $container->getDefinition(KeycloakConfiguration::class)->setPublic(true);
+        $container->compile(true);
+        $this->assertNull($container->get(KeycloakConfiguration::class)->getRefreshInterval());
+
+        $this->environment('AUTH_REFRESH_INTERVAL', '90');
+        $container = $this->container('auth-keycloak-services.yaml', true);
+        $container->getDefinition(KeycloakConfiguration::class)->setPublic(true);
+        $container->compile(true);
+        $this->assertSame(90, $container->get(KeycloakConfiguration::class)->getRefreshInterval());
+    }
+
+    #[Test]
+    public function theRefreshIntervalOfTheDatabaseIsTheDefaultUnlessTheEnvironmentSaysAnother(): void
+    {
+        $container = $this->container('auth-database-services.yaml', true);
+        $container->getDefinition(DatabaseConfiguration::class)->setPublic(true);
+        $container->compile(true);
+        $this->assertSame(300, $container->get(DatabaseConfiguration::class)->getRefreshInterval());
+
+        $this->environment('AUTH_REFRESH_INTERVAL', '45');
+        $container = $this->container('auth-database-services.yaml', true);
+        $container->getDefinition(DatabaseConfiguration::class)->setPublic(true);
+        $container->compile(true);
+        $this->assertSame(45, $container->get(DatabaseConfiguration::class)->getRefreshInterval());
     }
 }

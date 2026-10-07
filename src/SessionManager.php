@@ -41,6 +41,36 @@ class SessionManager implements SessionManagerInterface
     /**
      * {@inheritDoc}
      *
+     * The session is due when it does not say when the user was stored (it was
+     * made before the time was kept, or `forgetCheck()` was called), and when
+     * `$interval` seconds passed since then. Without an interval there is
+     * nothing else to ask again for.
+     */
+    public function isRefreshDue(SessionInterface $session, ?int $interval): bool
+    {
+        $checkedAt = $session->get('auth_checked_at');
+
+        if ($checkedAt === null) {
+            return true;
+        }
+
+        return $interval !== null && (int) $checkedAt + $interval <= time();
+    }
+
+    /**
+     * Forgets when the user was last asked to the provider, so the next
+     * request asks again whatever the interval says.
+     *
+     * @param SessionInterface $session The session.
+     */
+    public function forgetCheck(SessionInterface $session): void
+    {
+        $session->unset('auth_checked_at');
+    }
+
+    /**
+     * {@inheritDoc}
+     *
      * The session of `Mezzio\Session\SessionMiddleware` (`LazySession`) is
      * renewed in place and persisted with its new identifier. A session that
      * answers with another instance (`Mezzio\Session\Session` does, it is
@@ -63,6 +93,7 @@ class SessionManager implements SessionManagerInterface
     public function storeUserInfo(SessionInterface $session, array $userInfo): void
     {
         $session->set('user', $userInfo);
+        $session->set('auth_checked_at', time());
     }
 
     /**
@@ -79,6 +110,7 @@ class SessionManager implements SessionManagerInterface
     public function clearUserInfo(SessionInterface $session): void
     {
         $session->unset('user');
+        $session->unset('auth_checked_at');
     }
 
     /**

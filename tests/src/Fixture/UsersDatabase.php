@@ -117,6 +117,72 @@ final class UsersDatabase
     }
 
     /**
+     * Gives the user exactly these roles (what an administrator does in the
+     * database while the user has a session).
+     *
+     * @param list<string> $roles
+     */
+    public function setRoles(string $identity, array $roles): void
+    {
+        $pdo = new PDO('sqlite:' . $this->file);
+        $id = $this->userId($pdo, $identity);
+
+        $pdo->prepare(sprintf('DELETE FROM %s_role WHERE user_id = :user', $this->table))->execute(['user' => $id]);
+        foreach ($roles as $role) {
+            $statement = $pdo->prepare('SELECT id FROM role WHERE name = :name');
+            $statement->execute(['name' => $role]);
+            $roleId = $statement->fetchColumn();
+            if ($roleId === false) {
+                $pdo->prepare('INSERT INTO role (name) VALUES (:name)')->execute(['name' => $role]);
+                $roleId = $pdo->lastInsertId();
+            }
+            $pdo->prepare(sprintf('INSERT INTO %s_role (user_id, role_id) VALUES (:user, :role)', $this->table))
+                ->execute(['user' => $id, 'role' => $roleId]);
+        }
+    }
+
+    public function setName(string $identity, string $name): void
+    {
+        $pdo = new PDO('sqlite:' . $this->file);
+        $pdo->prepare(sprintf('UPDATE %s SET name = :name WHERE %s = :identity', $this->table, $this->identity))
+            ->execute(['name' => $name, 'identity' => $identity]);
+    }
+
+    /**
+     * Deletes the user.
+     */
+    public function delete(string $identity): void
+    {
+        $pdo = new PDO('sqlite:' . $this->file);
+        $id = $this->userId($pdo, $identity);
+
+        $pdo->prepare(sprintf('DELETE FROM %s_role WHERE user_id = :user', $this->table))->execute(['user' => $id]);
+        $pdo->prepare(sprintf('DELETE FROM %s WHERE id = :user', $this->table))->execute(['user' => $id]);
+    }
+
+    /**
+     * Makes the table of the users fail (it is not there) as a database that has
+     * a problem does, until `repair()`.
+     */
+    public function break(): void
+    {
+        (new PDO('sqlite:' . $this->file))->exec(sprintf('ALTER TABLE %s RENAME TO %s_broken', $this->table, $this->table));
+    }
+
+    public function repair(): void
+    {
+        (new PDO('sqlite:' . $this->file))->exec(sprintf('ALTER TABLE %s_broken RENAME TO %s', $this->table, $this->table));
+    }
+
+    private function userId(PDO $pdo, string $identity): int
+    {
+        $statement = $pdo->prepare(sprintf('SELECT id FROM %s WHERE %s = :identity', $this->table, $this->identity));
+        $statement->execute(['identity' => $identity]);
+
+        return (int) $statement->fetchColumn();
+    }
+
+    /**
      * Deletes the database.
      */
     public function remove(): void

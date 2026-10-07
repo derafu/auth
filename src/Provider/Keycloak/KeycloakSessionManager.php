@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Provider\Keycloak;
 
+use Derafu\Auth\Contract\ConfigurationInterface;
 use Derafu\Auth\Contract\SessionManagerInterface;
 use Derafu\Auth\SessionManager;
 use Mezzio\Session\SessionInterface;
@@ -60,20 +61,44 @@ class KeycloakSessionManager extends SessionManager implements SessionManagerInt
         if (isset($tokenInfo['id_token'])) {
             $session->set('oauth2_id_token', $tokenInfo['id_token']);
         }
+        // The expiry of this token, and no other: the one of the token before it
+        // is of no use (it is in the past, and every request would ask again).
         if (isset($tokenInfo['expires'])) {
             $session->set('oauth2_expiry', $tokenInfo['expires']);
+        } else {
+            $session->unset('oauth2_expiry');
         }
     }
 
     /**
-     * Checks if the stored token has expired.
+     * Tells whether the access token expired. A token that has no expiry does
+     * not (when it has to be asked again is up to `isRefreshDue()`).
      *
-     * @param SessionInterface $session The session to check.
-     * @return bool True if token has expired, false otherwise.
+     * @param SessionInterface $session The session.
+     * @return bool True if the token has an expiry and it is in the past.
      */
     public function isTokenExpired(SessionInterface $session): bool
     {
         return $session->has('oauth2_expiry') && $session->get('oauth2_expiry') < time();
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * The token expires, and that is when the user is asked again, unless the
+     * interval says earlier: what happens first. A token without an expiry has
+     * the interval, and the default one if there is none, so it is never left
+     * without being asked again.
+     */
+    public function isRefreshDue(SessionInterface $session, ?int $interval): bool
+    {
+        if ($this->isTokenExpired($session)) {
+            return true;
+        }
+
+        $interval ??= $session->has('oauth2_expiry') ? null : ConfigurationInterface::DEFAULT_REFRESH_INTERVAL;
+
+        return parent::isRefreshDue($session, $interval);
     }
 
     /**

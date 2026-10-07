@@ -59,6 +59,22 @@ interface SessionManagerInterface
      *
      * @param SessionInterface $session The session to clear.
      */
+    /**
+     * Tells whether the user of the session has to be asked to the provider
+     * again: its roles may have changed, or the user may not exist anymore.
+     *
+     * The session keeps when the user was last asked
+     * (see `storeUserInfo()`). The provider that has something else that says
+     * when (the expiration of a token) decides with it too, and what happens
+     * first counts.
+     *
+     * @param SessionInterface $session The session.
+     * @param int|null $interval The seconds between two checks, or null if the
+     * provider decides (see `ConfigurationInterface::getRefreshInterval()`).
+     * @return bool True if the user has to be asked again.
+     */
+    public function isRefreshDue(SessionInterface $session, ?int $interval): bool;
+
     public function clearSession(SessionInterface $session): void;
 
     /**

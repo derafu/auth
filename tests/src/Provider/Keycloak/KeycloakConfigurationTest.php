@@ -156,4 +156,32 @@ final class KeycloakConfigurationTest extends TestCase
 
         $this->config()->validate();
     }
+
+    #[Test]
+    public function theRefreshIntervalIsAutomaticByDefaultWhichIsTheExpirationOfTheToken(): void
+    {
+        $config = $this->config();
+
+        $this->assertNull($config->getRefreshInterval());
+        $this->assertNull($config->get('refresh_interval'));
+        $this->assertArrayHasKey('refresh_interval', $config->toArray());
+        $this->assertNull($config->toArray()['refresh_interval']);
+    }
+
+    #[Test]
+    public function theRefreshIntervalCanBeConfiguredAndZeroIsAutomatic(): void
+    {
+        $this->assertSame(120, $this->config(['refresh_interval' => 120])->getRefreshInterval());
+        $this->assertSame(120, $this->config(['refresh_interval' => 120])->toArray()['refresh_interval']);
+        $this->assertNull($this->config(['refresh_interval' => 0])->getRefreshInterval());
+    }
+
+    #[Test]
+    public function aNegativeRefreshIntervalIsAConfigurationError(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('The refresh interval must be a number of seconds, 0 or more.');
+
+        $this->config(['refresh_interval' => -5]);
+    }
 }

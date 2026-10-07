@@ -90,6 +90,31 @@ final class RealKeycloak
     }
 
     /**
+     * The administrator of this Keycloak.
+     */
+    public function admin(): KeycloakAdmin
+    {
+        return new KeycloakAdmin($this->url());
+    }
+
+    /**
+     * Freezes Keycloak: its port stays open and nothing answers, as a server
+     * that does not respond. A request waits until its own timeout.
+     */
+    public function pause(): void
+    {
+        exec('docker pause ' . escapeshellarg($this->container) . ' 2>&1');
+    }
+
+    /**
+     * Gives Keycloak its life back.
+     */
+    public function unpause(): void
+    {
+        exec('docker unpause ' . escapeshellarg($this->container) . ' 2>&1');
+    }
+
+    /**
      * Stops Keycloak and removes its container.
      */
     public function stop(): void
