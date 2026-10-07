@@ -13,9 +13,9 @@ declare(strict_types=1);
 namespace Derafu\TestsAuth\Provider\Database;
 
 use Derafu\Auth\FormManager;
+use Derafu\Auth\LoginThrottle;
 use Derafu\Auth\Provider\Database\DatabaseAuthentication;
 use Derafu\Auth\Provider\Database\DatabaseUserRepository;
-use Derafu\Auth\Provider\Database\LoginThrottle;
 use Derafu\Auth\SessionManager;
 use Derafu\Auth\User;
 use Derafu\Form\Factory\FormFactory;

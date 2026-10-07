@@ -10,9 +10,9 @@ declare(strict_types=1);
  * See LICENSE file for more details.
  */
 
-namespace Derafu\TestsAuth\Provider\Database;
+namespace Derafu\TestsAuth;
 
-use Derafu\Auth\Provider\Database\LoginThrottle;
+use Derafu\Auth\LoginThrottle;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;

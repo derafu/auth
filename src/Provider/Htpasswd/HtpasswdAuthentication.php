@@ -5,12 +5,12 @@ declare(strict_types=1);
 /**
  * Derafu: Auth - Authentication and Authorization.
  *
- * Copyright (c) 2025 Esteban De La Fuente Rubio / Derafu <https://www.derafu.dev>
+ * Copyright (c) 2026 Esteban De La Fuente Rubio / Derafu <https://www.derafu.dev>
  * Licensed under the MIT License.
  * See LICENSE file for more details.
  */
 
-namespace Derafu\Auth\Provider\Database;
+namespace Derafu\Auth\Provider\Htpasswd;
 
 use Derafu\Auth\Abstract\AbstractProviderAuthentication;
 use Derafu\Auth\AnonymousUser;
@@ -21,28 +21,27 @@ use Derafu\Auth\Contract\UserFactoryInterface;
 use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Exception\FormException;
 use Derafu\Auth\LoginThrottle;
-use Derafu\Auth\Provider\Database\Form\LoginForm;
+use Derafu\Auth\Provider\Htpasswd\Form\LoginForm;
 use Derafu\Auth\UserFactory;
 use Mezzio\Session\SessionInterface;
-use PDOException;
 use Psr\Http\Message\ServerRequestInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
- * Database authentication implementation for Mezzio.
+ * Htpasswd authentication implementation for Mezzio.
  *
  * This class implements our AuthenticationInterface to provide
- * username/password authentication through database.
+ * username/password authentication against an `.htpasswd` file.
  */
-class DatabaseAuthentication extends AbstractProviderAuthentication implements AuthenticationInterface
+class HtpasswdAuthentication extends AbstractProviderAuthentication implements AuthenticationInterface
 {
     private readonly UserFactoryInterface $userFactory;
 
     /**
-     * Creates a new Database authentication implementation.
+     * Creates a new htpasswd authentication implementation.
      *
-     * @param DatabaseUserRepository $userRepository The user repository.
-     * @param DatabaseConfiguration $config The configuration.
+     * @param HtpasswdUserRepository $userRepository The user repository.
+     * @param HtpasswdConfiguration $config The configuration.
      * @param SessionManagerInterface $sessionManager The session manager.
      * @param UserInterface $anonymousUser The anonymous user.
      * @param TranslatorInterface|null $translator Translates the response of an
@@ -54,8 +53,8 @@ class DatabaseAuthentication extends AbstractProviderAuthentication implements A
      * makes a `User`.
      */
     public function __construct(
-        private readonly DatabaseUserRepository $userRepository,
-        private readonly DatabaseConfiguration $config,
+        private readonly HtpasswdUserRepository $userRepository,
+        private readonly HtpasswdConfiguration $config,
         private readonly SessionManagerInterface $sessionManager,
         private readonly FormManagerInterface $formManager,
         private readonly UserInterface $anonymousUser = new AnonymousUser(),
@@ -99,8 +98,8 @@ class DatabaseAuthentication extends AbstractProviderAuthentication implements A
 
         // Get the identity and password.
         $data = $result->getProcessedData();
-        $identity = $data[$this->config->getUserIdentityField()];
-        $password = $data[$this->config->getUserPasswordField()];
+        $identity = $data[LoginForm::IDENTITY];
+        $password = $data[LoginForm::PASSWORD];
         $address = (string) ($request->getServerParams()['REMOTE_ADDR'] ?? 'unknown');
 
         // Too many failed attempts: the credentials are not even checked, so a
@@ -131,8 +130,6 @@ class DatabaseAuthentication extends AbstractProviderAuthentication implements A
         // Store user information in session.
         $userInfo = [
             'identity' => $user->getIdentity(),
-            'roles' => iterator_to_array($user->getRoles()),
-            'details' => $user->getDetails(),
         ];
         $this->sessionManager->storeUserInfo($session, $userInfo);
 
@@ -149,12 +146,9 @@ class DatabaseAuthentication extends AbstractProviderAuthentication implements A
     /**
      * {@inheritDoc}
      *
-     * The user of the session is a copy of what the database said when the user
-     * logged in, and the database is asked again every `refresh_interval`
-     * seconds, by the identity that the session has: the roles and the details
-     * are the ones of now, and a user that is not there anymore loses the
-     * session. If the database can not be asked nothing is thrown away and the
-     * user is not let in without being verified: the next request asks again.
+     * The file is read again every `refresh_interval` seconds, by the identity
+     * that the session has: a user that is not in the file anymore loses the
+     * session.
      */
     protected function getAuthenticatedUserFromSession(SessionInterface $session): ?UserInterface
     {
@@ -165,11 +159,7 @@ class DatabaseAuthentication extends AbstractProviderAuthentication implements A
         }
 
         if ($this->sessionManager->isRefreshDue($session, $this->config->getRefreshInterval())) {
-            try {
-                $user = $this->userRepository->find($userInfo['identity']);
-            } catch (PDOException) {
-                return null;
-            }
+            $user = $this->userRepository->find($userInfo['identity']);
 
             if ($user === null) {
                 $this->sessionManager->clearSession($session);
@@ -177,20 +167,12 @@ class DatabaseAuthentication extends AbstractProviderAuthentication implements A
                 return $this->anonymousUser;
             }
 
-            $this->sessionManager->storeUserInfo($session, [
-                'identity' => $user->getIdentity(),
-                'roles' => iterator_to_array($user->getRoles()),
-                'details' => $user->getDetails(),
-            ]);
+            $this->sessionManager->storeUserInfo($session, ['identity' => $user->getIdentity()]);
 
             return $user;
         }
 
         // Create user from session data.
-        return $this->userFactory->create(
-            $userInfo['identity'],
-            $userInfo['roles'] ?? [],
-            $userInfo['details'] ?? []
-        );
+        return $this->userFactory->create($userInfo['identity']);
     }
 }

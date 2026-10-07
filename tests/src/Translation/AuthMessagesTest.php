@@ -117,6 +117,8 @@ final class AuthMessagesTest extends TestCase
                     . 'new \\Derafu\\Auth\\Exception\\FormException($formError, 400)',
                 'Derafu\\Auth\\Provider\\Database\\DatabaseAuthentication::handleLogin: '
                     . '$this->addErrorFlash($request, $e->getTranslatableMessage(), now: true)',
+                'Derafu\\Auth\\Provider\\Htpasswd\\HtpasswdAuthentication::handleLogin: '
+                    . '$this->addErrorFlash($request, $e->getTranslatableMessage(), now: true)',
                 'partials/flash-messages.html.twig: '
                     . '{% set text = message.message|trans(parameters, message.domain ?? null) %}',
             ],

@@ -10,7 +10,7 @@ declare(strict_types=1);
  * See LICENSE file for more details.
  */
 
-namespace Derafu\Auth\Provider\Database;
+namespace Derafu\Auth;
 
 use Psr\Cache\CacheItemPoolInterface;
 

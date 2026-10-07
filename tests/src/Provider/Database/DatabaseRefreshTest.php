@@ -51,7 +51,7 @@ use Psr\Http\Message\ServerRequestInterface;
 #[UsesClass(\Derafu\Auth\Exception\FormException::class)]
 #[UsesClass(FormManager::class)]
 #[UsesClass(\Derafu\Auth\Provider\Database\DatabaseConfiguration::class)]
-#[UsesClass(\Derafu\Auth\Provider\Database\LoginThrottle::class)]
+#[UsesClass(\Derafu\Auth\LoginThrottle::class)]
 #[UsesClass(\Derafu\Auth\Provider\Database\Form\LoginForm::class)]
 #[UsesClass(\Derafu\Auth\User::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]

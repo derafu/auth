@@ -13,10 +13,12 @@ declare(strict_types=1);
 namespace Derafu\TestsAuth;
 
 use Derafu\Auth\Contract\UserFactoryInterface;
+use Derafu\Auth\LoginThrottle;
 use Derafu\Auth\Provider\Database\DatabaseAuthentication;
 use Derafu\Auth\Provider\Database\DatabaseConfiguration;
 use Derafu\Auth\Provider\Database\DatabaseUserRepository;
-use Derafu\Auth\Provider\Database\LoginThrottle;
+use Derafu\Auth\Provider\Htpasswd\HtpasswdAuthentication;
+use Derafu\Auth\Provider\Htpasswd\HtpasswdConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakAuthentication;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier;
@@ -364,5 +366,30 @@ final class ServicesTest extends TestCase
         $this->assertSame('people', $config->getUserRepository()['table']);
         $this->assertSame('/bye', $config->getLogoutRedirectPath());
         $this->assertSame('/denied', $config->getUnauthorizedRedirectPath());
+    }
+
+    #[Test]
+    public function theHtpasswdProviderIsWiredWithTheVariablesOfItsFile(): void
+    {
+        $this->environment('AUTH_HTPASSWD_PATH', '%kernel.project_dir%/var/.htpasswd');
+        $this->environment('AUTH_HTPASSWD_LOGIN_MAX_ATTEMPTS', '3');
+        $this->environment('AUTH_HTPASSWD_LOGIN_LOCK_SECONDS', '120');
+        $container = $this->container('auth-htpasswd-services.yaml', true);
+        $container->getDefinition(HtpasswdConfiguration::class)->setPublic(true);
+        $container->getDefinition(LoginThrottle::class)->setPublic(true);
+        $container->getDefinition(AuthenticationInterface::class)->setPublic(true);
+        $container->compile(true);
+
+        $config = $container->get(HtpasswdConfiguration::class);
+        $this->assertSame(dirname(__DIR__, 2) . '/var/.htpasswd', $config->getHtpasswdPath());
+        $this->assertSame('/auth/login', $config->getUnauthorizedRedirectPath());
+
+        $throttle = $container->get(LoginThrottle::class);
+        $this->assertSame(3, $this->property($throttle, 'maxAttempts'));
+        $this->assertSame(120, $this->property($throttle, 'lockSeconds'));
+
+        $authentication = $container->get(AuthenticationInterface::class);
+        $this->assertInstanceOf(HtpasswdAuthentication::class, $authentication);
+        $this->assertSame($throttle, $this->property($authentication, 'throttle'));
     }
 }

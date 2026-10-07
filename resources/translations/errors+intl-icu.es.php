@@ -18,6 +18,10 @@ return [
     // Configuration.
     'Database URL is required.' =>
         'La URL de la base de datos es obligatoria.',
+    'The path of the htpasswd file is required.' =>
+        'La ruta del archivo htpasswd es obligatoria.',
+    'The htpasswd file "{path}" can not be read.' =>
+        'No se puede leer el archivo htpasswd "{path}".',
     'Keycloak URL is required.' =>
         'La URL de Keycloak es obligatoria.',
     'Keycloak realm is required.' =>
