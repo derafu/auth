@@ -373,6 +373,26 @@ final class DatabaseAuthenticationTest extends TestCase
     }
 
     #[Test]
+    public function aLoginOfAUserThatIsNotActiveGivesTheSameErrorAsAWrongPassword(): void
+    {
+        // The user exists and the password is right: the login does not say that
+        // it is the user that is not let in, and it does not log it in.
+        $this->database->setActive('ana@example.com', false);
+
+        $result = $this->authenticate(
+            $this->app->request('/auth/login', body: ['email' => 'ana@example.com', 'password' => 'secret'])
+        );
+
+        $this->assertTrue($result['user']?->isAnonymous());
+        $this->assertSame(
+            ['message' => 'Invalid identity or password.', 'parameters' => [], 'domain' => 'auth', 'defaultLocale' => null],
+            $result['flashes']['error']
+        );
+        $this->assertSame([SessionApp::KNOWN], array_keys($this->app->persistence->store));
+        $this->assertArrayNotHasKey('user', $this->app->persistence->store[SessionApp::KNOWN]);
+    }
+
+    #[Test]
     public function aLoginWithAnUnknownIdentityGivesTheSameError(): void
     {
         $result = $this->authenticate(
@@ -402,7 +422,7 @@ final class DatabaseAuthenticationTest extends TestCase
         $this->assertSame(['admin'], $store['user']['roles']);
 
         // The session does not keep the hash of the password.
-        $this->assertSame(['id', 'email', 'name'], array_keys($store['user']['details']));
+        $this->assertSame(['id', 'email', 'name', 'active'], array_keys($store['user']['details']));
         $this->assertSame(
             ['message' => 'Successfully logged in.', 'parameters' => [], 'domain' => 'auth', 'defaultLocale' => null],
             $store[self::NEXT]['success']['value']

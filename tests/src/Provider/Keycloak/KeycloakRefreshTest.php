@@ -145,7 +145,6 @@ final class KeycloakRefreshTest extends TestCase
     /**
      * The user asks for a protected page with the session.
      *
-     * @phpstan-impure
      * @return array{ResponseInterface, MezzioUserInterface|null} The response
      * and the user that the page got (null if it did not get to run).
      */
@@ -182,21 +181,24 @@ final class KeycloakRefreshTest extends TestCase
         $admin->setAccessTokenLifespan(6);
         [$authentication] = $keycloak = $this->keycloak();
         $sid = $this->logIn($keycloak);
-        $this->assertSame(['admin', 'app-editor'], $this->roles($this->visit($authentication, $sid)[1]));
+        $atLogin = $this->visit($authentication, $sid);
+        $this->assertSame(['admin', 'app-editor'], $this->roles($atLogin[1]));
 
         $admin->removeRealmRole('ana', 'admin');
         $admin->addRealmRole('ana', 'editor');
 
         // The token has not expired: the session still has the roles that it was
         // given, so what Keycloak says now is not seen yet.
-        $this->assertSame(['admin', 'app-editor'], $this->roles($this->visit($authentication, $sid)[1]));
+        $beforeExpiry = $this->visit($authentication, $sid);
+        $this->assertSame(['admin', 'app-editor'], $this->roles($beforeExpiry[1]));
 
         sleep(7);
 
         // It expired: the session is renewed with the token that Keycloak gives
         // now, and the roles are the ones of now.
         $before = $this->app->persistence->store[$sid]['oauth2_token'];
-        $this->assertSame(['app-editor', 'editor'], $this->roles($this->visit($authentication, $sid)[1]));
+        $afterExpiry = $this->visit($authentication, $sid);
+        $this->assertSame(['app-editor', 'editor'], $this->roles($afterExpiry[1]));
         $this->assertNotSame($before, $this->app->persistence->store[$sid]['oauth2_token']);
     }
 

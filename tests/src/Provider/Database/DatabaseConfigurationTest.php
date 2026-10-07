@@ -288,4 +288,66 @@ final class DatabaseConfigurationTest extends TestCase
 
         new DatabaseConfiguration(['database_url' => 'sqlite::memory:', 'refresh_interval' => -1]);
     }
+
+    #[Test]
+    public function aUserIsActiveByTheColumnActiveByDefault(): void
+    {
+        $repository = (new DatabaseConfiguration(['database_url' => 'sqlite::memory:']))->getUserRepository();
+
+        $this->assertSame('active', $repository['field']['active']);
+        $this->assertSame('SELECT active FROM user WHERE email = :identity', $repository['sql_is_active']);
+    }
+
+    #[Test]
+    public function theQueryThatTellsIfAUserIsActiveIsMadeFromTheNamesOfTheConfiguration(): void
+    {
+        $repository = (new DatabaseConfiguration([
+            'database_url' => 'sqlite::memory:',
+            'user_repository' => [
+                'table' => 'people',
+                'field' => ['identity' => 'rut', 'active' => 'enabled'],
+            ],
+        ]))->getUserRepository();
+
+        $this->assertSame('enabled', $repository['field']['active']);
+        $this->assertSame('SELECT enabled FROM people WHERE rut = :identity', $repository['sql_is_active']);
+    }
+
+    #[Test]
+    public function theQueryThatTellsIfAUserIsActiveCanBeTheOneOfTheApplication(): void
+    {
+        $sql = 'SELECT COUNT(*) FROM person WHERE rut = :identity AND banned_at IS NULL';
+
+        $repository = (new DatabaseConfiguration([
+            'database_url' => 'sqlite::memory:',
+            'user_repository' => ['sql_is_active' => $sql],
+        ]))->getUserRepository();
+
+        $this->assertSame($sql, $repository['sql_is_active']);
+    }
+
+    #[Test]
+    public function theCheckThatAUserIsActiveCanBeTurnedOffWithFalseOrTheTextFalse(): void
+    {
+        foreach ([false, 'false', 'FALSE'] as $off) {
+            $repository = (new DatabaseConfiguration([
+                'database_url' => 'sqlite::memory:',
+                'user_repository' => ['sql_is_active' => $off],
+            ]))->getUserRepository();
+
+            $this->assertNull($repository['sql_is_active'], var_export($off, true));
+        }
+    }
+
+    #[Test]
+    public function theNameOfTheColumnActiveHasToBeAName(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('The name "active; DROP TABLE user" is not valid for a table or a column.');
+
+        new DatabaseConfiguration([
+            'database_url' => 'sqlite::memory:',
+            'user_repository' => ['field' => ['active' => 'active; DROP TABLE user']],
+        ]);
+    }
 }

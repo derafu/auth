@@ -59,8 +59,10 @@ services:
                     field:
                         identity: '%env(default::string:AUTH_USER_FIELD_IDENTITY)%'
                         password: '%env(default::string:AUTH_USER_FIELD_PASSWORD)%'
+                        active: '%env(default::string:AUTH_USER_FIELD_ACTIVE)%'
                     sql_get_roles: '%env(default::string:AUTH_USER_SQL_GET_ROLES)%'
                     sql_get_details: '%env(default::string:AUTH_USER_SQL_GET_DETAILS)%'
+                    sql_is_active: '%env(default::string:AUTH_USER_SQL_IS_ACTIVE)%'
 
                 # Base configuration for all providers.
                 protected_paths: '%env(default::json:AUTH_PROTECTED_PATHS)%'

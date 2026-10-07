@@ -28,6 +28,8 @@ return [
         'El secreto de cliente es obligatorio.',
     'Redirect URI is required.' =>
         'La URI de redirección es obligatoria.',
+    'The query "sql_is_active" failed: {error}. If the table has no column "{column}", give your own query in "sql_is_active" or turn the check off with false.' =>
+        'La consulta "sql_is_active" falló: {error}. Si la tabla no tiene la columna "{column}", entrega tu propia consulta en "sql_is_active" o desactiva la comprobación con false.',
     'The refresh interval must be a number of seconds, 0 or more.' =>
         'El intervalo de actualización debe ser un número de segundos, 0 o más.',
 

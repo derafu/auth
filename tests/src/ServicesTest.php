@@ -244,4 +244,30 @@ final class ServicesTest extends TestCase
         $container->compile(true);
         $this->assertSame(45, $container->get(DatabaseConfiguration::class)->getRefreshInterval());
     }
+
+    #[Test]
+    public function theColumnAndTheQueryOfActiveUsersAreTheOnesOfTheEnvironment(): void
+    {
+        $container = $this->container('auth-database-services.yaml', true);
+        $container->getDefinition(DatabaseConfiguration::class)->setPublic(true);
+        $container->compile(true);
+        $repository = $container->get(DatabaseConfiguration::class)->getUserRepository();
+        $this->assertSame('active', $repository['field']['active']);
+        $this->assertSame('SELECT active FROM user WHERE email = :identity', $repository['sql_is_active']);
+
+        $this->environment('AUTH_USER_FIELD_ACTIVE', 'enabled');
+        $container = $this->container('auth-database-services.yaml', true);
+        $container->getDefinition(DatabaseConfiguration::class)->setPublic(true);
+        $container->compile(true);
+        $this->assertSame(
+            'SELECT enabled FROM user WHERE email = :identity',
+            $container->get(DatabaseConfiguration::class)->getUserRepository()['sql_is_active']
+        );
+
+        $this->environment('AUTH_USER_SQL_IS_ACTIVE', 'false');
+        $container = $this->container('auth-database-services.yaml', true);
+        $container->getDefinition(DatabaseConfiguration::class)->setPublic(true);
+        $container->compile(true);
+        $this->assertNull($container->get(DatabaseConfiguration::class)->getUserRepository()['sql_is_active']);
+    }
 }

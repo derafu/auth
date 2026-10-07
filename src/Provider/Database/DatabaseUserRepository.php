@@ -14,6 +14,7 @@ namespace Derafu\Auth\Provider\Database;
 
 use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Contract\UserRepositoryInterface;
+use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Auth\User;
 use PDO;
 use PDOException;
@@ -90,6 +91,12 @@ class DatabaseUserRepository implements UserRepositoryInterface
             return null;
         }
 
+        // The password is right, but a user that is not active is not let in. It
+        // is the same answer as a wrong password, and its hash is not touched.
+        if (!$this->isActive($credential)) {
+            return null;
+        }
+
         if (password_needs_rehash($hash, PASSWORD_DEFAULT)) {
             $this->rehash($credential, $password);
         }
@@ -121,7 +128,57 @@ class DatabaseUserRepository implements UserRepositoryInterface
             $this->config->getUserIdentityField()
         ), $identity);
 
-        return $statement->fetch(PDO::FETCH_NUM) === false ? null : $this->userOf($identity);
+        if ($statement->fetch(PDO::FETCH_NUM) === false || !$this->isActive($identity)) {
+            return null;
+        }
+
+        return $this->userOf($identity);
+    }
+
+    /**
+     * Tells whether the user is active, with the query of the configuration
+     * (`sql_is_active`): the first value that it gives, and no row is not active.
+     * `0`, `false`, `null`, an empty text and the texts `0`, `f`, `false`, `n`,
+     * `no` and `off` say that it is not; anything else says that it is (a count
+     * of two, for example).
+     *
+     * @param string $identity The identity of the user.
+     * @return bool True if the user is active, or if the configuration has no
+     * query (the check is off).
+     * @throws ConfigurationException If the query fails: it is the one of the
+     * configuration that is wrong (the table has no such column), not the
+     * database.
+     */
+    private function isActive(string $identity): bool
+    {
+        $sql = $this->config->getUserRepository()['sql_is_active'];
+        if ($sql === null) {
+            return true;
+        }
+
+        try {
+            $value = $this->query((string) $sql, $identity)->fetchColumn();
+        } catch (PDOException $e) {
+            throw new ConfigurationException(
+                [
+                    'The query "sql_is_active" failed: {error}. If the table has no column "{column}", give your own query in "sql_is_active" or turn the check off with false.',
+                    'error' => $e->getMessage(),
+                    'column' => $this->config->getUserRepository()['field']['active'],
+                ],
+                0,
+                $e
+            );
+        }
+
+        if ($value === false || $value === null) {
+            return false;
+        }
+
+        $text = strtolower(trim((string) $value));
+
+        return !in_array($text, ['', 'f', 'false', 'n', 'no', 'off'], true)
+            && !(is_numeric($text) && (float) $text === 0.0)
+        ;
     }
 
     /**
@@ -167,7 +224,9 @@ class DatabaseUserRepository implements UserRepositoryInterface
     private function query(string $sql, string $identity): PDOStatement
     {
         $statement = $this->pdo()->prepare($sql);
-        $statement->execute(['identity' => $identity]);
+        // The identity goes in `:identity`; a query that does not use it (one
+        // that does not depend on the user) is run as it is.
+        $statement->execute(str_contains($sql, ':identity') ? ['identity' => $identity] : []);
 
         return $statement;
     }

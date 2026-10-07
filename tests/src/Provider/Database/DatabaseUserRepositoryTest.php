@@ -12,12 +12,15 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth\Provider\Database;
 
+use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Auth\Provider\Database\DatabaseConfiguration;
 use Derafu\Auth\Provider\Database\DatabaseUserRepository;
 use Derafu\Auth\User;
 use Derafu\Auth\UserFactory;
 use Derafu\TestsAuth\Fixture\UsersDatabase;
+use PDOException;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
@@ -149,7 +152,7 @@ final class DatabaseUserRepositoryTest extends TestCase
         // The default query is `SELECT *`: the password is a column of it.
         $default = $this->repository()->authenticate('ana@example.com', 'secret');
         $this->assertNotNull($default);
-        $this->assertSame(['id', 'email', 'name'], array_keys($default->getDetails()));
+        $this->assertSame(['id', 'email', 'name', 'active'], array_keys($default->getDetails()));
 
         // And a query that asks for it does not keep it either.
         $asked = $this->repository(config: [
@@ -176,7 +179,7 @@ final class DatabaseUserRepositoryTest extends TestCase
         $user = (new DatabaseUserRepository($this->database->config()))->authenticate('11111111-1', 'clave');
 
         $this->assertNotNull($user);
-        $this->assertSame(['id', 'rut', 'name'], array_keys($user->getDetails()));
+        $this->assertSame(['id', 'rut', 'name', 'active'], array_keys($user->getDetails()));
     }
 
     #[Test]
@@ -317,5 +320,164 @@ final class DatabaseUserRepositoryTest extends TestCase
         $repository->find('ana@example.com');
 
         $this->assertSame($hash, $this->database?->hash('ana@example.com'));
+    }
+
+    /**
+     * @param list<array{identity: string, password: string, roles: list<string>, active?: bool}> $users
+     * @param array<string, mixed> $userRepository
+     */
+    private function withActive(array $users, array $userRepository = [], bool $column = true): DatabaseUserRepository
+    {
+        $this->database = new UsersDatabase($users, withActiveColumn: $column);
+
+        return new DatabaseUserRepository($this->database->config(['user_repository' => [
+            'table' => 'user',
+            'field' => ['identity' => 'email', 'password' => 'password'],
+        ] + $userRepository]));
+    }
+
+    #[Test]
+    public function aUserThatIsNotActiveIsNotAuthenticatedWhateverItsPassword(): void
+    {
+        $repository = $this->withActive([
+            ['identity' => 'ana@example.com', 'password' => 'secret', 'roles' => ['admin']],
+            ['identity' => 'ben@example.com', 'password' => 'secret', 'roles' => ['admin'], 'active' => false],
+        ]);
+
+        $this->assertSame('ana@example.com', $repository->authenticate('ana@example.com', 'secret')?->getIdentity());
+        $this->assertNull($repository->authenticate('ben@example.com', 'secret'));
+    }
+
+    #[Test]
+    public function aUserThatIsNotActiveIsNotFoundAndIsFoundAgainWhenItIsActive(): void
+    {
+        $repository = $this->withActive([['identity' => 'ana@example.com', 'password' => 'secret', 'roles' => ['admin']]]);
+
+        $user = $repository->find('ana@example.com');
+        $this->assertNotNull($user);
+
+        $this->database?->setActive('ana@example.com', false);
+        $inactive = $repository->find('ana@example.com');
+        $this->assertNull($inactive);
+
+        $this->database?->setActive('ana@example.com', true);
+        $again = $repository->find('ana@example.com');
+        $this->assertNotNull($again);
+        $this->assertSame(['admin'], $again->getRoles());
+    }
+
+    #[Test]
+    public function aUserThatIsNotActiveDoesNotHaveItsPasswordRehashed(): void
+    {
+        // The hash is one that PHP would renew (a low cost), and the user is not
+        // active: nothing of it is touched.
+        $hash = password_hash('secret', PASSWORD_BCRYPT, ['cost' => 4]);
+        $repository = $this->withActive([
+            ['identity' => 'ben@example.com', 'hash' => $hash, 'password' => '', 'roles' => [], 'active' => false],
+        ]);
+
+        $this->assertNull($repository->authenticate('ben@example.com', 'secret'));
+        $this->assertSame($hash, $this->database?->hash('ben@example.com'));
+    }
+
+    #[Test]
+    public function withoutTheCheckEveryUserThatExistsIsActive(): void
+    {
+        $repository = $this->withActive(
+            [['identity' => 'ben@example.com', 'password' => 'secret', 'roles' => [], 'active' => false]],
+            ['sql_is_active' => false]
+        );
+
+        $this->assertNotNull($repository->authenticate('ben@example.com', 'secret'));
+        $this->assertNotNull($repository->find('ben@example.com'));
+    }
+
+    #[Test]
+    public function aTableWithoutTheColumnWorksWhenTheCheckIsOff(): void
+    {
+        $repository = $this->withActive(
+            [['identity' => 'ana@example.com', 'password' => 'secret', 'roles' => ['admin']]],
+            ['sql_is_active' => false],
+            column: false
+        );
+
+        $this->assertSame(['admin'], $repository->authenticate('ana@example.com', 'secret')?->getRoles());
+        $this->assertSame(['admin'], $repository->find('ana@example.com')?->getRoles());
+    }
+
+    #[Test]
+    public function aTableWithoutTheColumnIsAConfigurationErrorThatSaysWhatToDo(): void
+    {
+        $repository = $this->withActive(
+            [['identity' => 'ana@example.com', 'password' => 'secret', 'roles' => ['admin']]],
+            column: false
+        );
+
+        foreach ([
+            fn () => $repository->authenticate('ana@example.com', 'secret'),
+            fn () => $repository->find('ana@example.com'),
+        ] as $call) {
+            try {
+                $call();
+                $this->fail('It should have failed.');
+            } catch (ConfigurationException $e) {
+                $this->assertStringStartsWith('The query "sql_is_active" failed: ', $e->getMessage());
+                $this->assertStringContainsString('give your own query in "sql_is_active"', $e->getMessage());
+                $this->assertStringContainsString('turn the check off with false', $e->getMessage());
+                $this->assertInstanceOf(PDOException::class, $e->getPrevious());
+            }
+        }
+    }
+
+    #[Test]
+    public function theQueryOfTheApplicationDecidesWhoIsActive(): void
+    {
+        $repository = $this->withActive(
+            [
+                ['identity' => 'ana@example.com', 'password' => 'secret', 'roles' => []],
+                ['identity' => 'ben@example.com', 'password' => 'secret', 'roles' => []],
+            ],
+            ['sql_is_active' => "SELECT COUNT(*) FROM user WHERE email = :identity AND name <> 'User 2'"],
+            column: false
+        );
+
+        $this->assertNotNull($repository->find('ana@example.com'));
+        $this->assertNull($repository->find('ben@example.com'));
+    }
+
+    /**
+     * @return array<string, array{string, bool}>
+     */
+    public static function valuesOfTheQueryProvider(): array
+    {
+        return [
+            'one' => ['SELECT 1', true],
+            'a count of two' => ['SELECT 2', true],
+            'the text yes' => ["SELECT 'yes'", true],
+            'the text true' => ["SELECT 'true'", true],
+            'the text t' => ["SELECT 't'", true],
+            'zero' => ['SELECT 0', false],
+            'the text zero' => ["SELECT '0'", false],
+            'null' => ['SELECT NULL', false],
+            'an empty text' => ["SELECT ''", false],
+            'the text false' => ["SELECT 'false'", false],
+            'the text f' => ["SELECT 'f'", false],
+            'the text no' => ["SELECT 'no'", false],
+            'no row' => ['SELECT 1 WHERE 1 = 0', false],
+        ];
+    }
+
+    #[Test]
+    #[DataProvider('valuesOfTheQueryProvider')]
+    public function theFirstValueOfTheQueryTellsIfTheUserIsActive(string $sql, bool $active): void
+    {
+        $repository = $this->withActive(
+            [['identity' => 'ana@example.com', 'password' => 'secret', 'roles' => []]],
+            ['sql_is_active' => $sql],
+            column: false
+        );
+
+        $this->assertSame($active, $repository->find('ana@example.com') !== null);
+        $this->assertSame($active, $repository->authenticate('ana@example.com', 'secret') !== null);
     }
 }

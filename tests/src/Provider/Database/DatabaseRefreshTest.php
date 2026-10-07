@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Derafu\TestsAuth\Provider\Database;
 
 use Derafu\Auth\Contract\UserInterface;
+use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Auth\FormManager;
 use Derafu\Auth\Provider\Database\DatabaseAuthentication;
 use Derafu\Auth\Provider\Database\DatabaseUserRepository;
@@ -107,7 +108,6 @@ final class DatabaseRefreshTest extends TestCase
     /**
      * The user asks for a protected page with the session.
      *
-     * @phpstan-impure
      * @return array{ResponseInterface, UserInterface|null} The response and the
      * user that the page got (null if the user was sent away).
      */
@@ -134,16 +134,18 @@ final class DatabaseRefreshTest extends TestCase
         $this->database->setRoles('ana@example.com', ['editor', 'accountant']);
 
         // The database changed, the session has not been asked yet.
-        $this->assertSame(['admin'], $this->visit($authentication, $sid)[1]?->getRoles());
+        $first = $this->visit($authentication, $sid);
+        $this->assertSame(['admin'], $first[1]?->getRoles());
 
         // 299 seconds: not yet. 300: asked again.
         $this->app->persistence->store[$sid]['auth_checked_at'] = time() - 299;
-        $this->assertSame(['admin'], $this->visit($authentication, $sid)[1]?->getRoles());
+        $second = $this->visit($authentication, $sid);
+        $this->assertSame(['admin'], $second[1]?->getRoles());
 
         $this->app->persistence->store[$sid]['auth_checked_at'] = time() - 300;
-        $user = $this->visit($authentication, $sid)[1];
+        $third = $this->visit($authentication, $sid);
 
-        $this->assertEqualsCanonicalizing(['editor', 'accountant'], $user?->getRoles());
+        $this->assertEqualsCanonicalizing(['editor', 'accountant'], $third[1]?->getRoles());
         // The session has the new roles, and a new time for the next check.
         $this->assertEqualsCanonicalizing(['editor', 'accountant'], $this->app->persistence->store[$sid]['user']['roles']);
         $this->assertEqualsWithDelta(time(), $this->app->persistence->store[$sid]['auth_checked_at'], 2);
@@ -233,5 +235,55 @@ final class DatabaseRefreshTest extends TestCase
 
         $this->database->setRoles('ana@example.com', ['accountant']);
         $this->assertSame(['editor'], $this->visit($authentication, $sid)[1]?->getRoles());
+    }
+
+    #[Test]
+    public function aUserThatBecomesInactiveLosesTheSessionWhenTheSessionIsAsked(): void
+    {
+        $authentication = $this->authentication();
+        $sid = $this->logIn($authentication);
+        $this->database->setActive('ana@example.com', false);
+
+        // Until the interval passes the session is the copy of the login.
+        $first = $this->visit($authentication, $sid);
+        $this->assertNotNull($first[1]);
+
+        $this->app->persistence->store[$sid]['auth_checked_at'] = time() - 301;
+        $second = $this->visit($authentication, $sid);
+        [$response, $user] = $second;
+
+        $this->assertNull($user);
+        $this->assertInstanceOf(RedirectResponse::class, $response);
+        $this->assertArrayNotHasKey('user', $this->app->persistence->store[$sid]);
+    }
+
+    #[Test]
+    public function withoutTheCheckAnInactiveUserKeepsTheSession(): void
+    {
+        $authentication = $this->authentication(['user_repository' => ['sql_is_active' => false]]);
+        $sid = $this->logIn($authentication);
+        $this->database->setActive('ana@example.com', false);
+        $this->app->persistence->store[$sid]['auth_checked_at'] = time() - 301;
+
+        $this->assertNotNull($this->visit($authentication, $sid)[1]);
+    }
+
+    #[Test]
+    public function aQueryThatDoesNotWorkIsNotTakenForADatabaseThatIsDown(): void
+    {
+        // The table has no column "active": it is the configuration that is wrong,
+        // so it is said, and the session is not kept waiting for a database that
+        // is fine.
+        $this->database->remove();
+        $this->database = new UsersDatabase(withActiveColumn: false);
+        $authentication = $this->authentication(['user_repository' => ['sql_is_active' => false]]);
+        $sid = $this->logIn($authentication);
+        $broken = $this->authentication();
+        $this->app->persistence->store[$sid]['auth_checked_at'] = time() - 301;
+
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('The query "sql_is_active" failed: ');
+
+        $this->visit($broken, $sid);
     }
 }

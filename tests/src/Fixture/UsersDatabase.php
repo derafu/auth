@@ -24,7 +24,7 @@ final class UsersDatabase
     private readonly string $file;
 
     /**
-     * @param list<array{identity: string, password: string, roles: list<string>, hash?: string}> $users
+     * @param list<array{identity: string, password: string, roles: list<string>, hash?: string, active?: bool}> $users
      * The hash of the password is made with `password_hash()` unless one is given.
      * @param string $table The table of the users.
      * @param string $identity The column of the identity.
@@ -34,16 +34,19 @@ final class UsersDatabase
         array $users = [['identity' => 'ana@example.com', 'password' => 'secret', 'roles' => ['admin']]],
         private readonly string $table = 'user',
         private readonly string $identity = 'email',
-        private readonly string $password = 'password'
+        private readonly string $password = 'password',
+        private readonly bool $withActiveColumn = true,
+        private readonly string $active = 'active'
     ) {
         $this->file = tempnam(sys_get_temp_dir(), 'auth-users-') ?: '';
 
         $pdo = new PDO('sqlite:' . $this->file);
         $pdo->exec(sprintf(
-            'CREATE TABLE %s (id INTEGER PRIMARY KEY, %s TEXT, %s TEXT, name TEXT)',
+            'CREATE TABLE %s (id INTEGER PRIMARY KEY, %s TEXT, %s TEXT, name TEXT%s)',
             $this->table,
             $this->identity,
-            $this->password
+            $this->password,
+            $this->withActiveColumn ? ', ' . $this->active . ' INTEGER NOT NULL DEFAULT 1' : ''
         ));
         $pdo->exec('CREATE TABLE role (id INTEGER PRIMARY KEY, name TEXT)');
         $pdo->exec(sprintf('CREATE TABLE %s_role (user_id INTEGER, role_id INTEGER)', $this->table));
@@ -63,6 +66,9 @@ final class UsersDatabase
                 'name' => 'User ' . $id,
             ]);
 
+            if ($this->withActiveColumn && ($user['active'] ?? true) === false) {
+                $this->setActive($user['identity'], false);
+            }
             foreach ($user['roles'] as $role) {
                 if (!isset($roleIds[$role])) {
                     $roleIds[$role] = count($roleIds) + 1;
@@ -139,6 +145,17 @@ final class UsersDatabase
             $pdo->prepare(sprintf('INSERT INTO %s_role (user_id, role_id) VALUES (:user, :role)', $this->table))
                 ->execute(['user' => $id, 'role' => $roleId]);
         }
+    }
+
+    /**
+     * Makes the user active or inactive: a user that exists, with its password
+     * and its roles, that the application does not want to let in.
+     */
+    public function setActive(string $identity, bool $active): void
+    {
+        $pdo = new PDO('sqlite:' . $this->file);
+        $pdo->prepare(sprintf('UPDATE %s SET %s = :active WHERE %s = :identity', $this->table, $this->active, $this->identity))
+            ->execute(['active' => $active ? 1 : 0, 'identity' => $identity]);
     }
 
     public function setName(string $identity, string $name): void

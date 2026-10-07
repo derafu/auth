@@ -160,6 +160,7 @@ class DatabaseConfiguration extends AbstractProviderConfiguration implements Con
             'field' => [
                 'identity' => $config['field']['identity'] ?? 'email',
                 'password' => $config['field']['password'] ?? 'password',
+                'active' => $config['field']['active'] ?? 'active',
             ],
         ];
 
@@ -169,6 +170,7 @@ class DatabaseConfiguration extends AbstractProviderConfiguration implements Con
             $userRepositoryConfig['table'],
             $userRepositoryConfig['field']['identity'],
             $userRepositoryConfig['field']['password'],
+            $userRepositoryConfig['field']['active'],
         ] as $name) {
             if (!is_string($name) || !preg_match('/^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$/', $name)) {
                 throw new ConfigurationException([
@@ -202,6 +204,26 @@ class DatabaseConfiguration extends AbstractProviderConfiguration implements Con
                 $userRepositoryConfig['field']['identity']
             )
         ;
+
+        // The query that tells whether a user is active (a user can exist, with
+        // its password and its roles, and not be let in): the first value that it
+        // gives says it. `false` (or the text `false`, which is what an
+        // environment variable can say) is for who does not have the concept: the
+        // check is off and every user that exists is active.
+        $sqlIsActive = $config['sql_is_active'] ?? null;
+        if ($sqlIsActive === false || (is_string($sqlIsActive) && strtolower(trim($sqlIsActive)) === 'false')) {
+            $userRepositoryConfig['sql_is_active'] = null;
+        } else {
+            $userRepositoryConfig['sql_is_active'] = $sqlIsActive === null || $sqlIsActive === ''
+                ? sprintf(
+                    'SELECT %s FROM %s WHERE %s = :identity',
+                    $userRepositoryConfig['field']['active'],
+                    $userRepositoryConfig['table'],
+                    $userRepositoryConfig['field']['identity']
+                )
+                : $sqlIsActive
+            ;
+        }
 
         return $userRepositoryConfig;
     }
