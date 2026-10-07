@@ -12,10 +12,11 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Provider\Database;
 
+use Derafu\Auth\Contract\UserFactoryInterface;
 use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Contract\UserRepositoryInterface;
 use Derafu\Auth\Exception\ConfigurationException;
-use Derafu\Auth\User;
+use Derafu\Auth\UserFactory;
 use PDO;
 use PDOException;
 use PDOStatement;
@@ -56,11 +57,15 @@ class DatabaseUserRepository implements UserRepositoryInterface
      * @param PDO|null $pdo The connection to the database. By default, one made
      * from the URL of the configuration when it is needed.
      */
+    private readonly UserFactoryInterface $userFactory;
+
     public function __construct(
         private readonly DatabaseConfiguration $config,
-        ?PDO $pdo = null
+        ?PDO $pdo = null,
+        ?UserFactoryInterface $userFactory = null
     ) {
         $this->pdo = $pdo;
+        $this->userFactory = $userFactory ?? new UserFactory();
     }
 
     /**
@@ -185,7 +190,7 @@ class DatabaseUserRepository implements UserRepositoryInterface
      * The user with this identity, with the roles and the details that the
      * queries of the configuration give.
      */
-    private function userOf(string $identity): User
+    private function userOf(string $identity): UserInterface
     {
         $repository = $this->config->getUserRepository();
 
@@ -199,7 +204,7 @@ class DatabaseUserRepository implements UserRepositoryInterface
             $roles[] = (string) $role[0];
         }
 
-        return new User($identity, $roles, $details);
+        return $this->userFactory->create($identity, $roles, $details);
     }
 
     /**

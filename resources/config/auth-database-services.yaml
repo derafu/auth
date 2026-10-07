@@ -2,11 +2,15 @@ imports:
     - auth-services.yaml
 
 parameters:
-    env(AUTH_LOGIN_MAX_ATTEMPTS): '5'
-    env(AUTH_LOGIN_LOCK_SECONDS): '900'
-    env(AUTH_LOGIN_REDIRECT_ROUTE): '/'
-    env(AUTH_LOGOUT_REDIRECT_ROUTE): '/auth/login'
-    env(AUTH_UNAUTHORIZED_REDIRECT_ROUTE): '/auth/login'
+    # The database of the provider is the one of the application (DATABASE_URL)
+    # unless AUTH_DATABASE_URL says another.
+    auth.database.url.fallback: '%env(default::string:DATABASE_URL)%'
+
+    env(AUTH_DATABASE_LOGIN_MAX_ATTEMPTS): '5'
+    env(AUTH_DATABASE_LOGIN_LOCK_SECONDS): '900'
+    env(AUTH_LOGIN_REDIRECT_PATH): '/'
+    env(AUTH_LOGOUT_REDIRECT_PATH): '/auth/login'
+    env(AUTH_UNAUTHORIZED_REDIRECT_PATH): '/auth/login'
 
 services:
 
@@ -14,6 +18,12 @@ services:
         autowire: true
         autoconfigure: true
         public: false
+
+    # The users that the provider gives are made by this factory: an application
+    # that has its own class of user registers its factory in its place.
+    Derafu\Auth\UserFactory: ~
+    Derafu\Auth\Contract\UserFactoryInterface:
+        alias: Derafu\Auth\UserFactory
 
     # Authentication configuration.
     Mezzio\Authentication\AuthenticationMiddleware: ~
@@ -44,34 +54,34 @@ services:
     # must have one.
     Derafu\Auth\Provider\Database\LoginThrottle:
         arguments:
-            $maxAttempts: '%env(int:AUTH_LOGIN_MAX_ATTEMPTS)%'
-            $lockSeconds: '%env(int:AUTH_LOGIN_LOCK_SECONDS)%'
+            $maxAttempts: '%env(int:AUTH_DATABASE_LOGIN_MAX_ATTEMPTS)%'
+            $lockSeconds: '%env(int:AUTH_DATABASE_LOGIN_LOCK_SECONDS)%'
 
     Derafu\Auth\Provider\Database\DatabaseUserRepository: ~
     Derafu\Auth\Provider\Database\DatabaseConfiguration:
         arguments:
             $config:
                 # Configuration of database authentication provider.
-                database_url: '%env(default::string:DATABASE_URL)%'
+                database_url: '%env(default:auth.database.url.fallback:string:AUTH_DATABASE_URL)%'
                 project_dir: '%kernel.project_dir%' # For replacing %kernel.project_dir% in the database URL (useful with SQLite).
                 user_repository:
-                    table: '%env(default::string:AUTH_USER_TABLE)%'
+                    table: '%env(default::string:AUTH_DATABASE_USER_TABLE)%'
                     field:
-                        identity: '%env(default::string:AUTH_USER_FIELD_IDENTITY)%'
-                        password: '%env(default::string:AUTH_USER_FIELD_PASSWORD)%'
-                        active: '%env(default::string:AUTH_USER_FIELD_ACTIVE)%'
-                    sql_get_roles: '%env(default::string:AUTH_USER_SQL_GET_ROLES)%'
-                    sql_get_details: '%env(default::string:AUTH_USER_SQL_GET_DETAILS)%'
-                    sql_is_active: '%env(default::string:AUTH_USER_SQL_IS_ACTIVE)%'
+                        identity: '%env(default::string:AUTH_DATABASE_USER_FIELD_IDENTITY)%'
+                        password: '%env(default::string:AUTH_DATABASE_USER_FIELD_PASSWORD)%'
+                        active: '%env(default::string:AUTH_DATABASE_USER_FIELD_ACTIVE)%'
+                    sql_get_roles: '%env(default::string:AUTH_DATABASE_USER_SQL_GET_ROLES)%'
+                    sql_get_details: '%env(default::string:AUTH_DATABASE_USER_SQL_GET_DETAILS)%'
+                    sql_is_active: '%env(default::string:AUTH_DATABASE_USER_SQL_IS_ACTIVE)%'
 
                 # Base configuration for all providers.
                 protected_paths: '%env(default::json:AUTH_PROTECTED_PATHS)%'
                 logout_path: '%env(default::string:AUTH_LOGOUT_PATH)%'
-                login_redirect_route: '%env(default::string:AUTH_LOGIN_REDIRECT_ROUTE)%'
-                logout_redirect_route: '%env(default::string:AUTH_LOGOUT_REDIRECT_ROUTE)%'
-                unauthorized_redirect_route: '%env(default::string:AUTH_UNAUTHORIZED_REDIRECT_ROUTE)%'
+                login_redirect_path: '%env(default::string:AUTH_LOGIN_REDIRECT_PATH)%'
+                logout_redirect_path: '%env(default::string:AUTH_LOGOUT_REDIRECT_PATH)%'
+                unauthorized_redirect_path: '%env(default::string:AUTH_UNAUTHORIZED_REDIRECT_PATH)%'
                 enabled: '%env(default::bool:AUTH_ENABLED)%'
-                refresh_interval: '%env(default::int:AUTH_REFRESH_INTERVAL)%'
+                refresh_interval: '%env(default::int:AUTH_REFRESH_INTERVAL_SECONDS)%'
 
     # Database controller.
     Derafu\Auth\Provider\Database\DatabaseController:

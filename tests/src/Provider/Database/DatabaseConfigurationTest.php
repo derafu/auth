@@ -183,9 +183,9 @@ final class DatabaseConfigurationTest extends TestCase
         $this->assertSame([], $config->getProtectedPaths());
         $this->assertSame('/auth/login', $config->getLoginPath());
         $this->assertSame('/auth/logout', $config->getLogoutPath());
-        $this->assertSame('/', $config->getLoginRedirectRoute());
-        $this->assertSame('/', $config->getLogoutRedirectRoute());
-        $this->assertSame('/', $config->getUnauthorizedRedirectRoute());
+        $this->assertSame('/', $config->getLoginRedirectPath());
+        $this->assertSame('/', $config->getLogoutRedirectPath());
+        $this->assertSame('/', $config->getUnauthorizedRedirectPath());
         $this->assertTrue($config->isEnabled());
     }
 
@@ -243,16 +243,16 @@ final class DatabaseConfigurationTest extends TestCase
             'database_url' => 'sqlite::memory:',
             'login_path' => '/in',
             'logout_path' => '/out',
-            'login_redirect_route' => '/home',
-            'logout_redirect_route' => '/bye',
-            'unauthorized_redirect_route' => '/in',
+            'login_redirect_path' => '/home',
+            'logout_redirect_path' => '/bye',
+            'unauthorized_redirect_path' => '/in',
         ]);
 
         $this->assertSame('/in', $config->getLoginPath());
         $this->assertSame('/out', $config->getLogoutPath());
-        $this->assertSame('/home', $config->getLoginRedirectRoute());
-        $this->assertSame('/bye', $config->getLogoutRedirectRoute());
-        $this->assertSame('/in', $config->getUnauthorizedRedirectRoute());
+        $this->assertSame('/home', $config->getLoginRedirectPath());
+        $this->assertSame('/bye', $config->getLogoutRedirectPath());
+        $this->assertSame('/in', $config->getUnauthorizedRedirectPath());
     }
 
     #[Test]

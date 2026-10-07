@@ -48,29 +48,29 @@ abstract class AbstractProviderConfiguration implements ConfigurationInterface
     private string $logoutPath = '/auth/logout';
 
     /**
-     * The login redirect route.
+     * The login redirect path.
      *
      * Where the user will be redirected after login.
      */
-    private string $loginRedirectRoute = '/';
+    private string $loginRedirectPath = '/';
 
     /**
-     * The logout redirect route.
+     * The logout redirect path.
      *
      * Where the user will be redirected after logout.
      *
      * @var string
      */
-    private string $logoutRedirectRoute = '/';
+    private string $logoutRedirectPath = '/';
 
     /**
-     * The unauthorized redirect route.
+     * The unauthorized redirect path.
      *
      * Where the user will be redirected if they are unauthorized.
      *
      * @var string
      */
-    private string $unauthorizedRedirectRoute = '/';
+    private string $unauthorizedRedirectPath = '/';
 
     /**
      * Whether the authentication is enabled.
@@ -117,14 +117,14 @@ abstract class AbstractProviderConfiguration implements ConfigurationInterface
         ;
 
         // Redirect paths.
-        $this->loginRedirectRoute = $config['login_redirect_route']
-            ?? $this->loginRedirectRoute
+        $this->loginRedirectPath = $config['login_redirect_path']
+            ?? $this->loginRedirectPath
         ;
-        $this->logoutRedirectRoute = $config['logout_redirect_route']
-            ?? $this->logoutRedirectRoute
+        $this->logoutRedirectPath = $config['logout_redirect_path']
+            ?? $this->logoutRedirectPath
         ;
-        $this->unauthorizedRedirectRoute = $config['unauthorized_redirect_route']
-            ?? $this->unauthorizedRedirectRoute
+        $this->unauthorizedRedirectPath = $config['unauthorized_redirect_path']
+            ?? $this->unauthorizedRedirectPath
         ;
 
         // Enabled.
@@ -153,9 +153,9 @@ abstract class AbstractProviderConfiguration implements ConfigurationInterface
             'protected_paths' => $this->getProtectedPaths(),
             'login_path' => $this->getLoginPath(),
             'logout_path' => $this->getLogoutPath(),
-            'login_redirect_route' => $this->getLoginRedirectRoute(),
-            'logout_redirect_route' => $this->getLogoutRedirectRoute(),
-            'unauthorized_redirect_route' => $this->getUnauthorizedRedirectRoute(),
+            'login_redirect_path' => $this->getLoginRedirectPath(),
+            'logout_redirect_path' => $this->getLogoutRedirectPath(),
+            'unauthorized_redirect_path' => $this->getUnauthorizedRedirectPath(),
             'enabled' => $this->isEnabled(),
             'refresh_interval' => $this->getRefreshInterval(),
             default => $default,
@@ -171,9 +171,9 @@ abstract class AbstractProviderConfiguration implements ConfigurationInterface
             'protected_paths' => $this->getProtectedPaths(),
             'login_path' => $this->getLoginPath(),
             'logout_path' => $this->getLogoutPath(),
-            'login_redirect_route' => $this->getLoginRedirectRoute(),
-            'logout_redirect_route' => $this->getLogoutRedirectRoute(),
-            'unauthorized_redirect_route' => $this->getUnauthorizedRedirectRoute(),
+            'login_redirect_path' => $this->getLoginRedirectPath(),
+            'logout_redirect_path' => $this->getLogoutRedirectPath(),
+            'unauthorized_redirect_path' => $this->getUnauthorizedRedirectPath(),
             'enabled' => $this->isEnabled(),
             'refresh_interval' => $this->getRefreshInterval(),
         ];
@@ -206,25 +206,25 @@ abstract class AbstractProviderConfiguration implements ConfigurationInterface
     /**
      * {@inheritDoc}
      */
-    public function getLoginRedirectRoute(): string
+    public function getLoginRedirectPath(): string
     {
-        return $this->loginRedirectRoute;
+        return $this->loginRedirectPath;
     }
 
     /**
      * {@inheritDoc}
      */
-    public function getLogoutRedirectRoute(): string
+    public function getLogoutRedirectPath(): string
     {
-        return $this->logoutRedirectRoute;
+        return $this->logoutRedirectPath;
     }
 
     /**
      * {@inheritDoc}
      */
-    public function getUnauthorizedRedirectRoute(): string
+    public function getUnauthorizedRedirectPath(): string
     {
-        return $this->unauthorizedRedirectRoute;
+        return $this->unauthorizedRedirectPath;
     }
 
     /**
@@ -255,8 +255,8 @@ abstract class AbstractProviderConfiguration implements ConfigurationInterface
 
         // Check if path is in protected paths.
         $protectedPaths = $this->getProtectedPaths();
-        foreach ($protectedPaths as $route => $roles) {
-            if (str_starts_with($path, $route)) { // Simple route match.
+        foreach ($protectedPaths as $protectedPath => $roles) {
+            if (str_starts_with($path, $protectedPath)) { // Simple path match.
                 return $roles;
             }
         }
@@ -277,13 +277,13 @@ abstract class AbstractProviderConfiguration implements ConfigurationInterface
 
         // Check if path is in protected paths.
         $protectedPaths = $this->getProtectedPaths();
-        foreach ($protectedPaths as $route => $roles) {
-            if (str_starts_with($path, $route)) { // Simple route match.
+        foreach ($protectedPaths as $protectedPath => $roles) {
+            if (str_starts_with($path, $protectedPath)) { // Simple path match.
                 return true;
             }
         }
 
-        // If no route is matched, no authentication is required.
+        // If no path is matched, no authentication is required.
         return false;
     }
 }

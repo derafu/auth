@@ -17,10 +17,11 @@ use Derafu\Auth\AnonymousUser;
 use Derafu\Auth\Contract\AuthenticationInterface;
 use Derafu\Auth\Contract\FormManagerInterface;
 use Derafu\Auth\Contract\SessionManagerInterface;
+use Derafu\Auth\Contract\UserFactoryInterface;
 use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Exception\FormException;
 use Derafu\Auth\Provider\Database\Form\LoginForm;
-use Derafu\Auth\User;
+use Derafu\Auth\UserFactory;
 use Mezzio\Session\SessionInterface;
 use PDOException;
 use Psr\Http\Message\ServerRequestInterface;
@@ -34,6 +35,8 @@ use Symfony\Contracts\Translation\TranslatorInterface;
  */
 class DatabaseAuthentication extends AbstractProviderAuthentication implements AuthenticationInterface
 {
+    private readonly UserFactoryInterface $userFactory;
+
     /**
      * Creates a new Database authentication implementation.
      *
@@ -45,6 +48,9 @@ class DatabaseAuthentication extends AbstractProviderAuthentication implements A
      * unauthenticated request to the API.
      * @param LoginThrottle|null $throttle Limits the failed attempts to log in.
      * Without it the attempts are not limited.
+     * @param UserFactoryInterface|null $userFactory Makes the users (the one of
+     * the login, the one of the session, the one of the check). The default one
+     * makes a `User`.
      */
     public function __construct(
         private readonly DatabaseUserRepository $userRepository,
@@ -53,8 +59,10 @@ class DatabaseAuthentication extends AbstractProviderAuthentication implements A
         private readonly FormManagerInterface $formManager,
         private readonly UserInterface $anonymousUser = new AnonymousUser(),
         ?TranslatorInterface $translator = null,
-        private readonly ?LoginThrottle $throttle = null
+        private readonly ?LoginThrottle $throttle = null,
+        ?UserFactoryInterface $userFactory = null
     ) {
+        $this->userFactory = $userFactory ?? new UserFactory();
         parent::__construct(
             config: $config,
             sessionManager: $sessionManager,
@@ -178,10 +186,10 @@ class DatabaseAuthentication extends AbstractProviderAuthentication implements A
         }
 
         // Create user from session data.
-        return new User(
-            identity: $userInfo['identity'],
-            roles: $userInfo['roles'] ?? [],
-            details: $userInfo['details'] ?? []
+        return $this->userFactory->create(
+            $userInfo['identity'],
+            $userInfo['roles'] ?? [],
+            $userInfo['details'] ?? []
         );
     }
 }

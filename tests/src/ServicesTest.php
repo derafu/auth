@@ -12,13 +12,16 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth;
 
+use Derafu\Auth\Contract\UserFactoryInterface;
 use Derafu\Auth\Provider\Database\DatabaseAuthentication;
 use Derafu\Auth\Provider\Database\DatabaseConfiguration;
+use Derafu\Auth\Provider\Database\DatabaseUserRepository;
 use Derafu\Auth\Provider\Database\LoginThrottle;
 use Derafu\Auth\Provider\Keycloak\KeycloakAuthentication;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
+use Derafu\Auth\UserFactory;
 use Derafu\DataProcessor\ProcessorFactory;
 use Derafu\Form\Contract\Factory\FormFactoryInterface;
 use Derafu\Form\Contract\Processor\FormDataProcessorInterface;
@@ -28,6 +31,7 @@ use Derafu\Form\Processor\FormRulesResolver;
 use Derafu\Form\Type\TypeProvider;
 use Derafu\Form\Type\TypeRegistry;
 use Derafu\Form\Type\TypeResolver;
+use Derafu\TestsAuth\Fixture\CustomUserFactory;
 use Mezzio\Authentication\AuthenticationInterface;
 use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\Test;
@@ -132,11 +136,11 @@ final class ServicesTest extends TestCase
     #[Test]
     public function theConfigurationOfKeycloakIsTheOneOfTheEnvironmentWithSafeDefaults(): void
     {
-        $this->environment('KEYCLOAK_URL', 'https://auth.example.com');
-        $this->environment('KEYCLOAK_REALM', 'derafu');
-        $this->environment('KEYCLOAK_CLIENT_ID', 'app');
-        $this->environment('KEYCLOAK_CLIENT_SECRET', 'secret');
-        $this->environment('KEYCLOAK_REDIRECT_URI', 'https://app.example.com/auth/callback');
+        $this->environment('AUTH_KEYCLOAK_URL', 'https://auth.example.com');
+        $this->environment('AUTH_KEYCLOAK_REALM', 'derafu');
+        $this->environment('AUTH_KEYCLOAK_CLIENT_ID', 'app');
+        $this->environment('AUTH_KEYCLOAK_CLIENT_SECRET', 'secret');
+        $this->environment('AUTH_KEYCLOAK_REDIRECT_URI', 'https://app.example.com/auth/callback');
         $container = $this->container('auth-keycloak-services.yaml', true);
         $container->getDefinition(KeycloakConfiguration::class)->setPublic(true);
         $container->compile(true);
@@ -156,10 +160,10 @@ final class ServicesTest extends TestCase
     #[Test]
     public function theEnvironmentCanChangeTheLogoutOfKeycloakAndTheIssuer(): void
     {
-        $this->environment('KEYCLOAK_END_SESSION', 'false');
-        $this->environment('KEYCLOAK_ISSUER', 'https://public.example.com/realms/derafu');
-        $this->environment('KEYCLOAK_POST_LOGOUT_REDIRECT_URI', 'https://app.example.com/goodbye');
-        $this->environment('KEYCLOAK_HTTP_VERIFY', 'false');
+        $this->environment('AUTH_KEYCLOAK_END_SESSION', 'false');
+        $this->environment('AUTH_KEYCLOAK_ISSUER', 'https://public.example.com/realms/derafu');
+        $this->environment('AUTH_KEYCLOAK_POST_LOGOUT_REDIRECT_URI', 'https://app.example.com/goodbye');
+        $this->environment('AUTH_KEYCLOAK_HTTP_VERIFY', 'false');
         $container = $this->container('auth-keycloak-services.yaml', true);
         $container->getDefinition(KeycloakConfiguration::class)->setPublic(true);
         $container->compile(true);
@@ -203,8 +207,8 @@ final class ServicesTest extends TestCase
     #[Test]
     public function theLimitOfTheLoginsIsTheOneOfTheEnvironment(): void
     {
-        $this->environment('AUTH_LOGIN_MAX_ATTEMPTS', '2');
-        $this->environment('AUTH_LOGIN_LOCK_SECONDS', '60');
+        $this->environment('AUTH_DATABASE_LOGIN_MAX_ATTEMPTS', '2');
+        $this->environment('AUTH_DATABASE_LOGIN_LOCK_SECONDS', '60');
         $container = $this->container('auth-database-services.yaml', true);
         $container->getDefinition(LoginThrottle::class)->setPublic(true);
         $container->compile(true);
@@ -223,7 +227,7 @@ final class ServicesTest extends TestCase
         $container->compile(true);
         $this->assertNull($container->get(KeycloakConfiguration::class)->getRefreshInterval());
 
-        $this->environment('AUTH_REFRESH_INTERVAL', '90');
+        $this->environment('AUTH_REFRESH_INTERVAL_SECONDS', '90');
         $container = $this->container('auth-keycloak-services.yaml', true);
         $container->getDefinition(KeycloakConfiguration::class)->setPublic(true);
         $container->compile(true);
@@ -238,7 +242,7 @@ final class ServicesTest extends TestCase
         $container->compile(true);
         $this->assertSame(300, $container->get(DatabaseConfiguration::class)->getRefreshInterval());
 
-        $this->environment('AUTH_REFRESH_INTERVAL', '45');
+        $this->environment('AUTH_REFRESH_INTERVAL_SECONDS', '45');
         $container = $this->container('auth-database-services.yaml', true);
         $container->getDefinition(DatabaseConfiguration::class)->setPublic(true);
         $container->compile(true);
@@ -255,7 +259,7 @@ final class ServicesTest extends TestCase
         $this->assertSame('active', $repository['field']['active']);
         $this->assertSame('SELECT active FROM user WHERE email = :identity', $repository['sql_is_active']);
 
-        $this->environment('AUTH_USER_FIELD_ACTIVE', 'enabled');
+        $this->environment('AUTH_DATABASE_USER_FIELD_ACTIVE', 'enabled');
         $container = $this->container('auth-database-services.yaml', true);
         $container->getDefinition(DatabaseConfiguration::class)->setPublic(true);
         $container->compile(true);
@@ -264,10 +268,85 @@ final class ServicesTest extends TestCase
             $container->get(DatabaseConfiguration::class)->getUserRepository()['sql_is_active']
         );
 
-        $this->environment('AUTH_USER_SQL_IS_ACTIVE', 'false');
+        $this->environment('AUTH_DATABASE_USER_SQL_IS_ACTIVE', 'false');
         $container = $this->container('auth-database-services.yaml', true);
         $container->getDefinition(DatabaseConfiguration::class)->setPublic(true);
         $container->compile(true);
         $this->assertNull($container->get(DatabaseConfiguration::class)->getUserRepository()['sql_is_active']);
+    }
+
+    #[Test]
+    public function theFactoryOfUsersIsTheDefaultOneUnlessTheApplicationReplacesIt(): void
+    {
+        foreach (['auth-database-services.yaml', 'auth-keycloak-services.yaml'] as $services) {
+            $container = $this->container($services, true);
+            $container->getAlias(UserFactoryInterface::class)->setPublic(true);
+            $container->compile(true);
+
+            $this->assertSame(UserFactory::class, $container->get(UserFactoryInterface::class)::class, $services);
+        }
+    }
+
+    #[Test]
+    public function aFactoryOfTheApplicationIsTheOneThatBothProvidersUse(): void
+    {
+        $database = $this->container('auth-database-services.yaml', true);
+        $database->register(UserFactoryInterface::class, CustomUserFactory::class);
+        $database->getDefinition(DatabaseUserRepository::class)->setPublic(true);
+        $database->getDefinition(AuthenticationInterface::class)->setPublic(true);
+        $database->compile(true);
+
+        $this->assertInstanceOf(CustomUserFactory::class, $this->property($database->get(DatabaseUserRepository::class), 'userFactory'));
+        $this->assertInstanceOf(CustomUserFactory::class, $this->property($database->get(AuthenticationInterface::class), 'userFactory'));
+
+        $keycloak = $this->container('auth-keycloak-services.yaml', true);
+        $keycloak->register(UserFactoryInterface::class, CustomUserFactory::class);
+        $keycloak->getDefinition(KeycloakUserRepository::class)->setPublic(true);
+        $keycloak->compile(true);
+
+        $this->assertInstanceOf(CustomUserFactory::class, $this->property($keycloak->get(KeycloakUserRepository::class), 'userFactory'));
+    }
+
+    #[Test]
+    public function theDatabaseOfTheProviderIsTheOneOfTheApplicationUnlessItHasItsOwn(): void
+    {
+        // Neither is set: there is no URL (the configuration says so when it is
+        // used).
+        $container = $this->container('auth-database-services.yaml', true);
+        $container->getDefinition(DatabaseConfiguration::class)->setPublic(true);
+        $container->compile(true);
+        $this->assertSame('', $container->get(DatabaseConfiguration::class)->getDatabaseUrl());
+
+        // The one of the application.
+        $this->environment('DATABASE_URL', 'sqlite:/data/application.db');
+        $container = $this->container('auth-database-services.yaml', true);
+        $container->getDefinition(DatabaseConfiguration::class)->setPublic(true);
+        $container->compile(true);
+        $this->assertSame('sqlite:/data/application.db', $container->get(DatabaseConfiguration::class)->getDatabaseUrl());
+
+        // Its own, that comes first.
+        $this->environment('AUTH_DATABASE_URL', 'sqlite:/data/users.db');
+        $container = $this->container('auth-database-services.yaml', true);
+        $container->getDefinition(DatabaseConfiguration::class)->setPublic(true);
+        $container->compile(true);
+        $this->assertSame('sqlite:/data/users.db', $container->get(DatabaseConfiguration::class)->getDatabaseUrl());
+    }
+
+    #[Test]
+    public function theVariablesOfTheProvidersHaveTheNameOfTheirProviderAndTheUnitOfTheirNumbers(): void
+    {
+        $this->environment('AUTH_KEYCLOAK_HTTP_TIMEOUT_SECONDS', '7');
+        $this->environment('AUTH_KEYCLOAK_HTTP_CONNECT_TIMEOUT_SECONDS', '3');
+        $this->environment('AUTH_KEYCLOAK_CALLBACK_PATH', '/login/keycloak');
+        $this->environment('AUTH_LOGIN_REDIRECT_PATH', '/dashboard');
+        $container = $this->container('auth-keycloak-services.yaml', true);
+        $container->getDefinition(KeycloakConfiguration::class)->setPublic(true);
+        $container->compile(true);
+        $config = $container->get(KeycloakConfiguration::class);
+
+        $this->assertSame(7, $config->getHttpClientOptions()['timeout']);
+        $this->assertSame(3, $config->getHttpClientOptions()['connect_timeout']);
+        $this->assertSame('/login/keycloak', $config->getCallbackPath());
+        $this->assertSame('/dashboard', $config->getLoginRedirectPath());
     }
 }

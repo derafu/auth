@@ -73,7 +73,7 @@ final class KeycloakConfigurationTest extends TestCase
         // In the site of the redirect URI (with its port).
         $this->assertSame(
             'https://app.example.com:8443/bye',
-            $this->config(['logout_redirect_route' => '/bye'])->getPostLogoutRedirectUri()
+            $this->config(['logout_redirect_path' => '/bye'])->getPostLogoutRedirectUri()
         );
         $this->assertSame(
             'https://app.example.com:8443/',
@@ -90,7 +90,7 @@ final class KeycloakConfigurationTest extends TestCase
         );
         $this->assertSame(
             'https://other.example.com/bye',
-            $this->config(['logout_redirect_route' => 'https://other.example.com/bye'])->getPostLogoutRedirectUri()
+            $this->config(['logout_redirect_path' => 'https://other.example.com/bye'])->getPostLogoutRedirectUri()
         );
     }
 
@@ -116,7 +116,7 @@ final class KeycloakConfigurationTest extends TestCase
     #[Test]
     public function theValuesAreReadByKeyAndAsAnArray(): void
     {
-        $config = $this->config(['logout_redirect_route' => '/bye']);
+        $config = $this->config(['logout_redirect_path' => '/bye']);
 
         $this->assertSame('https://auth.example.com/realms/derafu', $config->get('issuer'));
         $this->assertTrue($config->get('end_session'));
@@ -131,7 +131,7 @@ final class KeycloakConfigurationTest extends TestCase
     public function theCallbackIsTheLoginPath(): void
     {
         $this->assertSame('/auth/callback', $this->config()->getLoginPath());
-        $this->assertSame('/in', $this->config(['callback_route' => '/in'])->getLoginPath());
+        $this->assertSame('/in', $this->config(['callback_path' => '/in'])->getLoginPath());
     }
 
     #[Test]

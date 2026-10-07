@@ -52,6 +52,48 @@ final class KeycloakAdmin
         $this->updateRealm(['revokeRefreshToken' => $revoke, 'refreshTokenMaxReuse' => 0]);
     }
 
+    /**
+     * Creates a user that has a username and a password and nothing else: no
+     * names, no email, no attributes.
+     */
+    public function createUser(string $username, string $password): void
+    {
+        // Keycloak asks a user that has no names or email to complete its profile
+        // before it lets it in. A realm whose users do not need them says that the
+        // action is not required.
+        $this->setProfileVerification(false);
+
+        $this->request('POST', '/users', [
+            'username' => $username,
+            'enabled' => true,
+            'credentials' => [['type' => 'password', 'value' => $password, 'temporary' => false]],
+        ]);
+    }
+
+    /**
+     * Whether Keycloak asks a user to complete its profile (names and email)
+     * before it logs in.
+     */
+    public function setProfileVerification(bool $enabled): void
+    {
+        $this->request('PUT', '/authentication/required-actions/VERIFY_PROFILE', [
+            'alias' => 'VERIFY_PROFILE',
+            'name' => 'Verify Profile',
+            'providerId' => 'VERIFY_PROFILE',
+            'enabled' => $enabled,
+            'defaultAction' => false,
+            'priority' => 90,
+        ]);
+    }
+
+    public function deleteUser(string $username): void
+    {
+        $users = $this->request('GET', '/users?username=' . rawurlencode($username) . '&exact=true');
+        if ($users !== []) {
+            $this->request('DELETE', '/users/' . $users[0]['id']);
+        }
+    }
+
     public function addRealmRole(string $username, string $role): void
     {
         $this->request('POST', '/users/' . $this->userId($username) . '/role-mappings/realm', [$this->role($role)]);
@@ -85,6 +127,8 @@ final class KeycloakAdmin
             'revokeRefreshToken' => false,
             'refreshTokenMaxReuse' => 0,
         ]);
+        $this->deleteUser('ben');
+        $this->setProfileVerification(true);
         $this->setEnabled('ana', true);
 
         $roles = array_column($this->request('GET', '/users/' . $this->userId('ana') . '/role-mappings/realm'), 'name');

@@ -19,7 +19,6 @@ use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakController;
 use Derafu\Auth\Provider\Keycloak\KeycloakSessionManager;
 use Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier;
-use Derafu\Auth\Provider\Keycloak\KeycloakUser;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
 use Derafu\Auth\SessionManager;
 use Derafu\Auth\Translation\AuthTranslationResourceProvider;
@@ -56,7 +55,7 @@ use Psr\Http\Message\ServerRequestInterface;
 #[UsesClass(KeycloakConfiguration::class)]
 #[UsesClass(KeycloakController::class)]
 #[UsesClass(KeycloakTokenVerifier::class)]
-#[UsesClass(KeycloakUser::class)]
+#[UsesClass(\Derafu\Auth\UserFactory::class)]
 #[UsesClass(SessionManager::class)]
 #[UsesClass(User::class)]
 #[UsesClass(AuthTranslationResourceProvider::class)]
@@ -145,7 +144,7 @@ final class KeycloakRefreshTest extends TestCase
     /**
      * The user asks for a protected page with the session.
      *
-     * @return array{ResponseInterface, MezzioUserInterface|null} The response
+     * @return array{ResponseInterface, \Derafu\Auth\Contract\UserInterface|null} The response
      * and the user that the page got (null if it did not get to run).
      */
     private function visit(KeycloakAuthentication $authentication, string $sid): array
@@ -313,5 +312,40 @@ final class KeycloakRefreshTest extends TestCase
         $this->assertInstanceOf(RedirectResponse::class, $response);
         $this->assertSame($session['oauth2_refresh_token'], $this->app->persistence->store[$sid]['oauth2_refresh_token']);
         $this->assertSame($session['user'], $this->app->persistence->store[$sid]['user']);
+    }
+
+    #[Test]
+    public function aUserWithoutNamesNorEmailLogsInAndItsStandardFieldsAreNull(): void
+    {
+        // A user that was created with only a username and a password. Keycloak
+        // gives no name, no email and no locale for it, and nothing fails.
+        self::$keycloak->admin()->createUser('ben', 'secret');
+        [$authentication, $controller] = $this->keycloak();
+
+        $page = $this->app->handleAuthenticated(
+            $this->app->request('/private/page'),
+            $authentication,
+            fn (): null => null
+        );
+        $query = $this->browser->logIn($page->getHeaderLine('Location'), 'ben', 'secret');
+        $response = $this->app->handleAuthenticated(
+            $this->app->request('/auth/callback', $query),
+            $authentication,
+            fn (ServerRequestInterface $request) => $controller->handle($request)
+        );
+        $sid = $this->app->sessionId($response);
+
+        $visit = $this->visit($authentication, $sid);
+        $user = $visit[1];
+
+        $this->assertNotNull($user);
+        $this->assertSame('ben', $user->getDetail('preferred_username'));
+        $this->assertSame('ben', $user->getUsername());
+        $this->assertSame('ben', $user->getName());
+        $this->assertNull($user->getGivenName());
+        $this->assertNull($user->getFamilyName());
+        $this->assertNull($user->getEmail());
+        $this->assertFalse($user->isEmailVerified());
+        $this->assertNull($user->getLocale());
     }
 }

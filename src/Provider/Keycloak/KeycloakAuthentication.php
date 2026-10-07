@@ -149,7 +149,7 @@ class KeycloakAuthentication extends AbstractProviderAuthentication implements A
 
         $this->addSuccessFlash($request, 'Successfully logged in.');
 
-        return new KeycloakUser($userInfo, $this->config->getClientId());
+        return $this->userRepository->createUser($userInfo);
     }
 
     /**
@@ -201,7 +201,7 @@ class KeycloakAuthentication extends AbstractProviderAuthentication implements A
 
                     $this->sessionManager->storeUserInfo($session, $userInfo);
 
-                    return new KeycloakUser($userInfo, $this->config->getClientId());
+                    return $this->userRepository->createUser($userInfo);
                 } catch (ProviderUnavailableException) {
                     return null;
                 } catch (AuthenticationException) {
@@ -215,7 +215,7 @@ class KeycloakAuthentication extends AbstractProviderAuthentication implements A
         // The user that the session has.
         $userInfo = $this->sessionManager->getUserInfo($session);
         if ($userInfo) {
-            return new KeycloakUser($userInfo, $this->config->getClientId());
+            return $this->userRepository->createUser($userInfo);
         }
 
         return null;

@@ -64,11 +64,11 @@ class KeycloakConfiguration extends AbstractProviderConfiguration implements Con
     private array $scopes = ['openid', 'profile', 'email'];
 
     /**
-     * The Keycloak callback route.
+     * The Keycloak callback path.
      *
      * @var string
      */
-    private string $callbackRoute = '/auth/callback';
+    private string $callbackPath = '/auth/callback';
 
     /**
      * The Keycloak HTTP client options.
@@ -133,8 +133,8 @@ class KeycloakConfiguration extends AbstractProviderConfiguration implements Con
         $this->scopes = $config['scopes']
             ?? $this->scopes
         ;
-        $this->callbackRoute = $config['callback_route']
-            ?? $this->callbackRoute
+        $this->callbackPath = $config['callback_path']
+            ?? $this->callbackPath
         ;
         $this->httpClientOptions = array_filter(
             $config['http_client_options'] ?? [],
@@ -194,7 +194,7 @@ class KeycloakConfiguration extends AbstractProviderConfiguration implements Con
             'client_secret' => $this->clientSecret,
             'redirect_uri' => $this->getRedirectUri(),
             'scopes' => $this->getScopes(),
-            'callback_route' => $this->getCallbackRoute(),
+            'callback_path' => $this->getCallbackPath(),
             'http_client_options' => $this->getHttpClientOptions(),
             'issuer' => $this->getIssuer(),
             'end_session' => $this->isEndSession(),
@@ -217,7 +217,7 @@ class KeycloakConfiguration extends AbstractProviderConfiguration implements Con
             'client_secret' => $this->getClientSecret(),
             'redirect_uri' => $this->getRedirectUri(),
             'scopes' => $this->getScopes(),
-            'callback_route' => $this->getCallbackRoute(),
+            'callback_path' => $this->getCallbackPath(),
             'http_client_options' => $this->getHttpClientOptions(),
             'issuer' => $this->getIssuer(),
             'end_session' => $this->isEndSession(),
@@ -286,13 +286,13 @@ class KeycloakConfiguration extends AbstractProviderConfiguration implements Con
     }
 
     /**
-     * Gets the Keycloak callback route.
+     * Gets the Keycloak callback path.
      *
-     * @return string The Keycloak callback route.
+     * @return string The Keycloak callback path.
      */
-    public function getCallbackRoute(): string
+    public function getCallbackPath(): string
     {
-        return $this->callbackRoute;
+        return $this->callbackPath;
     }
 
     /**
@@ -347,7 +347,7 @@ class KeycloakConfiguration extends AbstractProviderConfiguration implements Con
             return $this->postLogoutRedirectUri;
         }
 
-        $route = $this->getLogoutRedirectRoute();
+        $route = $this->getLogoutRedirectPath();
         if (preg_match('#^https?://#', $route)) {
             return $route;
         }
@@ -364,6 +364,6 @@ class KeycloakConfiguration extends AbstractProviderConfiguration implements Con
      */
     public function getLoginPath(): string
     {
-        return $this->getCallbackRoute();
+        return $this->getCallbackPath();
     }
 }

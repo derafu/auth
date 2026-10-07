@@ -17,6 +17,8 @@ use Derafu\Auth\Provider\Database\DatabaseConfiguration;
 use Derafu\Auth\Provider\Database\DatabaseUserRepository;
 use Derafu\Auth\User;
 use Derafu\Auth\UserFactory;
+use Derafu\TestsAuth\Fixture\CustomUser;
+use Derafu\TestsAuth\Fixture\CustomUserFactory;
 use Derafu\TestsAuth\Fixture\UsersDatabase;
 use PDOException;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -35,6 +37,7 @@ use PHPUnit\Framework\TestCase;
 #[UsesClass(\Derafu\Auth\Abstract\AbstractProviderConfiguration::class)]
 #[UsesClass(User::class)]
 #[UsesClass(UserFactory::class)]
+#[UsesClass(ConfigurationException::class)]
 final class DatabaseUserRepositoryTest extends TestCase
 {
     private ?UsersDatabase $database = null;
@@ -479,5 +482,60 @@ final class DatabaseUserRepositoryTest extends TestCase
 
         $this->assertSame($active, $repository->find('ana@example.com') !== null);
         $this->assertSame($active, $repository->authenticate('ana@example.com', 'secret') !== null);
+    }
+
+    #[Test]
+    public function theFactoryOfTheApplicationMakesTheUserOfTheLoginAndOfTheCheck(): void
+    {
+        $this->database = new UsersDatabase();
+        $repository = new DatabaseUserRepository($this->database->config(), userFactory: new CustomUserFactory());
+
+        $this->assertInstanceOf(CustomUser::class, $repository->authenticate('ana@example.com', 'secret'));
+        $this->assertInstanceOf(CustomUser::class, $repository->find('ana@example.com'));
+    }
+
+    #[Test]
+    public function theColumnsThatAreCalledLikeTheStandardFieldsAreThem(): void
+    {
+        // The default query is `SELECT *`: the columns `email` and `name` of the
+        // table are the email and the name of the user.
+        $user = $this->repository()->find('ana@example.com');
+
+        $this->assertNotNull($user);
+        $this->assertSame('ana@example.com', $user->getEmail());
+        $this->assertSame('User 1', $user->getName());
+        $this->assertNull($user->getGivenName());
+        $this->assertNull($user->getLocale());
+    }
+
+    #[Test]
+    public function aTableWithoutAnyOfTheStandardColumnsGivesNullAndNothingFails(): void
+    {
+        $this->database = new UsersDatabase(
+            [['identity' => '11111111-1', 'password' => 'clave', 'roles' => ['admin']]],
+            table: 'people',
+            identity: 'rut',
+            password: 'clave'
+        );
+        $repository = new DatabaseUserRepository($this->database->config([
+            'user_repository' => [
+                'table' => 'people',
+                'field' => ['identity' => 'rut', 'password' => 'clave'],
+                // A query that gives none of the standard fields.
+                'sql_get_details' => 'SELECT id FROM people WHERE rut = :identity',
+            ],
+        ]));
+
+        foreach ([$repository->authenticate('11111111-1', 'clave'), $repository->find('11111111-1')] as $user) {
+            $this->assertNotNull($user);
+            $this->assertSame(['admin'], $user->getRoles());
+            $this->assertNull($user->getName());
+            $this->assertNull($user->getGivenName());
+            $this->assertNull($user->getFamilyName());
+            $this->assertNull($user->getEmail());
+            $this->assertFalse($user->isEmailVerified());
+            $this->assertNull($user->getUsername());
+            $this->assertNull($user->getLocale());
+        }
     }
 }

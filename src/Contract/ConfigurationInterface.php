@@ -78,31 +78,31 @@ interface ConfigurationInterface
     public function getLogoutPath(): string;
 
     /**
-     * Gets the login redirect route.
+     * Gets the login redirect path.
      *
      * Where the user will be redirected after login.
      *
-     * @return string The login redirect route.
+     * @return string The login redirect path.
      */
-    public function getLoginRedirectRoute(): string;
+    public function getLoginRedirectPath(): string;
 
     /**
-     * Gets the logout redirect route.
+     * Gets the logout redirect path.
      *
      * Where the user will be redirected after logout.
      *
-     * @return string The logout redirect route.
+     * @return string The logout redirect path.
      */
-    public function getLogoutRedirectRoute(): string;
+    public function getLogoutRedirectPath(): string;
 
     /**
-     * Gets the unauthorized redirect route.
+     * Gets the unauthorized redirect path.
      *
      * Where the user will be redirected if they are unauthorized.
      *
-     * @return string The unauthorized redirect route.
+     * @return string The unauthorized redirect path.
      */
-    public function getUnauthorizedRedirectRoute(): string;
+    public function getUnauthorizedRedirectPath(): string;
 
     /**
      * Gets whether the authentication is enabled.

@@ -12,10 +12,13 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Provider\Keycloak;
 
+use Derafu\Auth\Contract\UserFactoryInterface;
+use Derafu\Auth\Contract\UserInterface as DerafuUserInterface;
 use Derafu\Auth\Contract\UserRepositoryInterface;
 use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Auth\Exception\ProviderUnavailableException;
+use Derafu\Auth\UserFactory;
 use Exception;
 use GuzzleHttp\Client;
 use League\OAuth2\Client\Provider\Exception\IdentityProviderException;
@@ -50,10 +53,15 @@ class KeycloakUserRepository implements UserRepositoryInterface
      * @param KeycloakTokenVerifier|null $verifier Verifies the tokens. By
      * default, one that reads the keys of the realm of the configuration.
      */
+    private readonly UserFactoryInterface $userFactory;
+
     public function __construct(
         private readonly KeycloakConfiguration $config,
-        ?KeycloakTokenVerifier $verifier = null
+        ?KeycloakTokenVerifier $verifier = null,
+        ?UserFactoryInterface $userFactory = null
     ) {
+        $this->userFactory = $userFactory ?? new UserFactory();
+
         if (!class_exists(GenericProvider::class)) {
             throw new ConfigurationException(
                 'The Keycloak provider requires "league/oauth2-client". Run: composer require league/oauth2-client'
@@ -73,7 +81,7 @@ class KeycloakUserRepository implements UserRepositoryInterface
             // For Keycloak, credential is the access token.
             $userInfo = $this->getUserInfoFromToken($credential);
 
-            return new KeycloakUser($userInfo, $this->config->getClientId());
+            return $this->createUser($userInfo);
         } catch (AuthenticationException) {
             return null;
         }
@@ -273,6 +281,62 @@ class KeycloakUserRepository implements UserRepositoryInterface
         } catch (AuthenticationException) {
             return false;
         }
+    }
+
+    /**
+     * Makes the user from what Keycloak says about it (the claims of the access
+     * token and the user info).
+     *
+     * The identity is the `sub`, the roles are the ones of the realm and the ones
+     * of the client of the application, and the details are the claims as they
+     * are: the standard fields of the user (name, email...) are the claims of
+     * OpenID Connect, and the claims that a mapper of the realm adds (an
+     * attribute of the user, its groups) are there too. A claim that is not there
+     * is a field that is `null`, not an error. The user is made by the factory,
+     * so it is the class of user of the application.
+     *
+     * @param array<string, mixed> $userInfo The claims and the user info.
+     * @return DerafuUserInterface The user.
+     * @throws AuthenticationException If there is no `sub`.
+     */
+    public function createUser(array $userInfo): DerafuUserInterface
+    {
+        $identity = $userInfo['sub']
+            ?? throw new AuthenticationException('User identity not found in keycloak user info.');
+
+        return $this->userFactory->create(
+            (string) $identity,
+            $this->extractRoles($userInfo),
+            $userInfo
+        );
+    }
+
+    /**
+     * The roles of the user: the ones of the realm and the ones of the client of
+     * the application (what the user can do in another client says nothing about
+     * this one), as texts and without duplicates.
+     *
+     * @param array<string, mixed> $userInfo
+     * @return list<string>
+     */
+    private function extractRoles(array $userInfo): array
+    {
+        $clientId = $this->config->getClientId();
+
+        $roles = is_array($userInfo['roles'] ?? null) ? $userInfo['roles'] : [];
+
+        $realmAccess = $userInfo['realm_access'] ?? [];
+        if (is_array($realmAccess) && is_array($realmAccess['roles'] ?? null)) {
+            $roles = array_merge($roles, $realmAccess['roles']);
+        }
+
+        $resourceAccess = $userInfo['resource_access'] ?? [];
+        $access = is_array($resourceAccess) ? ($resourceAccess[$clientId] ?? null) : null;
+        if (is_array($access) && is_array($access['roles'] ?? null)) {
+            $roles = array_merge($roles, $access['roles']);
+        }
+
+        return array_values(array_unique(array_filter($roles, 'is_string')));
     }
 
     /**

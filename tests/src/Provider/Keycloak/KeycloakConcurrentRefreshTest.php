@@ -19,7 +19,6 @@ use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakController;
 use Derafu\Auth\Provider\Keycloak\KeycloakSessionManager;
 use Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier;
-use Derafu\Auth\Provider\Keycloak\KeycloakUser;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
 use Derafu\Auth\SessionManager;
 use Derafu\Auth\Translation\AuthTranslationResourceProvider;
@@ -59,7 +58,7 @@ use Psr\Http\Message\ServerRequestInterface;
 #[UsesClass(KeycloakConfiguration::class)]
 #[UsesClass(KeycloakController::class)]
 #[UsesClass(KeycloakTokenVerifier::class)]
-#[UsesClass(KeycloakUser::class)]
+#[UsesClass(\Derafu\Auth\UserFactory::class)]
 #[UsesClass(SessionManager::class)]
 #[UsesClass(User::class)]
 #[UsesClass(AuthTranslationResourceProvider::class)]
@@ -144,7 +143,7 @@ final class KeycloakConcurrentRefreshTest extends TestCase
                 'MODE' => $mode,
                 'SESSION_ID' => $id,
                 'SESSION_PATH' => $this->directory,
-                'KEYCLOAK_URL' => self::$keycloak->url(),
+                'TEST_KEYCLOAK_URL' => self::$keycloak->url(),
                 'GO_FILE' => $this->directory . '/go',
                 'PATH' => (string) getenv('PATH'),
             ] + $environment

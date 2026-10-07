@@ -349,7 +349,7 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
 
         $this->addSuccessFlash($request, 'The session has been closed successfully.');
 
-        return new RedirectResponse((string) $this->config->getLogoutRedirectRoute());
+        return new RedirectResponse((string) $this->config->getLogoutRedirectPath());
     }
 
     /**
@@ -388,7 +388,7 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
             ['path' => $request->getUri()->getPath()]
         );
 
-        return new RedirectResponse((string) $this->config->getUnauthorizedRedirectRoute());
+        return new RedirectResponse((string) $this->config->getUnauthorizedRedirectPath());
     }
 
     /**
@@ -483,6 +483,6 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
         $this->rememberPage($request, $session);
 
         // Redirect to login page.
-        return new RedirectResponse((string) $this->config->getUnauthorizedRedirectRoute());
+        return new RedirectResponse((string) $this->config->getUnauthorizedRedirectPath());
     }
 }

@@ -68,7 +68,7 @@ class KeycloakController implements RequestHandlerInterface
         }
 
         $redirectUrl = $this->sessionManager->getRedirectUrl($session)
-            ?: $this->config->getLoginRedirectRoute()
+            ?: $this->config->getLoginRedirectPath()
         ;
         $this->sessionManager->clearRedirectUrl($session);
 
@@ -85,6 +85,6 @@ class KeycloakController implements RequestHandlerInterface
      */
     public function logout(ServerRequestInterface $request): ResponseInterface
     {
-        return new RedirectResponse($this->config->getLogoutRedirectRoute());
+        return new RedirectResponse($this->config->getLogoutRedirectPath());
     }
 }

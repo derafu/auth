@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth\Provider\Database;
 
+use Derafu\Auth\Contract\UserFactoryInterface;
 use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Auth\FormManager;
@@ -22,6 +23,8 @@ use Derafu\Form\Factory\FormFactory;
 use Derafu\Form\Type\TypeProvider;
 use Derafu\Form\Type\TypeRegistry;
 use Derafu\Form\Type\TypeResolver;
+use Derafu\TestsAuth\Fixture\CustomUser;
+use Derafu\TestsAuth\Fixture\CustomUserFactory;
 use Derafu\TestsAuth\Fixture\SessionApp;
 use Derafu\TestsAuth\Fixture\UsersDatabase;
 use Laminas\Diactoros\Response\RedirectResponse;
@@ -52,6 +55,7 @@ use Psr\Http\Message\ServerRequestInterface;
 #[UsesClass(\Derafu\Auth\Provider\Database\Form\LoginForm::class)]
 #[UsesClass(\Derafu\Auth\User::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
+#[UsesClass(ConfigurationException::class)]
 final class DatabaseRefreshTest extends TestCase
 {
     private SessionApp $app;
@@ -72,23 +76,24 @@ final class DatabaseRefreshTest extends TestCase
     /**
      * @param array<string, mixed> $config
      */
-    private function authentication(array $config = []): DatabaseAuthentication
+    private function authentication(array $config = [], ?UserFactoryInterface $userFactory = null): DatabaseAuthentication
     {
         $config = $this->database->config($config + [
             'enabled' => true,
             'protected_paths' => ['/private'],
-            'unauthorized_redirect_route' => '/auth/login',
+            'unauthorized_redirect_path' => '/auth/login',
         ]);
 
         return new DatabaseAuthentication(
-            new DatabaseUserRepository($config),
+            new DatabaseUserRepository($config, userFactory: $userFactory),
             $config,
             new SessionManager(),
             new FormManager(
                 new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
                 $this->app->processor(),
                 $config
-            )
+            ),
+            userFactory: $userFactory
         );
     }
 
@@ -285,5 +290,21 @@ final class DatabaseRefreshTest extends TestCase
         $this->expectExceptionMessage('The query "sql_is_active" failed: ');
 
         $this->visit($broken, $sid);
+    }
+
+    #[Test]
+    public function theUserIsTheOneOfTheFactoryOfTheApplicationInTheSessionAndAfterTheCheck(): void
+    {
+        $authentication = $this->authentication(userFactory: new CustomUserFactory());
+        $sid = $this->logIn($authentication);
+
+        // The one that is made from the copy that the session has.
+        $fromTheSession = $this->visit($authentication, $sid);
+        $this->assertInstanceOf(CustomUser::class, $fromTheSession[1]);
+
+        // And the one that the database gives when the session is asked again.
+        $this->app->persistence->store[$sid]['auth_checked_at'] = time() - 301;
+        $afterTheCheck = $this->visit($authentication, $sid);
+        $this->assertInstanceOf(CustomUser::class, $afterTheCheck[1]);
     }
 }

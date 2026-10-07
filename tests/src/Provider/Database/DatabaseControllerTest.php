@@ -75,7 +75,7 @@ final class DatabaseControllerTest extends TestCase
         $config = $this->database->config([
             'enabled' => true,
             'protected_paths' => ['/private'],
-            'unauthorized_redirect_route' => '/auth/login',
+            'unauthorized_redirect_path' => '/auth/login',
         ]);
 
         $translator = TranslatorFactory::create('es', ['en'], [

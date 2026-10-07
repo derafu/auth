@@ -19,7 +19,6 @@ use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakController;
 use Derafu\Auth\Provider\Keycloak\KeycloakSessionManager;
 use Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier;
-use Derafu\Auth\Provider\Keycloak\KeycloakUser;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
 use Derafu\Auth\SessionManager;
 use Derafu\Auth\Translation\AuthTranslationResourceProvider;
@@ -64,7 +63,7 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
 #[UsesClass(AnonymousUser::class)]
 #[UsesClass(AuthenticationException::class)]
 #[UsesClass(KeycloakConfiguration::class)]
-#[UsesClass(KeycloakUser::class)]
+#[UsesClass(\Derafu\Auth\UserFactory::class)]
 #[UsesClass(SessionManager::class)]
 #[UsesClass(User::class)]
 #[UsesClass(AuthTranslationResourceProvider::class)]
@@ -109,8 +108,8 @@ final class KeycloakFlowTest extends TestCase
             'redirect_uri' => 'https://app.test/auth/callback',
             'enabled' => true,
             'protected_paths' => $protected,
-            'login_redirect_route' => '/home',
-            'logout_redirect_route' => '/bye',
+            'login_redirect_path' => '/home',
+            'logout_redirect_path' => '/bye',
         ]);
         $sessionManager = new KeycloakSessionManager();
         $repository = new KeycloakUserRepository($config);
@@ -248,7 +247,7 @@ final class KeycloakFlowTest extends TestCase
             }
         );
 
-        $this->assertInstanceOf(KeycloakUser::class, $user);
+        $this->assertInstanceOf(User::class, $user);
 
         // The role of the realm and the one of this client; the roles that the user
         // has in another client of the realm (`account`) are not roles here.

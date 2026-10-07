@@ -70,6 +70,87 @@ class User implements UserInterface
 
     /**
      * {@inheritDoc}
+     *
+     * The standard fields are the claims of OpenID Connect, which is what the
+     * providers give the details with: Keycloak has them, and a database has them
+     * when its columns are called like that (or the query of the details renames
+     * them). A field that is not there is `null`, never an error.
+     */
+    public function getName(): ?string
+    {
+        return $this->text('name') ?? $this->text('preferred_username');
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function getGivenName(): ?string
+    {
+        return $this->text('given_name');
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function getFamilyName(): ?string
+    {
+        return $this->text('family_name');
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function getEmail(): ?string
+    {
+        return $this->text('email');
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function isEmailVerified(): bool
+    {
+        $value = $this->details['email_verified'] ?? null;
+
+        return is_scalar($value) && filter_var($value, FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function getUsername(): ?string
+    {
+        return $this->text('preferred_username') ?? $this->getEmail();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function getLocale(): ?string
+    {
+        return $this->text('locale');
+    }
+
+    /**
+     * The value of a detail as a text, or null if it is not one: it has to be a
+     * text or a number, and not empty (so that a field that is blank does not
+     * stop a fallback).
+     */
+    private function text(string $name): ?string
+    {
+        $value = $this->details[$name] ?? null;
+
+        if (!is_string($value) && !is_int($value) && !is_float($value)) {
+            return null;
+        }
+
+        $text = trim((string) $value);
+
+        return $text === '' ? null : $text;
+    }
+
+    /**
+     * {@inheritDoc}
      */
     public function isAnonymous(): bool
     {

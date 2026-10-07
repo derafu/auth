@@ -60,3 +60,6 @@ build/
 *.bak
 *.cache
 *.tmp
+
+# PHP CS Fixer configuration
+/.php-cs-fixer.php

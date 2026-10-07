@@ -8,7 +8,7 @@ declare(strict_types=1);
  * tests that need two requests at the same time.
  *
  * The parameters are in the environment: SESSION_PATH, SESSION_ID, MODE,
- * KEYCLOAK_URL and GO_FILE.
+ * TEST_KEYCLOAK_URL and GO_FILE.
  *
  *   - `seed`: writes the data of the session (JSON, from the standard input).
  *   - `request`: waits until GO_FILE exists (so two processes start together),
@@ -54,7 +54,7 @@ if ($mode === 'seed' || $mode === 'dump') {
 }
 
 $config = new KeycloakConfiguration([
-    'keycloak_url' => (string) getenv('KEYCLOAK_URL'),
+    'keycloak_url' => (string) getenv('TEST_KEYCLOAK_URL'),
     'realm' => 'test',
     'client_id' => 'derafu-auth',
     'client_secret' => 'test-secret',
