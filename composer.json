@@ -57,7 +57,8 @@
         "symfony/config": "^8.1",
         "symfony/yaml": "^8.1",
         "derafu/csrf": "dev-main",
-        "derafu/captcha": "dev-main"
+        "derafu/captcha": "dev-main",
+        "altcha-org/altcha": "^2.3"
     },
     "suggest": {
         "derafu/captcha": "The captcha providers (hCaptcha, Turnstile, reCAPTCHA v3 and ALTCHA), which the login form of the database provider needs: it is protected with a captcha, and a form that is protected can not be rendered without one.",
