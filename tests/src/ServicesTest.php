@@ -349,4 +349,20 @@ final class ServicesTest extends TestCase
         $this->assertSame('/login/keycloak', $config->getCallbackPath());
         $this->assertSame('/dashboard', $config->getLoginRedirectPath());
     }
+
+    #[Test]
+    public function theVariablesOfTheDatabaseProviderAreTheOnesOfItsFile(): void
+    {
+        $this->environment('AUTH_DATABASE_USER_TABLE', 'people');
+        $this->environment('AUTH_LOGOUT_REDIRECT_PATH', '/bye');
+        $this->environment('AUTH_UNAUTHORIZED_REDIRECT_PATH', '/denied');
+        $container = $this->container('auth-database-services.yaml', true);
+        $container->getDefinition(DatabaseConfiguration::class)->setPublic(true);
+        $container->compile(true);
+        $config = $container->get(DatabaseConfiguration::class);
+
+        $this->assertSame('people', $config->getUserRepository()['table']);
+        $this->assertSame('/bye', $config->getLogoutRedirectPath());
+        $this->assertSame('/denied', $config->getUnauthorizedRedirectPath());
+    }
 }
