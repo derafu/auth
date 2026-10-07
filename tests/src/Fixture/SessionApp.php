@@ -12,7 +12,13 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth\Fixture;
 
+use AltchaOrg\Altcha\Algorithm\Pbkdf2;
+use AltchaOrg\Altcha\Altcha;
+use AltchaOrg\Altcha\Challenge;
+use AltchaOrg\Altcha\Payload;
+use AltchaOrg\Altcha\SolveChallengeOptions;
 use Closure;
+use Derafu\Captcha\Provider\AltchaProvider;
 use Derafu\Csrf\CsrfSessionMiddleware;
 use Derafu\Csrf\SessionCsrfTokenManager;
 use Derafu\DataProcessor\ProcessorFactory;
@@ -38,11 +44,12 @@ use Psr\Http\Server\RequestHandlerInterface;
  * messages and the CSRF token middlewares, with a session persistence in memory.
  * A request goes through them and an action runs inside, as the handler.
  *
- * The forms are protected with a CSRF token, as they are by default: the form
- * data processor and the renderer that it gives (`processor()` and
- * `renderer()`) work with the token manager of the session of the app, and the
- * request of a form that is sent carries the token of its session (`token()`),
- * unless it is said that it does not.
+ * The forms are protected with a CSRF token, as they are by default, and the
+ * login form with a captcha too (ALTCHA, which needs no service): the form data
+ * processor and the renderer that it gives (`processor()` and `renderer()`) work
+ * with the token manager of the session of the app and with its captcha, and the
+ * request of a form that is sent carries the token of its session (`token()`) and
+ * what the visitor solved of the captcha, unless it is said that it does not.
  */
 final class SessionApp
 {
@@ -51,14 +58,22 @@ final class SessionApp
      */
     public const KNOWN = 'id-that-the-client-has';
 
+    /**
+     * The secret key of the captcha of the app (ALTCHA, with a cheap challenge).
+     */
+    public const CAPTCHA_SECRET = 'a-secret-key-of-the-captcha';
+
     public readonly InMemorySessionPersistence $persistence;
 
     public readonly SessionCsrfTokenManager $csrf;
+
+    public readonly AltchaProvider $captcha;
 
     public function __construct()
     {
         $this->persistence = new InMemorySessionPersistence();
         $this->csrf = new SessionCsrfTokenManager();
+        $this->captcha = new AltchaProvider(self::CAPTCHA_SECRET, 'en', cost: 10);
         $this->persistence->store[self::KNOWN] = [];
     }
 
@@ -72,6 +87,8 @@ final class SessionApp
      * @param string $address The address of the client.
      * @param bool $csrf Whether the body of a form that is sent carries the CSRF
      * token of the session (when the client has one).
+     * @param bool $captcha Whether the body of a form that is sent carries what
+     * the visitor solved of the captcha.
      */
     public function request(
         string $path,
@@ -80,7 +97,8 @@ final class SessionApp
         ?string $sid = null,
         array $headers = [],
         string $address = '203.0.113.7',
-        bool $csrf = true
+        bool $csrf = true,
+        bool $captcha = true
     ): ServerRequestInterface {
         $request = (new ServerRequest(['REMOTE_ADDR' => $address]))
             ->withUri(new Uri('https://app.test' . $path . ($query === [] ? '' : '?' . http_build_query($query))))
@@ -94,6 +112,10 @@ final class SessionApp
 
         if ($body !== null && $csrf && isset($this->persistence->store[$sid ?? self::KNOWN])) {
             $body += [FormInterface::CSRF_FIELD => $this->token($sid)];
+        }
+
+        if ($body !== null && $captcha) {
+            $body += [$this->captcha->getResponseField() => $this->solvedCaptcha()];
         }
 
         return $body === null ? $request : $request->withParsedBody($body);
@@ -121,24 +143,46 @@ final class SessionApp
     }
 
     /**
-     * A form data processor that checks the CSRF token with the manager of
-     * the app.
+     * What a visitor sends when it solves the captcha of a form: the browser
+     * solves the challenge of the widget, which is done here with the library.
+     *
+     * @param string $formId The id of the form (`login` for the login form).
+     */
+    public function solvedCaptcha(string $formId = 'login'): string
+    {
+        preg_match('/ challenge="([^"]*)"/', $this->captcha->getWidget($formId), $matches);
+        $challenge = Challenge::fromArray(json_decode(html_entity_decode($matches[1], ENT_QUOTES), true));
+        $solution = (new Altcha(hmacSignatureSecret: self::CAPTCHA_SECRET))->solveChallenge(new SolveChallengeOptions(
+            algorithm: new Pbkdf2(),
+            challenge: $challenge,
+        ));
+
+        return (new Payload($challenge, $solution))->toBase64();
+    }
+
+    /**
+     * A form data processor that checks the CSRF token and the captcha with the
+     * ones of the app.
      */
     public function processor(): FormDataProcessor
     {
         return new FormDataProcessor(
             new FormRulesResolver(),
             (new ProcessorFactory())->create(),
-            csrfTokenManager: $this->csrf
+            csrfTokenManager: $this->csrf,
+            captchaProvider: $this->captcha
         );
     }
 
     /**
-     * A form renderer that writes the CSRF token of the manager of the app.
+     * A form renderer that writes the CSRF token and the captcha of the app.
      */
     public function renderer(): FormRendererInterface
     {
-        return FormRendererFactory::create(['csrf_token_manager' => $this->csrf]);
+        return FormRendererFactory::create([
+            'csrf_token_manager' => $this->csrf,
+            'captcha_provider' => $this->captcha,
+        ]);
     }
 
     /**

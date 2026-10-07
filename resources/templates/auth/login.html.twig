@@ -7,6 +7,7 @@
     {% include 'partials/flash-messages.html.twig' %}
     {{ form_start(form, {'attr': {'action': path('auth_login')}}) }}
         {{ form_element(form.uiSchema, form) }}
+        {{ form_captcha(form) }}
         {{ form_csrf(form) }}
         <button type="submit" class="btn btn-primary w-100">{{ 'Login'|trans }}</button>
     {{ form_end(form) }}

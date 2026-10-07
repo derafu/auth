@@ -56,9 +56,11 @@
         "symfony/dependency-injection": "^8.1",
         "symfony/config": "^8.1",
         "symfony/yaml": "^8.1",
-        "derafu/csrf": "dev-main"
+        "derafu/csrf": "dev-main",
+        "derafu/captcha": "dev-main"
     },
     "suggest": {
+        "derafu/captcha": "The captcha providers (hCaptcha, Turnstile, reCAPTCHA v3 and ALTCHA), which the login form of the database provider needs: it is protected with a captcha, and a form that is protected can not be rendered without one.",
         "derafu/csrf": "A CSRF token manager over the session of Mezzio, which the login form of the database provider needs (its form is protected with a CSRF token).",
         "derafu/session": "The services of the session and of the flash messages of Mezzio (the middlewares and the variables SESSION_*), which the application needs in its pipeline before the authentication.",
         "nikic/php-parser": "Required by the tests of the messages of the package (Derafu\\Translation\\Lint reads the code).",

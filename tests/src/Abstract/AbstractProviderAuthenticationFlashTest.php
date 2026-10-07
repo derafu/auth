@@ -91,7 +91,7 @@ final class AbstractProviderAuthenticationFlashTest extends TestCase
             {
                 return array_map(
                     fn (string $name) => new TwigFunction($name, fn () => '', ['is_safe' => ['html']]),
-                    ['path', 'form_start', 'form_element', 'form_csrf', 'form_end']
+                    ['path', 'form_start', 'form_element', 'form_captcha', 'form_csrf', 'form_end']
                 );
             }
         };

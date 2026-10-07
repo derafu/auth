@@ -175,6 +175,18 @@ final class DatabaseControllerTest extends TestCase
     }
 
     #[Test]
+    public function theLoginPageHasTheCaptchaOfTheApplicationForTheLoginForm(): void
+    {
+        $page = $this->page($this->app->request('/auth/login'));
+
+        $this->assertStringContainsString('<altcha-widget', $page);
+        $this->assertSame(1, preg_match('/ challenge="([^"]*)"/', $page, $matches));
+        $challenge = json_decode(html_entity_decode($matches[1], ENT_QUOTES), true);
+        $this->assertSame(['form' => 'login'], $challenge['parameters']['data']);
+        $this->assertStringContainsString('name="altcha"', $page);
+    }
+
+    #[Test]
     public function theLoginPageOfARequestWithoutABodyHasTheFormToo(): void
     {
         // The parsed body of the request is null (some PSR-7 implementations).

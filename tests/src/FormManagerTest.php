@@ -12,10 +12,16 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth;
 
+use AltchaOrg\Altcha\Algorithm\Pbkdf2;
+use AltchaOrg\Altcha\Altcha;
+use AltchaOrg\Altcha\Challenge;
+use AltchaOrg\Altcha\Payload;
+use AltchaOrg\Altcha\SolveChallengeOptions;
 use Derafu\Auth\Exception\FormException;
 use Derafu\Auth\FormManager;
 use Derafu\Auth\Provider\Database\DatabaseConfiguration;
 use Derafu\Auth\Provider\Database\Form\LoginForm;
+use Derafu\Captcha\Provider\AltchaProvider;
 use Derafu\Csrf\SessionCsrfTokenManager;
 use Derafu\DataProcessor\ProcessorFactory;
 use Derafu\Form\Factory\FormFactory;
@@ -43,21 +49,44 @@ final class FormManagerTest extends TestCase
 {
     private SessionCsrfTokenManager $csrf;
 
+    private AltchaProvider $captcha;
+
     protected function setUp(): void
     {
         $this->csrf = new SessionCsrfTokenManager();
         $this->csrf->useSession(new Session([]));
+        $this->captcha = new AltchaProvider('a-secret-key', 'en', cost: 10);
     }
 
     /**
-     * The data of a form that is sent, with the token of its session.
+     * What the visitor sends when it solves the captcha of a form: the browser
+     * solves the challenge of the widget, which is done here with the library.
+     */
+    private function solved(string $formId = 'login'): string
+    {
+        preg_match('/ challenge="([^"]*)"/', $this->captcha->getWidget($formId), $matches);
+        $challenge = Challenge::fromArray(json_decode(html_entity_decode($matches[1], ENT_QUOTES), true));
+        $solution = (new Altcha(hmacSignatureSecret: 'a-secret-key'))->solveChallenge(new SolveChallengeOptions(
+            algorithm: new Pbkdf2(),
+            challenge: $challenge,
+        ));
+        $this->assertNotNull($solution, 'The challenge was not solved.');
+
+        return (new Payload($challenge, $solution))->toBase64();
+    }
+
+    /**
+     * The data of a form that is sent, with the token of its session and what the
+     * visitor solved of the captcha.
      *
      * @param array<string, string> $data
      * @return array<string, string>
      */
-    private function sent(array $data): array
+    private function sent(array $data, bool $captcha = true): array
     {
-        return $data + ['_token' => $this->csrf->getToken('login')];
+        $data += ['_token' => $this->csrf->getToken('login')];
+
+        return $captcha ? $data + ['altcha' => $this->solved()] : $data;
     }
 
     /**
@@ -67,7 +96,7 @@ final class FormManagerTest extends TestCase
     {
         return new FormManager(
             new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
-            new FormDataProcessor(new FormRulesResolver(), (new ProcessorFactory())->create(), csrfTokenManager: $this->csrf),
+            new FormDataProcessor(new FormRulesResolver(), (new ProcessorFactory())->create(), csrfTokenManager: $this->csrf, captchaProvider: $this->captcha),
             new DatabaseConfiguration($config + ['database_url' => 'sqlite::memory:'])
         );
     }
@@ -146,6 +175,33 @@ final class FormManagerTest extends TestCase
             $this->assertSame(400, $e->getCode());
             $this->assertSame('The form is not valid or has expired. Reload the page and try again.', $e->getMessage());
         }
+    }
+
+    #[Test]
+    public function aFormSentWithoutTheCaptchaIsRejectedWithTheMessageOfTheForm(): void
+    {
+        try {
+            $this->manager()->processForm(
+                LoginForm::class,
+                $this->sent(['email' => 'ana@example.com', 'password' => 'secret'], captcha: false)
+            );
+            $this->fail('It should have failed.');
+        } catch (FormException $e) {
+            $this->assertSame(400, $e->getCode());
+            $this->assertSame('The captcha is not valid. Try again.', $e->getMessage());
+        }
+    }
+
+    #[Test]
+    public function theCaptchaOfAnotherFormIsRejected(): void
+    {
+        $this->expectException(FormException::class);
+        $this->expectExceptionMessage('The captcha is not valid. Try again.');
+
+        $this->manager()->processForm(
+            LoginForm::class,
+            $this->sent(['email' => 'ana@example.com', 'password' => 'secret', 'altcha' => $this->solved('contact')], captcha: false)
+        );
     }
 
     #[Test]

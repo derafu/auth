@@ -59,6 +59,8 @@ final class DatabaseAuthenticationTest extends TestCase
 {
     private const NEXT = 'Mezzio\Flash\FlashMessagesInterface::FLASH_NEXT';
 
+    private const NO_CAPTCHA = 'The captcha is not valid. Try again.';
+
     private const EXPIRED = 'The form is not valid or has expired. Reload the page and try again.';
 
     private SessionApp $app;
@@ -301,6 +303,35 @@ final class DatabaseAuthenticationTest extends TestCase
 
         $this->assertTrue($result['user']?->isAnonymous());
         $this->assertSame(self::EXPIRED, $result['flashes']['error']['message']);
+    }
+
+    #[Test]
+    public function aLoginWithoutTheCaptchaIsRejectedEvenWithTheRightCredentials(): void
+    {
+        $result = $this->authenticate($this->app->request(
+            '/auth/login',
+            body: ['email' => 'ana@example.com', 'password' => 'secret'],
+            captcha: false
+        ));
+
+        $this->assertTrue($result['user']?->isAnonymous());
+        $this->assertSame(
+            ['message' => self::NO_CAPTCHA, 'parameters' => [], 'domain' => 'errors', 'defaultLocale' => null],
+            $result['flashes']['error']
+        );
+    }
+
+    #[Test]
+    public function aLoginWithTheCaptchaOfAnotherFormIsRejected(): void
+    {
+        $result = $this->authenticate($this->app->request(
+            '/auth/login',
+            body: ['email' => 'ana@example.com', 'password' => 'secret', 'altcha' => $this->app->solvedCaptcha('contact')],
+            captcha: false
+        ));
+
+        $this->assertTrue($result['user']?->isAnonymous());
+        $this->assertSame(self::NO_CAPTCHA, $result['flashes']['error']['message']);
     }
 
     #[Test]
