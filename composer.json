@@ -29,6 +29,7 @@
         "derafu/form": "dev-main",
         "derafu/renderer": "dev-main",
         "derafu/routing": "dev-main",
+        "derafu/support": "dev-main",
         "derafu/translation": "dev-main",
         "laminas/laminas-diactoros": "^3.8",
         "mezzio/mezzio-authentication": "^1.13",

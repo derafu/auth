@@ -18,6 +18,7 @@ use Derafu\Auth\Contract\AuthenticationInterface;
 use Derafu\Auth\Contract\ConfigurationInterface;
 use Derafu\Auth\Contract\SessionManagerInterface;
 use Derafu\Auth\Contract\UserInterface;
+use Derafu\Support\Url;
 use Derafu\Translation\Contract\TranslatableMessageInterface;
 use Derafu\Translation\TranslatableMessage;
 use Laminas\Diactoros\Response\JsonResponse;
@@ -121,7 +122,7 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
         // Handle an unauthorized request to the API: a client of the API gets
         // the answer, with a session or without it (the session middleware gives
         // one to every request), not a redirect to a login that it can not use.
-        if (str_starts_with($path, '/api')) {
+        if (Url::pathStartsWith($path, '/api')) {
             return $this->handleUnauthorizedApi();
         }
 

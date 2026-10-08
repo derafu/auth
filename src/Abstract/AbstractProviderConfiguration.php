@@ -14,6 +14,7 @@ namespace Derafu\Auth\Abstract;
 
 use Derafu\Auth\Contract\ConfigurationInterface;
 use Derafu\Auth\Exception\ConfigurationException;
+use Derafu\Support\Url;
 
 /**
  * Abstract provider configuration.
@@ -28,6 +29,15 @@ abstract class AbstractProviderConfiguration implements ConfigurationInterface
      * @var array
      */
     private array $protectedPaths = [];
+
+    /**
+     * The rules of the protected paths, with their path in its canonical form
+     * (see `Derafu\Support\Url::normalizePath()`), the roles and the number of
+     * segments of the path: the rule that has more is the more specific.
+     *
+     * @var list<array{path: string, roles: array<string>, depth: int}>
+     */
+    private array $rules = [];
 
     /**
      * The login path.
@@ -97,6 +107,7 @@ abstract class AbstractProviderConfiguration implements ConfigurationInterface
             ?? $this->protectedPaths
         ;
         $this->protectedPaths = [];
+        $this->rules = [];
         foreach ($protectedPaths as $key => $value) {
             if (is_int($key)) {
                 $path = $value;
@@ -105,7 +116,23 @@ abstract class AbstractProviderConfiguration implements ConfigurationInterface
                 $path = $key;
                 $roles = is_array($value) ? $value : [$value];
             }
+
+            // A rule that is not a path is not ignored: it would protect nothing
+            // without anybody noticing.
+            $canonical = is_string($path) && trim($path) !== '' ? Url::normalizePath($path) : null;
+            if ($canonical === null) {
+                throw new ConfigurationException([
+                    'The protected path "{path}" is not valid.',
+                    'path' => is_string($path) ? $path : get_debug_type($path),
+                ]);
+            }
+
             $this->protectedPaths[$path] = $roles;
+            $this->rules[] = [
+                'path' => $canonical,
+                'roles' => $roles,
+                'depth' => count((array) Url::pathSegments($canonical)),
+            ];
         }
 
         // Login and logout paths.
@@ -245,6 +272,11 @@ abstract class AbstractProviderConfiguration implements ConfigurationInterface
 
     /**
      * {@inheritDoc}
+     *
+     * The roles are the ones of the most specific rule that the path is under
+     * (see `requiresAuth()`): with the rules `/api` and `/api/human_resources`,
+     * the path `/api/human_resources/x` needs the roles of the second one, no
+     * matter the order in which they were written.
      */
     public function allowedRoles(string $path): array
     {
@@ -253,20 +285,24 @@ abstract class AbstractProviderConfiguration implements ConfigurationInterface
             return [];
         }
 
-        // Check if path is in protected paths.
-        $protectedPaths = $this->getProtectedPaths();
-        foreach ($protectedPaths as $protectedPath => $roles) {
-            if (str_starts_with($path, $protectedPath)) { // Simple path match.
-                return $roles;
-            }
-        }
-
         // If no protected path matches, no role is needed.
-        return [];
+        return $this->ruleOf($path)['roles'] ?? [];
     }
 
     /**
      * {@inheritDoc}
+     *
+     * A path is protected if it is under any of the rules, **by segments**: the
+     * rule `/api` protects `/api`, `/api/index` and `/api/index/x`, and not
+     * `/apiary`. The path and the rules are compared in their canonical form
+     * (`/api//index`, `/api/./index` and `/api/%69ndex` are `/api/index`), and
+     * without telling the case apart: a server that reads files from a file
+     * system that does not (the one of macOS or Windows) serves `/Academy/x` with
+     * the file of `/academy/x`, and the rule must not depend on that.
+     *
+     * A path that has no safe canonical form (it climbs a directory, it has an
+     * escaped separator, a control character...) is protected: it can not be told
+     * which rule it is under, so it is not let in without a user.
      */
     public function requiresAuth(string $path): bool
     {
@@ -275,15 +311,34 @@ abstract class AbstractProviderConfiguration implements ConfigurationInterface
             return false;
         }
 
-        // Check if path is in protected paths.
-        $protectedPaths = $this->getProtectedPaths();
-        foreach ($protectedPaths as $protectedPath => $roles) {
-            if (str_starts_with($path, $protectedPath)) { // Simple path match.
-                return true;
+        if (Url::normalizePath($path) === null) {
+            return true;
+        }
+
+        return $this->ruleOf($path) !== null;
+    }
+
+    /**
+     * Finds the most specific rule that a path is under.
+     *
+     * @param string $path The path.
+     * @return array{path: string, roles: array<string>, depth: int}|null The rule
+     * that has the most segments (the first one written, if two have the same
+     * path), or null if the path is not under any.
+     */
+    private function ruleOf(string $path): ?array
+    {
+        $found = null;
+        foreach ($this->rules as $rule) {
+            if (!Url::pathStartsWith($path, $rule['path'], caseSensitive: false)) {
+                continue;
+            }
+
+            if ($found === null || $rule['depth'] > $found['depth']) {
+                $found = $rule;
             }
         }
 
-        // If no path is matched, no authentication is required.
-        return false;
+        return $found;
     }
 }

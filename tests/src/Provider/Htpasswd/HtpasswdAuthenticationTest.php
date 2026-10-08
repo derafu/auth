@@ -139,11 +139,11 @@ final class HtpasswdAuthenticationTest extends TestCase
      *
      * @return array{ResponseInterface, UserInterface|null}
      */
-    private function visit(HtpasswdAuthentication $authentication, string $sid): array
+    private function visit(HtpasswdAuthentication $authentication, string $sid, string $path = '/private/page'): array
     {
         $user = null;
         $response = $this->app->handle(
-            $this->app->request('/private/page', sid: $sid),
+            $this->app->request($path, sid: $sid),
             function (ServerRequestInterface $request) use ($authentication, &$user): ?ResponseInterface {
                 $user = $authentication->authenticate($request);
 
@@ -302,6 +302,72 @@ final class HtpasswdAuthenticationTest extends TestCase
         [, $user] = $this->visit($authentication, $sid);
 
         $this->assertSame('ana', $user?->getIdentity());
+    }
+
+    #[Test]
+    public function aProtectedPathIsProtectedWhateverTheWayItIsWritten(): void
+    {
+        $authentication = $this->authentication();
+        $sid = $this->logIn($authentication, 'ana', 'secret')['sid'];
+
+        // The same page, written in every way that a server or a browser could
+        // take for it: a user is needed, and with one the page is served.
+        foreach (['/private/page', '//private/page', '/private//page', '/private/./page', '/private/%70age', '/PRIVATE/page', '/private/page/', '/Private/./%70age'] as $path) {
+            $this->assertNull($this->visit($authentication, SessionApp::KNOWN, $path)[1], $path);
+            $this->assertSame('ana', $this->visit($authentication, $sid, $path)[1]?->getIdentity(), $path);
+        }
+    }
+
+    #[Test]
+    public function onlyThePathsOfTheApiGetAJsonResponseNotARedirect(): void
+    {
+        $authentication = $this->authentication();
+        $answer = function (string $path) use ($authentication): ResponseInterface {
+            $response = null;
+            $this->app->handle(
+                $this->app->request($path),
+                function (ServerRequestInterface $request) use ($authentication, &$response): void {
+                    $response = $authentication->unauthorizedResponse($request);
+                }
+            );
+            $this->assertInstanceOf(ResponseInterface::class, $response);
+
+            return $response;
+        };
+
+        // /api and what is below it: the response of an API.
+        foreach (['/api', '/api/items', '/api/a/b'] as $path) {
+            $this->assertSame(401, $answer($path)->getStatusCode(), $path);
+            $this->assertSame('application/json', $answer($path)->getHeaderLine('Content-Type'), $path);
+        }
+
+        // /apiary is not the API: it is a page, and its user is sent to the login.
+        foreach (['/apiary', '/apiary/x', '/api2'] as $path) {
+            $this->assertInstanceOf(RedirectResponse::class, $answer($path), $path);
+        }
+    }
+
+    #[Test]
+    public function aPathThatHasNoSafeFormNeedsAUser(): void
+    {
+        $authentication = $this->authentication();
+
+        foreach (['/private/../page', '/public/../private/page', '/p%2Fq', '/private/%2e%2e/page'] as $path) {
+            $this->assertNull($this->visit($authentication, SessionApp::KNOWN, $path)[1], $path);
+        }
+    }
+
+    #[Test]
+    public function aPathThatOnlyStartsLikeAProtectedOneIsPublic(): void
+    {
+        $authentication = $this->authentication();
+
+        foreach (['/privately', '/private2/page', '/privateer'] as $path) {
+            $user = $this->visit($authentication, SessionApp::KNOWN, $path)[1];
+
+            $this->assertNotNull($user, $path);
+            $this->assertTrue($user->isAnonymous(), $path);
+        }
     }
 
     #[Test]
