@@ -184,4 +184,60 @@ final class KeycloakConfigurationTest extends TestCase
 
         $this->config(['refresh_interval' => -5]);
     }
+
+    #[Test]
+    public function theClientOfTheApiIsTheClientOfTheApplicationUnlessItHasItsOwn(): void
+    {
+        $config = $this->config();
+
+        $this->assertSame('app', $config->getApiClientId());
+        $this->assertSame('secret', $config->getApiClientSecret());
+        $this->assertSame('app', $config->getApiAudience());
+
+        $config = $this->config(['api_client_id' => 'billing-api', 'api_client_secret' => 'api-secret']);
+
+        $this->assertSame('billing-api', $config->getApiClientId());
+        $this->assertSame('api-secret', $config->getApiClientSecret());
+        $this->assertSame('billing-api', $config->getApiAudience(), 'The audience is the client that asks.');
+        $this->assertSame('app', $config->getClientId(), 'The login keeps its client.');
+        $this->assertSame('billing-api', $config->get('api_client_id'));
+        $this->assertSame('api-secret', $config->get('api_client_secret'));
+        $this->assertSame('billing-api', $config->toArray()['api_client_id']);
+        $this->assertSame('api-secret', $config->toArray()['api_client_secret']);
+    }
+
+    #[Test]
+    public function theClientOfTheApiNeedsItsIdAndItsSecret(): void
+    {
+        foreach ([['api_client_id' => 'billing-api'], ['api_client_secret' => 'api-secret']] as $half) {
+            try {
+                $this->config($half);
+                $this->fail('A half of the client of the API was accepted.');
+            } catch (ConfigurationException $e) {
+                $this->assertStringContainsString('both', $e->getMessage());
+            }
+        }
+    }
+
+    #[Test]
+    public function theAudienceMustBeTheClientOfTheApiWhenKeycloakIsAsked(): void
+    {
+        $api = ['api_client_id' => 'billing-api', 'api_client_secret' => 'api-secret'];
+
+        // The client of the application is not the one that asks any more.
+        $this->expectException(ConfigurationException::class);
+        $this->config($api + ['api_audience' => 'app']);
+    }
+
+    #[Test]
+    public function theAudienceIsTheClientOfTheApiWhenItIsTheSame(): void
+    {
+        $config = $this->config([
+            'api_client_id' => 'billing-api',
+            'api_client_secret' => 'api-secret',
+            'api_audience' => 'billing-api',
+        ]);
+
+        $this->assertSame('billing-api', $config->getApiAudience());
+    }
 }

@@ -392,4 +392,82 @@ final class ServicesTest extends TestCase
         $this->assertInstanceOf(HtpasswdAuthentication::class, $authentication);
         $this->assertSame($throttle, $this->property($authentication, 'throttle'));
     }
+
+    #[Test]
+    public function theApiIsConfiguredWithTheSameVariablesInEveryProvider(): void
+    {
+        $this->environment('AUTH_API_PATHS', '["/api", "/docs/index.json"]');
+        $this->environment('AUTH_API_REALM', 'Billing');
+
+        foreach ([
+            ['auth-keycloak-services.yaml', KeycloakConfiguration::class],
+            ['auth-database-services.yaml', DatabaseConfiguration::class],
+            ['auth-htpasswd-services.yaml', HtpasswdConfiguration::class],
+        ] as [$file, $class]) {
+            $container = $this->container($file, true);
+            $container->getDefinition($class)->setPublic(true);
+            $container->compile(true);
+            $config = $container->get($class);
+
+            $this->assertSame(['/api', '/docs/index.json'], $config->getApiPaths(), $file);
+            $this->assertSame('Billing', $config->getApiRealm(), $file);
+        }
+    }
+
+    #[Test]
+    public function theApiIsTheOneOfApiWithTheRealmApiWhenTheEnvironmentDoesNotSayOtherwise(): void
+    {
+        foreach ([
+            ['auth-keycloak-services.yaml', KeycloakConfiguration::class],
+            ['auth-database-services.yaml', DatabaseConfiguration::class],
+            ['auth-htpasswd-services.yaml', HtpasswdConfiguration::class],
+        ] as [$file, $class]) {
+            $container = $this->container($file, true);
+            $container->getDefinition($class)->setPublic(true);
+            $container->compile(true);
+            $config = $container->get($class);
+
+            $this->assertSame(['/api'], $config->getApiPaths(), $file);
+            $this->assertSame('API', $config->getApiRealm(), $file);
+        }
+    }
+
+    #[Test]
+    public function theTokensOfTheApiAreAskedToKeycloakUnlessTheEnvironmentSaysNot(): void
+    {
+        $this->environment('AUTH_KEYCLOAK_CLIENT_ID', 'derafu-api');
+
+        $container = $this->container('auth-keycloak-services.yaml', true);
+        $container->getDefinition(KeycloakConfiguration::class)->setPublic(true);
+        $container->compile(true);
+        $config = $container->get(KeycloakConfiguration::class);
+
+        $this->assertTrue($config->isApiIntrospection());
+        $this->assertSame('derafu-api', $config->getApiAudience(), 'The client of the application, if the audience is not given.');
+
+        // Turned off: another audience is possible, as nobody asks Keycloak.
+        $this->environment('AUTH_KEYCLOAK_API_INTROSPECTION', 'false');
+        $this->environment('AUTH_KEYCLOAK_API_AUDIENCE', 'billing-api');
+        $container = $this->container('auth-keycloak-services.yaml', true);
+        $container->getDefinition(KeycloakConfiguration::class)->setPublic(true);
+        $container->compile(true);
+        $config = $container->get(KeycloakConfiguration::class);
+
+        $this->assertFalse($config->isApiIntrospection());
+        $this->assertSame('billing-api', $config->getApiAudience());
+
+        // The client of the API, apart from the one of the login.
+        $this->environment('AUTH_KEYCLOAK_API_AUDIENCE', '');
+        $this->environment('AUTH_KEYCLOAK_API_INTROSPECTION', 'true');
+        $this->environment('AUTH_KEYCLOAK_API_CLIENT_ID', 'billing-api');
+        $this->environment('AUTH_KEYCLOAK_API_CLIENT_SECRET', 'billing-secret');
+        $container = $this->container('auth-keycloak-services.yaml', true);
+        $container->getDefinition(KeycloakConfiguration::class)->setPublic(true);
+        $container->compile(true);
+        $config = $container->get(KeycloakConfiguration::class);
+
+        $this->assertSame('billing-api', $config->getApiClientId());
+        $this->assertSame('billing-secret', $config->getApiClientSecret());
+        $this->assertSame('billing-api', $config->getApiAudience());
+    }
 }

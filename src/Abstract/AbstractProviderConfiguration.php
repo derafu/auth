@@ -94,6 +94,18 @@ abstract class AbstractProviderConfiguration implements ConfigurationInterface
     private ?int $refreshInterval = null;
 
     /**
+     * The paths of the API, in their canonical form.
+     *
+     * @var list<string>
+     */
+    private array $apiPaths = ['/api'];
+
+    /**
+     * The realm that the response 401 of the API announces.
+     */
+    private string $apiRealm = 'API';
+
+    /**
      * Creates a new abstract provider configuration.
      *
      * This must be called by the child class constructor.
@@ -169,6 +181,28 @@ abstract class AbstractProviderConfiguration implements ConfigurationInterface
             );
         }
         $this->refreshInterval = $refreshInterval === 0 ? null : $refreshInterval;
+
+        // The API: its paths, and the label of its protection space.
+        $apiPaths = $config['api_paths'] ?? $this->apiPaths;
+        $this->apiPaths = [];
+        foreach ((array) $apiPaths as $apiPath) {
+            $canonical = is_string($apiPath) && trim($apiPath) !== '' ? Url::normalizePath($apiPath) : null;
+            // The root would make the whole site the API.
+            if ($canonical === null || $canonical === '/') {
+                throw new ConfigurationException([
+                    'The path of the API "{path}" is not valid.',
+                    'path' => is_string($apiPath) ? $apiPath : get_debug_type($apiPath),
+                ]);
+            }
+            $this->apiPaths[] = $canonical;
+        }
+
+        // It goes in a header between quotes: nothing that could end them.
+        $apiRealm = $config['api_realm'] ?? $this->apiRealm;
+        if (!is_string($apiRealm) || trim($apiRealm) === '' || preg_match('/[\x00-\x1f\x7f"\\\\]/', $apiRealm)) {
+            throw new ConfigurationException('The realm of the API must be a text without quotes, backslashes or control characters.');
+        }
+        $this->apiRealm = trim($apiRealm);
     }
 
     /**
@@ -185,6 +219,8 @@ abstract class AbstractProviderConfiguration implements ConfigurationInterface
             'unauthorized_redirect_path' => $this->getUnauthorizedRedirectPath(),
             'enabled' => $this->isEnabled(),
             'refresh_interval' => $this->getRefreshInterval(),
+            'api_paths' => $this->getApiPaths(),
+            'api_realm' => $this->getApiRealm(),
             default => $default,
         };
     }
@@ -203,7 +239,25 @@ abstract class AbstractProviderConfiguration implements ConfigurationInterface
             'unauthorized_redirect_path' => $this->getUnauthorizedRedirectPath(),
             'enabled' => $this->isEnabled(),
             'refresh_interval' => $this->getRefreshInterval(),
+            'api_paths' => $this->getApiPaths(),
+            'api_realm' => $this->getApiRealm(),
         ];
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function getApiPaths(): array
+    {
+        return $this->apiPaths;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function getApiRealm(): string
+    {
+        return $this->apiRealm;
     }
 
     /**

@@ -40,8 +40,11 @@ final class AbstractProviderAuthenticationUnauthorizedTest extends TestCase
      */
     private function unauthenticatedResponseOfTheApi(?string $locale): array
     {
+        $config = $this->createStub(ConfigurationInterface::class);
+        $config->method('getApiPaths')->willReturn(['/api']);
+
         $authentication = new FlashAuthentication(
-            $this->createStub(ConfigurationInterface::class),
+            $config,
             $this->createStub(SessionManagerInterface::class),
             translator: $locale === null
                 ? null

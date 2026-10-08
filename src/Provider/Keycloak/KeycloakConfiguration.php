@@ -98,6 +98,31 @@ class KeycloakConfiguration extends AbstractProviderConfiguration implements Con
     private bool $endSession = true;
 
     /**
+     * The audience that the access tokens of the clients of the API must have:
+     * the identifier of the API in Keycloak. Empty: the client of the
+     * application.
+     */
+    private string $apiAudience = '';
+
+    /**
+     * The client that asks Keycloak about the tokens of the API (introspection),
+     * when the API is a client of its own. Empty: the client of the application.
+     */
+    private string $apiClientId = '';
+
+    /**
+     * The secret of the client of the API. Empty: the secret of the client of the
+     * application.
+     */
+    private string $apiClientSecret = '';
+
+    /**
+     * Whether Keycloak is asked, for each request of a client of the API, if its
+     * access token is still active.
+     */
+    private bool $apiIntrospection = true;
+
+    /**
      * The URL where Keycloak sends the user after the logout. It must be one of
      * the post logout redirect URIs of the client. If it is empty it is the page
      * that follows the logout, in the site of the redirect URI.
@@ -149,6 +174,30 @@ class KeycloakConfiguration extends AbstractProviderConfiguration implements Con
         $this->postLogoutRedirectUri = $config['post_logout_redirect_uri']
             ?? $this->postLogoutRedirectUri
         ;
+        $this->apiAudience = trim((string) ($config['api_audience'] ?? $this->apiAudience));
+        $this->apiIntrospection = (bool) ($config['api_introspection'] ?? $this->apiIntrospection);
+
+        $this->apiClientId = trim((string) ($config['api_client_id'] ?? $this->apiClientId));
+        $this->apiClientSecret = (string) ($config['api_client_secret'] ?? $this->apiClientSecret);
+
+        // The client of the API is both things or none: its secret is not the one
+        // of the client of the application.
+        if (($this->apiClientId === '') !== ($this->apiClientSecret === '')) {
+            throw new ConfigurationException('The client of the API needs its ID and its secret, both.');
+        }
+
+        // Keycloak answers about a token only to a client that is in its audience
+        // (to any other it says that the token is not active, to the client that
+        // asked for it too). The client that asks is the one of the API, or the
+        // one of the application, so an audience that is another one would close
+        // the API with no reason that shows.
+        if ($this->apiIntrospection && $this->apiAudience !== '' && $this->apiAudience !== $this->getApiClientId()) {
+            throw new ConfigurationException([
+                'The audience of the API "{audience}" is not the client "{client}": Keycloak is asked about the tokens of the API by the client, and it only answers about the tokens that have it in their audience. Use the client as the audience, or turn the introspection off.',
+                'audience' => $this->apiAudience,
+                'client' => $this->getApiClientId(),
+            ]);
+        }
     }
 
     /**
@@ -199,6 +248,10 @@ class KeycloakConfiguration extends AbstractProviderConfiguration implements Con
             'issuer' => $this->getIssuer(),
             'end_session' => $this->isEndSession(),
             'post_logout_redirect_uri' => $this->getPostLogoutRedirectUri(),
+            'api_audience' => $this->getApiAudience(),
+            'api_client_id' => $this->getApiClientId(),
+            'api_client_secret' => $this->getApiClientSecret(),
+            'api_introspection' => $this->isApiIntrospection(),
             default => $default,
         };
     }
@@ -222,6 +275,10 @@ class KeycloakConfiguration extends AbstractProviderConfiguration implements Con
             'issuer' => $this->getIssuer(),
             'end_session' => $this->isEndSession(),
             'post_logout_redirect_uri' => $this->getPostLogoutRedirectUri(),
+            'api_audience' => $this->getApiAudience(),
+            'api_client_id' => $this->getApiClientId(),
+            'api_client_secret' => $this->getApiClientSecret(),
+            'api_introspection' => $this->isApiIntrospection(),
         ]);
     }
 
@@ -357,6 +414,70 @@ class KeycloakConfiguration extends AbstractProviderConfiguration implements Con
             . (isset($uri['port']) ? ':' . $uri['port'] : '');
 
         return $origin . '/' . ltrim($route, '/');
+    }
+
+    /**
+     * Gets the audience that the access token of a client of the API must have
+     * (the `aud` of the token): the identifier of the API in Keycloak.
+     *
+     * Without it, a token that Keycloak gave to any client of the realm, for any
+     * other application, would be accepted by the API: the audience says that the
+     * token was made to be used here. It is the client of the application unless
+     * another one is configured. The roles of the client of the audience are the
+     * ones of the client of the API (together with the ones of the realm).
+     *
+     * @return string The audience.
+     */
+    public function getApiAudience(): string
+    {
+        return $this->apiAudience !== '' ? $this->apiAudience : $this->getApiClientId();
+    }
+
+    /**
+     * Gets the client that asks Keycloak about the tokens of the API
+     * (introspection): the client of the API if it has one of its own, and the
+     * client of the application otherwise.
+     *
+     * @return string The ID of the client.
+     */
+    public function getApiClientId(): string
+    {
+        return $this->apiClientId !== '' ? $this->apiClientId : $this->clientId;
+    }
+
+    /**
+     * Gets the secret of the client that asks Keycloak about the tokens of the
+     * API (see `getApiClientId()`).
+     *
+     * @return string The secret of the client.
+     */
+    public function getApiClientSecret(): string
+    {
+        return $this->apiClientSecret !== '' ? $this->apiClientSecret : $this->clientSecret;
+    }
+
+    /**
+     * Gets whether Keycloak is asked, in each request of a client of the API,
+     * whether its access token is still **active** (token introspection, RFC
+     * 7662). It is, by default.
+     *
+     * A token is verified by what it says (its signature and its expiration), so a
+     * token of a user that was disabled, or that was revoked, is valid until it
+     * expires. Asking Keycloak closes that: the token that Keycloak does not
+     * consider active is not valid, at once. It has a price, a request to Keycloak
+     * for each request to the API. Turning it off is for the ones that give their
+     * clients tokens that last a short time and trust that: the token is verified
+     * with no request to Keycloak but the one for its keys, that are cached.
+     *
+     * Keycloak answers about a token only to a client that is in the audience of
+     * the token, so with the introspection on the audience of the API is the
+     * client that asks: the one of the API (`getApiClientId()`).
+     *
+     * @return bool True if the token is asked to Keycloak.
+     */
+    public function isApiIntrospection(): bool
+    {
+        return $this->apiIntrospection;
     }
 
     /**

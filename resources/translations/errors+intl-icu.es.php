@@ -36,6 +36,10 @@ return [
         'La consulta "sql_is_active" falló: {error}. Si la tabla no tiene la columna "{column}", entrega tu propia consulta en "sql_is_active" o desactiva la comprobación con false.',
     'The protected path "{path}" is not valid.' =>
         'La ruta protegida "{path}" no es válida.',
+    'The path of the API "{path}" is not valid.' =>
+        'La ruta de la API "{path}" no es válida.',
+    'The realm of the API must be a text without quotes, backslashes or control characters.' =>
+        'El realm de la API debe ser un texto sin comillas, barras invertidas ni caracteres de control.',
     'The refresh interval must be a number of seconds, 0 or more.' =>
         'El intervalo de actualización debe ser un número de segundos, 0 o más.',
 
@@ -64,6 +68,20 @@ return [
         'El proveedor de Keycloak requiere "firebase/php-jwt". Ejecuta: composer require firebase/php-jwt',
     'Failed to validate the token: {error}' =>
         'No se pudo validar el token: {error}',
+    'Failed to introspect the token: {error}' =>
+        'No se pudo consultar a Keycloak por el token: {error}',
+    'The token is not active.' =>
+        'El token no está activo.',
+    'The user of the introspection is not the user of the token.' =>
+        'El usuario de la introspección no es el usuario del token.',
+    'The audience of the API "{audience}" is not the client "{client}": Keycloak is asked about the tokens of the API by the client, and it only answers about the tokens that have it in their audience. Use the client as the audience, or turn the introspection off.' =>
+        'La audiencia de la API "{audience}" no es el cliente "{client}": a Keycloak se le consulta por los tokens de la API con el cliente, y solo responde por los tokens que lo tienen en su audiencia. Usa el cliente como audiencia, o desactiva la introspección.',
+    'The token is not an access token.' =>
+        'El token no es un token de acceso.',
+    'The client of the API needs its ID and its secret, both.' =>
+        'El cliente de la API necesita su ID y su secreto, los dos.',
+    'The audience of the token is not this API.' =>
+        'La audiencia del token no es esta API.',
     'The audience of the token is not this client.' =>
         'La audiencia del token no es este cliente.',
     'The nonce of the token is not the one of the login.' =>

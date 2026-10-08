@@ -126,6 +126,30 @@ interface ConfigurationInterface
     public function getRefreshInterval(): ?int;
 
     /**
+     * Gets the paths of the API: the ones that are `/api` (or any other that is
+     * configured) or below them are the ones of a client that is a program, not
+     * a browser. It is authenticated by the credentials of the header
+     * `Authorization` (that are read only there), without a session, and it gets a
+     * JSON answer with the challenge `WWW-Authenticate`, never a redirect, when it
+     * is not authenticated.
+     *
+     * It says **how** a client is authenticated; which paths need a user, and
+     * with which roles, is said by the protected paths.
+     *
+     * @return list<string> The paths, in their canonical form (`/api` by default).
+     */
+    public function getApiPaths(): array;
+
+    /**
+     * Gets the realm that the response `401` of the API announces in the header
+     * `WWW-Authenticate`: the name of the protection space, a label (it is not
+     * the realm of Keycloak).
+     *
+     * @return string The realm (`API` by default).
+     */
+    public function getApiRealm(): string;
+
+    /**
      * Gets the roles that the protected path that matches the given path needs.
      *
      * @param string $path The path to check.

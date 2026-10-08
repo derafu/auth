@@ -1,6 +1,12 @@
 imports:
     - auth-services.yaml
 
+parameters:
+    # Keycloak is asked, in each request of a client of the API, whether its token
+    # is still active (token introspection). Turn it off (false) to trust the
+    # expiration of tokens that last a short time.
+    env(AUTH_KEYCLOAK_API_INTROSPECTION): 'true'
+
 services:
 
     _defaults:
@@ -71,6 +77,12 @@ services:
                 unauthorized_redirect_path: '%env(default::string:AUTH_UNAUTHORIZED_REDIRECT_PATH)%'
                 enabled: '%env(default::bool:AUTH_ENABLED)%'
                 refresh_interval: '%env(default::int:AUTH_REFRESH_INTERVAL_SECONDS)%'
+                api_paths: '%env(default::json:AUTH_API_PATHS)%'
+                api_realm: '%env(default::string:AUTH_API_REALM)%'
+                api_audience: '%env(default::string:AUTH_KEYCLOAK_API_AUDIENCE)%'
+                api_client_id: '%env(default::string:AUTH_KEYCLOAK_API_CLIENT_ID)%'
+                api_client_secret: '%env(default::string:AUTH_KEYCLOAK_API_CLIENT_SECRET)%'
+                api_introspection: '%env(bool:AUTH_KEYCLOAK_API_INTROSPECTION)%'
 
     # Keycloak controller.
     Derafu\Auth\Provider\Keycloak\KeycloakController:

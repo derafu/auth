@@ -74,6 +74,29 @@ class DatabaseAuthentication extends AbstractProviderAuthentication implements A
 
     /**
      * {@inheritDoc}
+     *
+     * A client of the API sends its user and its password: `Basic`.
+     */
+    protected function authorizationScheme(): ?string
+    {
+        return 'Basic';
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * The user and the password are verified in each request, with the same limit
+     * of failed attempts as the login form (see `authenticateBasic()`).
+     */
+    protected function authenticateCredentials(
+        ServerRequestInterface $request,
+        string $credentials
+    ): ?UserInterface {
+        return $this->authenticateBasic($request, $credentials, $this->userRepository, $this->throttle);
+    }
+
+    /**
+     * {@inheritDoc}
      */
     protected function handleLogin(
         ServerRequestInterface $request,

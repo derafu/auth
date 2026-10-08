@@ -21,6 +21,7 @@ use Derafu\Auth\Exception\ProviderUnavailableException;
 use Derafu\Auth\UserFactory;
 use Exception;
 use GuzzleHttp\Client;
+use GuzzleHttp\ClientInterface;
 use League\OAuth2\Client\Provider\Exception\IdentityProviderException;
 use League\OAuth2\Client\Provider\GenericProvider;
 use League\OAuth2\Client\Token\AccessToken;
@@ -41,6 +42,8 @@ class KeycloakUserRepository implements UserRepositoryInterface
 
     private KeycloakTokenVerifier $verifier;
 
+    private ClientInterface $httpClient;
+
     /**
      * The nonce of the authorization URL that was created last.
      */
@@ -52,15 +55,21 @@ class KeycloakUserRepository implements UserRepositoryInterface
      * @param KeycloakConfiguration $config The Keycloak configuration.
      * @param KeycloakTokenVerifier|null $verifier Verifies the tokens. By
      * default, one that reads the keys of the realm of the configuration.
+     * @param UserFactoryInterface|null $userFactory Makes the users.
+     * @param ClientInterface|null $httpClient The client for the requests to
+     * Keycloak. By default, one with the options of the configuration (the
+     * timeouts, the verification of the certificate).
      */
     private readonly UserFactoryInterface $userFactory;
 
     public function __construct(
         private readonly KeycloakConfiguration $config,
         ?KeycloakTokenVerifier $verifier = null,
-        ?UserFactoryInterface $userFactory = null
+        ?UserFactoryInterface $userFactory = null,
+        ?ClientInterface $httpClient = null
     ) {
         $this->userFactory = $userFactory ?? new UserFactory();
+        $this->httpClient = $httpClient ?? new Client($this->config->getHttpClientOptions());
 
         if (!class_exists(GenericProvider::class)) {
             throw new ConfigurationException(
@@ -119,6 +128,81 @@ class KeycloakUserRepository implements UserRepositoryInterface
         }
 
         return array_merge($userInfo, $claims);
+    }
+
+    /**
+     * Verifies the access token that a client of the API sends: what the token
+     * says (see `KeycloakTokenVerifier::verifyBearerToken()`) and, unless it is
+     * turned off in the configuration, that Keycloak says that it is active (see
+     * `introspect()`). The first is done before the second, so a token that is not
+     * valid does not cost a request to Keycloak.
+     *
+     * @param string $accessToken The access token.
+     * @return array<string, mixed> The claims of the token.
+     * @throws AuthenticationException If the token is not valid, or it is not
+     * active.
+     * @throws ProviderUnavailableException If Keycloak can not be asked whether
+     * the token is active: the token is not accepted without knowing.
+     */
+    public function verifyBearerToken(string $accessToken): array
+    {
+        $claims = $this->verifier->verifyBearerToken($accessToken, $this->config->getApiAudience());
+
+        if ($this->config->isApiIntrospection()) {
+            $this->introspect($accessToken, $claims);
+        }
+
+        return $claims;
+    }
+
+    /**
+     * Asks Keycloak whether an access token is active (token introspection, RFC
+     * 7662): it is not if it expired, if it was revoked, if the session that it
+     * belongs to ended or if its user was disabled. The client of the application
+     * authenticates with its credentials.
+     *
+     * @param string $accessToken The access token.
+     * @param array<string, mixed> $claims What the token says.
+     * @throws AuthenticationException If Keycloak says that the token is not
+     * active, or that it is the token of another user.
+     * @throws ProviderUnavailableException If Keycloak can not answer (it does not
+     * answer, it fails, or it does not accept the credentials of the client): it
+     * is not a token that is not valid.
+     */
+    private function introspect(string $accessToken, array $claims): void
+    {
+        try {
+            $response = $this->httpClient->request('POST', $this->getIntrospectionUrl(), [
+                'form_params' => [
+                    'token' => $accessToken,
+                    'token_type_hint' => 'access_token',
+                    'client_id' => $this->config->getApiClientId(),
+                    'client_secret' => $this->config->getApiClientSecret(),
+                ],
+                'headers' => ['Accept' => 'application/json'],
+                'http_errors' => false,
+            ]);
+            $status = $response->getStatusCode();
+            $answer = json_decode((string) $response->getBody(), true);
+        } catch (Exception $e) {
+            throw new ProviderUnavailableException(['Failed to introspect the token: {error}', 'error' => $e->getMessage()], 0, $e);
+        }
+
+        // Anything but an answer is Keycloak that can not say it.
+        if ($status !== 200 || !is_array($answer)) {
+            throw new ProviderUnavailableException([
+                'Failed to introspect the token: {error}',
+                'error' => 'HTTP status ' . $status,
+            ]);
+        }
+
+        if (($answer['active'] ?? false) !== true) {
+            throw new AuthenticationException('The token is not active.');
+        }
+
+        if (isset($answer['sub']) && $answer['sub'] !== ($claims['sub'] ?? null)) {
+            throw new AuthenticationException('The user of the introspection is not the user of the token.');
+        }
     }
 
     /**
@@ -296,17 +380,20 @@ class KeycloakUserRepository implements UserRepositoryInterface
      * so it is the class of user of the application.
      *
      * @param array<string, mixed> $userInfo The claims and the user info.
+     * @param string|null $client The client whose roles are the ones of the user
+     * (together with the ones of the realm): the one of the application by
+     * default, and the one of the audience for a client of the API.
      * @return DerafuUserInterface The user.
      * @throws AuthenticationException If there is no `sub`.
      */
-    public function createUser(array $userInfo): DerafuUserInterface
+    public function createUser(array $userInfo, ?string $client = null): DerafuUserInterface
     {
         $identity = $userInfo['sub']
             ?? throw new AuthenticationException('User identity not found in keycloak user info.');
 
         return $this->userFactory->create(
             (string) $identity,
-            $this->extractRoles($userInfo),
+            $this->extractRoles($userInfo, $client ?? $this->config->getClientId()),
             $userInfo
         );
     }
@@ -317,12 +404,11 @@ class KeycloakUserRepository implements UserRepositoryInterface
      * this one), as texts and without duplicates.
      *
      * @param array<string, mixed> $userInfo
+     * @param string $clientId The client whose roles count.
      * @return list<string>
      */
-    private function extractRoles(array $userInfo): array
+    private function extractRoles(array $userInfo, string $clientId): array
     {
-        $clientId = $this->config->getClientId();
-
         $roles = is_array($userInfo['roles'] ?? null) ? $userInfo['roles'] : [];
 
         $realmAccess = $userInfo['realm_access'] ?? [];
@@ -373,8 +459,6 @@ class KeycloakUserRepository implements UserRepositoryInterface
      */
     private function initializeProvider(): void
     {
-        $httpClient = new Client($this->config->getHttpClientOptions());
-
         $this->provider = new GenericProvider([
             'clientId' => $this->config->getClientId(),
             'clientSecret' => $this->config->getClientSecret(),
@@ -388,7 +472,7 @@ class KeycloakUserRepository implements UserRepositoryInterface
             // A collaborator, not an option: the provider takes the client from
             // here, and makes one of its own (without the timeouts and the
             // verification of the configuration) if it is not.
-            'httpClient' => $httpClient,
+            'httpClient' => $this->httpClient,
         ]);
     }
 
@@ -426,6 +510,16 @@ class KeycloakUserRepository implements UserRepositoryInterface
      * Gets the user info URL.
      *
      * @return string The user info URL.
+     */
+    private function getIntrospectionUrl(): string
+    {
+        return $this->config->getRealmUrl() . '/protocol/openid-connect/token/introspect';
+    }
+
+    /**
+     * Gets the URL of the user info.
+     *
+     * @return string The URL.
      */
     private function getUserInfoUrl(): string
     {

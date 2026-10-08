@@ -224,6 +224,39 @@ class KeycloakAuthentication extends AbstractProviderAuthentication implements A
     /**
      * {@inheritDoc}
      *
+     * A client of the API sends the access token that Keycloak gave it (a
+     * service with `client_credentials`, or a person): `Bearer`.
+     */
+    protected function authorizationScheme(): ?string
+    {
+        return 'Bearer';
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * The token is verified by what it says (see
+     * `KeycloakTokenVerifier::verifyBearerToken()`): nothing is asked to Keycloak
+     * but its keys, that are cached, so a request does not wait for it. The user
+     * has the roles of the realm and the ones of the client of the audience.
+     */
+    protected function authenticateCredentials(
+        ServerRequestInterface $request,
+        string $credentials
+    ): ?UserInterface {
+        try {
+            return $this->userRepository->createUser(
+                $this->userRepository->verifyBearerToken($credentials),
+                $this->config->getApiAudience()
+            );
+        } catch (AuthenticationException) {
+            return null;
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     *
      * The session of the application is closed, and the user is sent to Keycloak
      * to end its session there too (OpenID Connect RP-Initiated Logout), which
      * sends the user back to the page that follows the logout. Otherwise the user

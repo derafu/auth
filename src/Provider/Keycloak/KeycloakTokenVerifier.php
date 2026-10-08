@@ -141,6 +141,40 @@ class KeycloakTokenVerifier
     }
 
     /**
+     * Verifies the access token that a client of the API sends.
+     *
+     * The token is the one of a service (`client_credentials`) or of a person,
+     * that was given to any client of the realm: what makes it valid for this API
+     * is its audience, so it must have the configured one (see
+     * `KeycloakConfiguration::getApiAudience()`). Apart from the signature, the
+     * issuer and the expiration, it must be an access token (an ID token, a
+     * refresh token or an offline token are not one, they must not open the API).
+     *
+     * It is verified only by what it says: a token that was not revoked, of a
+     * user that was disabled after it was given, is valid until it expires.
+     *
+     * @param string $accessToken The access token.
+     * @param string $audience The audience that it must have.
+     * @return array<string, mixed> The claims of the token.
+     * @throws AuthenticationException If the token is not valid.
+     */
+    public function verifyBearerToken(string $accessToken, string $audience): array
+    {
+        $claims = $this->decode($accessToken);
+
+        // Keycloak says "Bearer" in the access tokens; the ID token says "ID".
+        if (($claims['typ'] ?? null) !== 'Bearer') {
+            throw new AuthenticationException('The token is not an access token.');
+        }
+
+        if ($audience === '' || !in_array($audience, (array) ($claims['aud'] ?? []), true)) {
+            throw new AuthenticationException('The audience of the token is not this API.');
+        }
+
+        return $claims;
+    }
+
+    /**
      * Decodes a token verifying its signature, its issuer and its expiration.
      *
      * @return array<string, mixed>

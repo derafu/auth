@@ -47,6 +47,21 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 final class AuthenticationTranslatorTest extends TestCase
 {
     /**
+     * A configuration that has the path of the API that the tests ask for.
+     *
+     * @template T of \Derafu\Auth\Contract\ConfigurationInterface
+     * @param class-string<T> $class
+     * @return T&\PHPUnit\Framework\MockObject\Stub
+     */
+    private static function configuration(self $test, string $class): object
+    {
+        $config = $test->createStub($class);
+        $config->method('getApiPaths')->willReturn(['/api']);
+
+        return $config;
+    }
+
+    /**
      * @return array<string, array{callable(self, TranslatorInterface|null): AbstractProviderAuthentication}>
      */
     public static function provideProviders(): array
@@ -55,7 +70,7 @@ final class AuthenticationTranslatorTest extends TestCase
             'database' => [
                 fn (self $test, ?TranslatorInterface $translator) => new DatabaseAuthentication(
                     $test->createStub(DatabaseUserRepository::class),
-                    $test->createStub(DatabaseConfiguration::class),
+                    self::configuration($test, DatabaseConfiguration::class),
                     $test->createStub(SessionManagerInterface::class),
                     $test->createStub(FormManagerInterface::class),
                     translator: $translator
@@ -64,7 +79,7 @@ final class AuthenticationTranslatorTest extends TestCase
             'keycloak' => [
                 fn (self $test, ?TranslatorInterface $translator) => new KeycloakAuthentication(
                     $test->createStub(KeycloakUserRepository::class),
-                    $test->createStub(KeycloakConfiguration::class),
+                    self::configuration($test, KeycloakConfiguration::class),
                     $test->createStub(KeycloakSessionManager::class),
                     translator: $translator
                 ),

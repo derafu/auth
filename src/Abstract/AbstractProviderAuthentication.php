@@ -18,6 +18,8 @@ use Derafu\Auth\Contract\AuthenticationInterface;
 use Derafu\Auth\Contract\ConfigurationInterface;
 use Derafu\Auth\Contract\SessionManagerInterface;
 use Derafu\Auth\Contract\UserInterface;
+use Derafu\Auth\Contract\UserRepositoryInterface;
+use Derafu\Auth\LoginThrottle;
 use Derafu\Support\Url;
 use Derafu\Translation\Contract\TranslatableMessageInterface;
 use Derafu\Translation\TranslatableMessage;
@@ -61,7 +63,17 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
         // Get the path, session and user from the request.
         $path = $request->getUri()->getPath();
         $session = $this->getSessionFromRequest($request);
-        $user = $this->getUserFromSession($session);
+
+        // A client of the API that sends credentials in the header
+        // `Authorization` (of the scheme that the provider reads) is
+        // authenticated by them, in each request and without a session: the
+        // session is not read, so nothing is kept and no cookie is set. If they
+        // are not valid it is not authenticated: it does not go back to a session
+        // that it may have, it was not asking for one.
+        $credentials = $this->credentialsOf($request);
+        $user = $credentials !== null
+            ? $this->authenticateCredentials($request, $credentials) ?? $this->anonymousUser
+            : $this->getUserFromSession($session);
 
         // The logout and the login are done before looking at what is
         // protected: they are the way out and the way in, so a protected path
@@ -122,8 +134,8 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
         // Handle an unauthorized request to the API: a client of the API gets
         // the answer, with a session or without it (the session middleware gives
         // one to every request), not a redirect to a login that it can not use.
-        if (Url::pathStartsWith($path, '/api')) {
-            return $this->handleUnauthorizedApi();
+        if ($this->isApiPath($path)) {
+            return $this->handleUnauthorizedApi($request);
         }
 
         // Handle unauthorized request (with session).
@@ -417,22 +429,220 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
     }
 
     /**
-     * Handles the unauthorized request to the API (a path that starts with
-     * `/api`): a JSON response with the status 401, in the language of the
-     * translator.
+     * Handles the unauthorized request to the API (a path that is one of the ones of
+     * the API or below one of them): a JSON response with the status 401, in the language of
+     * the translator, and the header `WWW-Authenticate` that says how to
+     * authenticate (see `challenge()`).
      *
+     * @param ServerRequestInterface|null $request The request, to know whether
+     * it sent credentials that were not valid.
      * @return PsrResponseInterface The response.
      */
-    protected function handleUnauthorizedApi(): PsrResponseInterface
+    protected function handleUnauthorizedApi(?ServerRequestInterface $request = null): PsrResponseInterface
     {
+        $challenge = $request !== null ? $this->challenge($request) : null;
+
         return new JsonResponse(
             [
                 'status' => 401,
                 'title' => $this->translate(new TranslatableMessage('Unauthorized', [], 'auth')),
                 'detail' => $this->translate(new TranslatableMessage('You need to send valid credentials to access this resource.', [], 'auth')),
             ],
-            401
+            401,
+            $challenge !== null ? ['WWW-Authenticate' => $challenge] : []
         );
+    }
+
+    /**
+     * Gets the scheme of the header `Authorization` that the provider reads from
+     * a client of the API (`Bearer` for a token, `Basic` for a user and a
+     * password), or null if it reads none: the credentials are not read from the
+     * header, and a header is ignored.
+     *
+     * A header with another scheme is ignored too, not rejected: a server that is
+     * in front of the application can add its own (a `Basic` for the whole
+     * site), and that must not break the sessions of the users.
+     *
+     * @return string|null The scheme.
+     */
+    protected function authorizationScheme(): ?string
+    {
+        return null;
+    }
+
+    /**
+     * Authenticates a client of the API by the credentials that it sent in the
+     * header `Authorization`, with the scheme that the provider reads
+     * (`authorizationScheme()`). It is done in each request, and nothing is kept.
+     *
+     * @param ServerRequestInterface $request The request.
+     * @param string $credentials What comes after the scheme: the token, or the
+     * user and the password in Base64.
+     * @return UserInterface|null The user, or null if the credentials are not
+     * valid.
+     */
+    protected function authenticateCredentials(
+        ServerRequestInterface $request,
+        string $credentials
+    ): ?UserInterface {
+        return null;
+    }
+
+    /**
+     * Gets the credentials that a request sends in the header `Authorization`,
+     * if they are for the API and of the scheme that the provider reads.
+     *
+     * @param ServerRequestInterface $request The request.
+     * @return string|null What comes after the scheme, or null if there are none.
+     */
+    protected function credentialsOf(ServerRequestInterface $request): ?string
+    {
+        $scheme = $this->authorizationScheme();
+        if ($scheme === null || !$this->isApiPath($request->getUri()->getPath())) {
+            return null;
+        }
+
+        // `Scheme credentials`, in one header: two of them, or a scheme with
+        // nothing after it, are not credentials.
+        $header = trim($request->getHeaderLine('Authorization'));
+        if (preg_match('/^(\S+)[ \t]+(\S+)$/', $header, $matches) && strcasecmp($matches[1], $scheme) === 0) {
+            return $matches[2];
+        }
+
+        return null;
+    }
+
+    /**
+     * Gets what the response 401 of the API says in the header
+     * `WWW-Authenticate`: how to authenticate (RFC 7235). For `Bearer` (RFC 6750)
+     * it also says `invalid_token` when the request sent a token that was not
+     * valid.
+     *
+     * The challenge of `Basic` is left out when the request says that it comes
+     * from a script of a page (`X-Requested-With: XMLHttpRequest`): a browser
+     * answers it with its own window to ask for a user and a password, and a page
+     * that calls the API with its session wants the `401`, not that window (Rails
+     * and Spring do the same). `Bearer` is never asked by a browser, so it is
+     * always sent.
+     *
+     * @param ServerRequestInterface $request The request.
+     * @return string|null The challenge, or null if the provider reads no
+     * credentials from the header, or if it is not to be sent.
+     */
+    protected function challenge(ServerRequestInterface $request): ?string
+    {
+        $scheme = $this->authorizationScheme();
+        if ($scheme === null) {
+            return null;
+        }
+
+        $realm = $this->config->getApiRealm();
+
+        if (strcasecmp($scheme, 'Bearer') === 0) {
+            return sprintf('%s realm="%s"', $scheme, $realm)
+                . ($this->credentialsOf($request) !== null ? ', error="invalid_token"' : '')
+            ;
+        }
+
+        if (strcasecmp($request->getHeaderLine('X-Requested-With'), 'XMLHttpRequest') === 0) {
+            return null;
+        }
+
+        return sprintf('%s realm="%s", charset="UTF-8"', $scheme, $realm);
+    }
+
+    /**
+     * Reads the credentials of the scheme `Basic` (RFC 7617): the user and the
+     * password, separated by a colon, in Base64 and in UTF-8.
+     *
+     * @param string $credentials What comes after `Basic`.
+     * @return array{string, string}|null The identity and the password, or null
+     * if it is not Base64, it is not UTF-8, it has no colon or its identity is
+     * empty.
+     */
+    protected function basicCredentials(string $credentials): ?array
+    {
+        $decoded = base64_decode($credentials, true);
+        if ($decoded === false || !mb_check_encoding($decoded, 'UTF-8')) {
+            return null;
+        }
+
+        $parts = explode(':', $decoded, 2);
+        if (count($parts) !== 2 || $parts[0] === '') {
+            return null;
+        }
+
+        return [$parts[0], $parts[1]];
+    }
+
+    /**
+     * Authenticates a client of the API by the credentials of the scheme `Basic`
+     * (the user and the password), against the repository of users of a provider
+     * that has a password for each user.
+     *
+     * The failed attempts are limited as the ones of the login form are, by
+     * identity and by network of the client (see `clientAddress()`): a program
+     * guesses passwords much faster than a person. A client that is limited is
+     * not asked anything, whatever it sent, so a password that is guessed while
+     * it is limited is of no use. The user that does not exist, the one that has
+     * a wrong password and the one that is not active are the same answer.
+     *
+     * The password is verified in each request, as it is in the login (with the
+     * cost of the hash of the password): it is the price of not keeping anything.
+     *
+     * @param ServerRequestInterface $request The request.
+     * @param string $credentials What comes after `Basic`.
+     * @param UserRepositoryInterface $repository Where the users are.
+     * @param LoginThrottle|null $throttle Limits the failed attempts. Without it
+     * they are not limited.
+     * @return UserInterface|null The user, or null if the credentials are not
+     * valid or the client is limited.
+     */
+    protected function authenticateBasic(
+        ServerRequestInterface $request,
+        string $credentials,
+        UserRepositoryInterface $repository,
+        ?LoginThrottle $throttle
+    ): ?UserInterface {
+        $basic = $this->basicCredentials($credentials);
+        if ($basic === null) {
+            return null;
+        }
+
+        [$identity, $password] = $basic;
+        $address = $this->clientAddress($request);
+
+        if (($throttle?->retryAfter($identity, $address) ?? 0) > 0) {
+            return null;
+        }
+
+        $user = $repository->authenticate($identity, $password);
+        if (!$user instanceof UserInterface) {
+            $throttle?->hit($identity, $address);
+
+            return null;
+        }
+
+        $throttle?->clear($identity, $address);
+
+        return $user;
+    }
+
+    /**
+     * Checks that a path is one of the API or is below one of them.
+     *
+     * @param string $path The path.
+     * @return bool True if it is.
+     */
+    protected function isApiPath(string $path): bool
+    {
+        foreach ($this->config->getApiPaths() as $apiPath) {
+            if (Url::pathStartsWith($path, $apiPath)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

@@ -82,6 +82,8 @@ services:
                 unauthorized_redirect_path: '%env(default::string:AUTH_UNAUTHORIZED_REDIRECT_PATH)%'
                 enabled: '%env(default::bool:AUTH_ENABLED)%'
                 refresh_interval: '%env(default::int:AUTH_REFRESH_INTERVAL_SECONDS)%'
+                api_paths: '%env(default::json:AUTH_API_PATHS)%'
+                api_realm: '%env(default::string:AUTH_API_REALM)%'
 
     # Database controller.
     Derafu\Auth\Provider\Database\DatabaseController:

@@ -17,6 +17,14 @@
         {
           "name": "app-editor"
         }
+      ],
+      "derafu-api": [
+        {
+          "name": "reader"
+        },
+        {
+          "name": "writer"
+        }
       ]
     }
   },
@@ -39,6 +47,75 @@
         "post.logout.redirect.uris": "https://app.test/bye",
         "pkce.code.challenge.method": "S256"
       }
+    },
+    {
+      "clientId": "derafu-api",
+      "name": "The API that the tests protect",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "api-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false
+    },
+    {
+      "clientId": "derafu-service",
+      "name": "A service that calls the API (client credentials)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "service-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocolMappers": [
+        {
+          "name": "api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "derafu-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "derafu-cli",
+      "name": "A program of a person that calls the API (password grant)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "protocolMappers": [
+        {
+          "name": "api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "derafu-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "derafu-noaudience",
+      "name": "A service whose tokens are not for the API",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "noaudience-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true
     }
   ],
   "users": [
@@ -65,8 +142,32 @@
         ],
         "account": [
           "view-profile"
+        ],
+        "derafu-api": [
+          "writer"
         ]
       }
+    },
+    {
+      "username": "service-account-derafu-service",
+      "enabled": true,
+      "serviceAccountClientId": "derafu-service",
+      "realmRoles": [
+        "editor"
+      ],
+      "clientRoles": {
+        "derafu-api": [
+          "reader"
+        ]
+      }
+    },
+    {
+      "username": "service-account-derafu-noaudience",
+      "enabled": true,
+      "serviceAccountClientId": "derafu-noaudience",
+      "realmRoles": [
+        "editor"
+      ]
     }
   ]
 }
