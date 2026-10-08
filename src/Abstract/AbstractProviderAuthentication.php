@@ -222,6 +222,30 @@ abstract class AbstractProviderAuthentication implements AuthenticationInterface
     }
 
     /**
+     * Gets who the client of the request is, to count its failed logins.
+     *
+     * It is the network of the client that the HTTP layer decided, if it did: the
+     * attribute `client_network` of the request (`ClientIpMiddleware` of
+     * `derafu/http` leaves it, deciding which proxies are trusted to say who the
+     * client is). Without it, it is the address of the connection. The headers of
+     * the request (`X-Forwarded-For`...) are never read here: they are written by
+     * the client, so it could choose its own counter and try as many passwords as
+     * it wants.
+     *
+     * @param ServerRequestInterface $request The request.
+     * @return string The network of the client, or its address.
+     */
+    protected function clientAddress(ServerRequestInterface $request): string
+    {
+        $network = $request->getAttribute('client_network');
+        if (is_string($network) && $network !== '') {
+            return $network;
+        }
+
+        return (string) ($request->getServerParams()['REMOTE_ADDR'] ?? 'unknown');
+    }
+
+    /**
      * Gets the session from the request.
      *
      * @param ServerRequestInterface $request The request.

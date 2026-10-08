@@ -100,7 +100,7 @@ class HtpasswdAuthentication extends AbstractProviderAuthentication implements A
         $data = $result->getProcessedData();
         $identity = $data[LoginForm::IDENTITY];
         $password = $data[LoginForm::PASSWORD];
-        $address = (string) ($request->getServerParams()['REMOTE_ADDR'] ?? 'unknown');
+        $address = $this->clientAddress($request);
 
         // Too many failed attempts: the credentials are not even checked, so a
         // password that is guessed in the window is of no use.

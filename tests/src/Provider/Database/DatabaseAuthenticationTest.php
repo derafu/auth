@@ -612,14 +612,21 @@ final class DatabaseAuthenticationTest extends TestCase
     private function tryToLogIn(
         DatabaseAuthentication $authentication,
         string $password,
-        string $address = '203.0.113.7'
+        string $address = '203.0.113.7',
+        ?string $network = null,
+        array $headers = []
     ): array {
         $result = ['user' => null, 'flashes' => []];
         $request = $this->app->request(
             '/auth/login',
             body: ['email' => 'ana@example.com', 'password' => $password],
+            headers: $headers,
             address: $address
         );
+        // What the HTTP layer decided about who the client is.
+        if ($network !== null) {
+            $request = $request->withAttribute('client_network', $network);
+        }
 
         $this->app->handle($request, function (ServerRequestInterface $request) use ($authentication, &$result) {
             $result['user'] = $authentication->authenticate($request);
@@ -629,6 +636,43 @@ final class DatabaseAuthenticationTest extends TestCase
         });
 
         return $result;
+    }
+
+    #[Test]
+    public function theFailedAttemptsAreCountedByTheNetworkOfTheClientThatTheHttpLayerDecided(): void
+    {
+        [$authentication] = $this->throttled();
+
+        // Behind a proxy every connection comes from the proxy: the clients are
+        // told apart by the network that the HTTP layer left in the request.
+        foreach ([1, 2, 3] as $attempt) {
+            $this->tryToLogIn($authentication, 'wrong', address: '10.0.0.1', network: '203.0.113.9/32');
+        }
+
+        $blocked = $this->tryToLogIn($authentication, 'secret', address: '10.0.0.1', network: '203.0.113.9/32');
+        $this->assertTrue($blocked['user']?->isAnonymous());
+        $this->assertStringContainsString('Too many failed login attempts', $blocked['flashes']['error']['message']);
+
+        // The same client from another connection is still blocked, and another
+        // client behind the same proxy is not.
+        $this->assertTrue($this->tryToLogIn($authentication, 'secret', address: '10.0.0.2', network: '203.0.113.9/32')['user']?->isAnonymous());
+        $this->assertSame('ana@example.com', $this->tryToLogIn($authentication, 'secret', address: '10.0.0.1', network: '203.0.113.10/32')['user']?->getIdentity());
+    }
+
+    #[Test]
+    public function theHeadersOfTheClientDoNotChooseItsCounterOfFailedAttempts(): void
+    {
+        [$authentication] = $this->throttled();
+
+        // The client sends a different address in each request: it is still the
+        // same one.
+        foreach ([1, 2, 3] as $attempt) {
+            $this->tryToLogIn($authentication, 'wrong', headers: ['X-Forwarded-For' => '198.51.100.' . $attempt]);
+        }
+
+        $blocked = $this->tryToLogIn($authentication, 'secret', headers: ['X-Forwarded-For' => '198.51.100.99']);
+        $this->assertTrue($blocked['user']?->isAnonymous());
+        $this->assertStringContainsString('Too many failed login attempts', $blocked['flashes']['error']['message']);
     }
 
     #[Test]

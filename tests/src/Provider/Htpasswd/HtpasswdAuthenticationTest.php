@@ -102,12 +102,24 @@ final class HtpasswdAuthenticationTest extends TestCase
      *
      * @return array{user: UserInterface|null, flashes: array<string, mixed>, sid: string}
      */
-    private function logIn(HtpasswdAuthentication $authentication, string $identity, string $password, string $address = '203.0.113.7'): array
-    {
+    private function logIn(
+        HtpasswdAuthentication $authentication,
+        string $identity,
+        string $password,
+        string $address = '203.0.113.7',
+        ?string $network = null,
+        array $headers = []
+    ): array {
         $result = ['user' => null, 'flashes' => [], 'sid' => ''];
 
+        $request = $this->app->request('/auth/login', body: ['username' => $identity, 'password' => $password], headers: $headers, address: $address);
+        // What the HTTP layer decided about who the client is.
+        if ($network !== null) {
+            $request = $request->withAttribute('client_network', $network);
+        }
+
         $response = $this->app->handle(
-            $this->app->request('/auth/login', body: ['username' => $identity, 'password' => $password], address: $address),
+            $request,
             function (ServerRequestInterface $request) use ($authentication, &$result): null {
                 $result['user'] = $authentication->authenticate($request);
                 $flash = $request->getAttribute(FlashMessageMiddleware::FLASH_ATTRIBUTE);
@@ -212,6 +224,50 @@ final class HtpasswdAuthenticationTest extends TestCase
 
         // Another address is not blocked.
         $this->assertSame('ana', $this->logIn($authentication, 'ana', 'secret', '198.51.100.9')['user']?->getIdentity());
+    }
+
+    #[Test]
+    public function theFailedAttemptsAreCountedByTheNetworkOfTheClientThatTheHttpLayerDecided(): void
+    {
+        $authentication = $this->authentication(new LoginThrottle(new ArrayAdapter(), maxAttempts: 2, lockSeconds: 600));
+
+        // Behind a proxy every connection comes from the proxy: the clients are
+        // told apart by the network that the HTTP layer left in the request.
+        $this->logIn($authentication, 'ana', 'wrong', address: '10.0.0.1', network: '203.0.113.9/32');
+        $this->logIn($authentication, 'ana', 'wrong', address: '10.0.0.1', network: '203.0.113.9/32');
+
+        $this->assertTrue($this->logIn($authentication, 'ana', 'secret', address: '10.0.0.1', network: '203.0.113.9/32')['user']?->isAnonymous());
+        // The same client from another connection is still blocked...
+        $this->assertTrue($this->logIn($authentication, 'ana', 'secret', address: '10.0.0.2', network: '203.0.113.9/32')['user']?->isAnonymous());
+        // ...and another client behind the same proxy is not.
+        $this->assertSame('ana', $this->logIn($authentication, 'ana', 'secret', address: '10.0.0.1', network: '203.0.113.10/32')['user']?->getIdentity());
+    }
+
+    #[Test]
+    public function anEmptyNetworkOfTheHttpLayerIsNotAClient(): void
+    {
+        $authentication = $this->authentication(new LoginThrottle(new ArrayAdapter(), maxAttempts: 2, lockSeconds: 600));
+
+        // An empty network would make everybody one client: the address of the
+        // connection is used instead.
+        $this->logIn($authentication, 'ana', 'wrong', address: '203.0.113.7', network: '');
+        $this->logIn($authentication, 'ana', 'wrong', address: '203.0.113.7', network: '');
+
+        $this->assertTrue($this->logIn($authentication, 'ana', 'secret', address: '203.0.113.7', network: '')['user']?->isAnonymous());
+        $this->assertSame('ana', $this->logIn($authentication, 'ana', 'secret', address: '198.51.100.9', network: '')['user']?->getIdentity());
+    }
+
+    #[Test]
+    public function theHeadersOfTheClientDoNotChooseItsCounterOfFailedAttempts(): void
+    {
+        $authentication = $this->authentication(new LoginThrottle(new ArrayAdapter(), maxAttempts: 2, lockSeconds: 600));
+
+        $this->logIn($authentication, 'ana', 'wrong', headers: ['X-Forwarded-For' => '198.51.100.1']);
+        $this->logIn($authentication, 'ana', 'wrong', headers: ['X-Forwarded-For' => '198.51.100.2']);
+
+        $blocked = $this->logIn($authentication, 'ana', 'secret', headers: ['X-Forwarded-For' => '198.51.100.99']);
+        $this->assertTrue($blocked['user']?->isAnonymous());
+        $this->assertStringContainsString('Too many failed login attempts', $blocked['flashes']['error']['message']);
     }
 
     #[Test]
