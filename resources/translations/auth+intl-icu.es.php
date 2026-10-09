@@ -17,7 +17,6 @@ return [
     // Responses to the clients of the API.
     'Unauthorized' => 'No autorizado',
     'You need to send valid credentials to access this resource.' => 'Debes enviar credenciales válidas para acceder a este recurso.',
-    'The user is not authorized to access this resource.' => 'El usuario no está autorizado para acceder a este recurso.',
 
     // Login form (Provider/Database/Form/LoginForm.php).
     'Username' => 'Usuario',

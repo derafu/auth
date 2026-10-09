@@ -63,6 +63,7 @@ use Psr\Http\Message\ServerRequestInterface;
 #[UsesClass(\Derafu\Auth\Provider\Database\Web\Form\LoginForm::class)]
 #[UsesClass(\Derafu\Auth\User::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
+#[UsesClass(\Derafu\Auth\Authentication\AuthenticationMiddleware::class)]
 final class SessionRenewalTest extends TestCase
 {
     private const KNOWN = SessionApp::KNOWN;

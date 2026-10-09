@@ -70,6 +70,7 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\SessionManager::class)]
 #[UsesClass(\Derafu\Auth\User::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
+#[UsesClass(\Derafu\Auth\Authentication\AuthenticationMiddleware::class)]
 final class KeycloakBearerTest extends TestCase
 {
     private const URL = 'https://keycloak.test';

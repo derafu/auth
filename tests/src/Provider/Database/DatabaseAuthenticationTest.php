@@ -65,6 +65,7 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\SessionManager::class)]
 #[UsesClass(User::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
+#[UsesClass(\Derafu\Auth\Authentication\AuthenticationMiddleware::class)]
 final class DatabaseAuthenticationTest extends TestCase
 {
     private const NEXT = 'Mezzio\Flash\FlashMessagesInterface::FLASH_NEXT';

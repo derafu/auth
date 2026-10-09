@@ -14,8 +14,9 @@ namespace Derafu\TestsAuth\Authorization;
 
 use Derafu\Auth\Authorization\AccessRules;
 use Derafu\Auth\Authorization\AuthorizationManager;
+use Derafu\Auth\Authorization\AuthorizationMiddleware;
 use Derafu\Auth\Contract\UserInterface;
-use Derafu\Auth\UnauthorizedResponseFactory;
+use Derafu\Auth\Exception\AuthorizationException;
 use Derafu\Auth\User;
 use Derafu\Routing\ValueObject\Route;
 use Derafu\Routing\ValueObject\RouteMatch;
@@ -23,7 +24,6 @@ use Laminas\Diactoros\Response\EmptyResponse;
 use Laminas\Diactoros\ServerRequest;
 use Laminas\Diactoros\Uri;
 use Mezzio\Authentication\UserInterface as MezzioUserInterface;
-use Mezzio\Authorization\AuthorizationMiddleware;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\UsesClass;
@@ -33,18 +33,22 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * What the authorization middleware of Mezzio answers with the `Authorization`
- * of the package, the same that a site has in its pipeline.
+ * What the authorization middleware of the package does with the
+ * `AuthorizationManager`, the same that a site has in its pipeline.
  *
- * It follows the standard (RBAC and ACL of Mezzio): without a user it is a 401,
- * and with a user it is a 403 unless one of the roles of the user is granted, so
- * a user without roles is never granted. What the package adds is, on top of
- * the standard: a protected path without roles in the site and in the route only
- * asks for a user, and a role that nobody declared is not an error.
+ * It decides as the standard (RBAC and ACL of Mezzio) does: without a user it is
+ * a 401, and with a user it is a 403 unless one of the roles of the user is
+ * granted, so a user without roles is never granted. The difference is that it
+ * does not make a response: it throws an exception with that code, that the
+ * application answers as any other error, and its message says which roles give
+ * access. What the package adds, on top of the standard: a protected path without
+ * roles in the site and in the route only asks for a user, and a role that nobody
+ * declared is not an error.
  */
+#[CoversClass(AuthorizationMiddleware::class)]
 #[CoversClass(AuthorizationManager::class)]
 #[UsesClass(AccessRules::class)]
-#[UsesClass(UnauthorizedResponseFactory::class)]
+#[UsesClass(AuthorizationException::class)]
 #[UsesClass(User::class)]
 final class AuthorizationMiddlewareTest extends TestCase
 {
@@ -54,13 +58,13 @@ final class AuthorizationMiddlewareTest extends TestCase
      * null.
      */
     #[DataProvider('cases')]
-    public function testTheStatusOfTheResponse(
+    public function testTheStatusOfTheAnswer(
         int $expected,
         string $path,
         ?array $roles,
         ?array $routeRoles = null
     ): void {
-        $this->assertSame($expected, $this->statusOf($path, $roles, $routeRoles));
+        $this->assertSame($expected, $this->statusOf($path, $roles, $routeRoles)['status']);
     }
 
     /**
@@ -89,13 +93,17 @@ final class AuthorizationMiddlewareTest extends TestCase
     }
 
     /**
+     * What the middleware says about a request: the status (200 when it lets it
+     * go on, and the code of the exception when it does not) and the message.
+     *
      * @param list<string>|null $roles
      * @param list<string>|null $routeRoles
+     * @return array{status: int, message: string}
      */
-    private function statusOf(string $path, ?array $roles, ?array $routeRoles): int
+    private function statusOf(string $path, ?array $roles, ?array $routeRoles): array
     {
-        $rules = new AccessRules(['protected_paths' => ['/private', '/admin' => 'admin']]);
-        $middleware = new AuthorizationMiddleware(new AuthorizationManager($rules), new UnauthorizedResponseFactory());
+        $rules = new AccessRules(['protected_paths' => ['/private', '/admin' => 'admin', '/staff' => ['editor', 'admin']]]);
+        $middleware = new AuthorizationMiddleware(new AuthorizationManager($rules), $rules);
 
         $request = (new ServerRequest())->withUri(new Uri('https://app.test' . $path));
         if ($roles !== null) {
@@ -108,12 +116,57 @@ final class AuthorizationMiddlewareTest extends TestCase
             );
         }
 
-        return $middleware->process($request, new class () implements RequestHandlerInterface {
-            public function handle(ServerRequestInterface $request): ResponseInterface
-            {
-                return new EmptyResponse(200);
-            }
-        })->getStatusCode();
+        try {
+            $response = $middleware->process($request, new class () implements RequestHandlerInterface {
+                public function handle(ServerRequestInterface $request): ResponseInterface
+                {
+                    return new EmptyResponse(200);
+                }
+            });
+
+            return ['status' => $response->getStatusCode(), 'message' => ''];
+        } catch (AuthorizationException $e) {
+            return ['status' => $e->getCode(), 'message' => $e->getMessage()];
+        }
+    }
+
+    public function testTheMessageSaysWhichRolesGiveAccess(): void
+    {
+        $this->assertSame(
+            'You do not have access to /admin/users. These roles give access: admin.',
+            $this->statusOf('/admin/users', ['user'], null)['message']
+        );
+        $this->assertSame(
+            'You do not have access to /staff. These roles give access: editor, admin.',
+            $this->statusOf('/staff', ['user'], null)['message']
+        );
+        // The roles of a route, when the site does not ask for any.
+        $this->assertSame(
+            'You do not have access to /page. These roles give access: editor, owner.',
+            $this->statusOf('/page', ['user'], ['editor', 'owner'])['message']
+        );
+    }
+
+    public function testAUserWithoutRolesIsToldThatItHasNone(): void
+    {
+        // The path only asks for a user, and a user without roles is never granted.
+        $this->assertSame(
+            'You do not have access to /private: your user has no roles.',
+            $this->statusOf('/private', [], null)['message']
+        );
+    }
+
+    public function testWithoutAUserTheMessageSaysToAuthenticate(): void
+    {
+        $answer = $this->statusOf('/admin', null, null);
+
+        $this->assertSame(401, $answer['status']);
+        $this->assertSame('You must be authenticated to access /admin.', $answer['message']);
+    }
+
+    public function testAPathThatIsLetInSaysNothing(): void
+    {
+        $this->assertSame(['status' => 200, 'message' => ''], $this->statusOf('/admin', ['admin'], null));
     }
 
     /**

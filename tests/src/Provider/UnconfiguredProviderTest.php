@@ -92,6 +92,7 @@ use PHPUnit\Framework\TestCase;
 #[UsesClass(BasicScheme::class)]
 #[UsesClass(BearerScheme::class)]
 #[UsesClass(ConfigurationException::class)]
+#[UsesClass(\Derafu\Auth\Authentication\AuthenticationMiddleware::class)]
 final class UnconfiguredProviderTest extends TestCase
 {
     private const SETTINGS = ['enabled' => true, 'protected_paths' => ['/private', '/api']];

@@ -66,6 +66,7 @@ use Twig\TwigFunction;
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
 #[UsesClass(\Derafu\Auth\User::class)]
 #[UsesClass(AuthTranslationResourceProvider::class)]
+#[UsesClass(\Derafu\Auth\Authentication\AuthenticationMiddleware::class)]
 final class HtpasswdControllerTest extends TestCase
 {
     private SessionApp $app;

@@ -55,6 +55,7 @@ use PHPUnit\Framework\TestCase;
 #[UsesClass(SessionManager::class)]
 #[UsesClass(\Derafu\Auth\User::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
+#[UsesClass(\Derafu\Auth\Authentication\AuthenticationMiddleware::class)]
 final class HtpasswdApiBasicTest extends TestCase
 {
     use ApiBasicTests;

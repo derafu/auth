@@ -61,7 +61,9 @@ services:
             $channels: !tagged_iterator derafu_auth.channel
     Mezzio\Authentication\AuthenticationInterface:
         alias: Derafu\Auth\Contract\AuthenticationInterface
-    Mezzio\Authentication\AuthenticationMiddleware: ~
+    # The middleware of the authentication: the one that a pipeline names.
+    Derafu\Auth\Authentication\AuthenticationMiddleware:
+        lazy: Psr\Http\Server\MiddlewareInterface
 
     # The authorization: may who is asking enter here.
     Derafu\Auth\Contract\AuthorizationInterface:
@@ -69,10 +71,12 @@ services:
         lazy: true
     Mezzio\Authorization\AuthorizationInterface:
         alias: Derafu\Auth\Contract\AuthorizationInterface
-    Derafu\Auth\UnauthorizedResponseFactory: ~
-    Mezzio\Authorization\AuthorizationMiddleware:
-        arguments:
-            $responseFactory: '@Derafu\Auth\UnauthorizedResponseFactory'
+    # The middleware of the authorization: the one that a pipeline names, after
+    # the one of the authentication. It does not make a response: it throws an
+    # exception with the status (401 or 403), that the application answers as any
+    # other error (an error page in HTML, a problem in JSON for the API).
+    Derafu\Auth\Authorization\AuthorizationMiddleware:
+        lazy: Psr\Http\Server\MiddlewareInterface
 
     # The web channel: a session. It is the last one that is asked (the lowest
     # priority): it is the channel of every request that is not of another one.

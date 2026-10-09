@@ -65,6 +65,7 @@ use Twig\TwigFunction;
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\SessionManager::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
 #[UsesClass(AuthTranslationResourceProvider::class)]
+#[UsesClass(\Derafu\Auth\Authentication\AuthenticationMiddleware::class)]
 final class DatabaseControllerTest extends TestCase
 {
     private SessionApp $app;

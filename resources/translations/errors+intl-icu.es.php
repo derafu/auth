@@ -38,6 +38,12 @@ return [
         'La audiencia de la API no está configurada: define AUTH_KEYCLOAK_API_AUDIENCE, o el cliente con AUTH_KEYCLOAK_CLIENT_ID.',
     'Keycloak is asked about the tokens with a client, and it is not configured: set AUTH_KEYCLOAK_CLIENT_ID and AUTH_KEYCLOAK_CLIENT_SECRET (or the ones of the API, AUTH_KEYCLOAK_API_CLIENT_ID and AUTH_KEYCLOAK_API_CLIENT_SECRET), or turn the introspection off with AUTH_KEYCLOAK_API_INTROSPECTION=false.' =>
         'A Keycloak se le consulta por los tokens con un cliente, y no está configurado: define AUTH_KEYCLOAK_CLIENT_ID y AUTH_KEYCLOAK_CLIENT_SECRET (o los de la API, AUTH_KEYCLOAK_API_CLIENT_ID y AUTH_KEYCLOAK_API_CLIENT_SECRET), o desactiva la introspección con AUTH_KEYCLOAK_API_INTROSPECTION=false.',
+    'You must be authenticated to access {path}.' =>
+        'Debes iniciar sesión para acceder a {path}.',
+    'You do not have access to {path}: your user has no roles.' =>
+        'No tienes acceso a {path}: tu usuario no tiene roles.',
+    'You do not have access to {path}. These roles give access: {roles}.' =>
+        'No tienes acceso a {path}. Estos roles dan acceso: {roles}.',
     'No channel of authentication matches the request.' =>
         'Ningún canal de autenticación corresponde a la petición.',
     'The query "sql_is_active" failed: {error}. If the table has no column "{column}", give your own query in "sql_is_active" or turn the check off with false.' =>

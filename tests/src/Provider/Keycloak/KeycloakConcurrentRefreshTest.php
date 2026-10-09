@@ -71,6 +71,7 @@ use Psr\Http\Message\ServerRequestInterface;
 #[UsesClass(SessionManager::class)]
 #[UsesClass(User::class)]
 #[UsesClass(AuthTranslationResourceProvider::class)]
+#[UsesClass(\Derafu\Auth\Authentication\AuthenticationMiddleware::class)]
 final class KeycloakConcurrentRefreshTest extends TestCase
 {
     private static RealKeycloak $keycloak;

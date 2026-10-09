@@ -77,6 +77,7 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
 #[UsesClass(SessionManager::class)]
 #[UsesClass(User::class)]
 #[UsesClass(AuthTranslationResourceProvider::class)]
+#[UsesClass(\Derafu\Auth\Authentication\AuthenticationMiddleware::class)]
 final class KeycloakFlowTest extends TestCase
 {
     private const NEXT = 'Mezzio\Flash\FlashMessagesInterface::FLASH_NEXT';

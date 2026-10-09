@@ -13,12 +13,14 @@ declare(strict_types=1);
 namespace Derafu\TestsAuth;
 
 use Derafu\Auth\Authentication\AuthenticationManager;
+use Derafu\Auth\Authentication\AuthenticationMiddleware;
 use Derafu\Auth\Authentication\Channel\Api\ApiChannel;
 use Derafu\Auth\Authentication\Channel\Api\ApiConfiguration;
 use Derafu\Auth\Authentication\Channel\Web\WebChannel;
 use Derafu\Auth\Authentication\Channel\Web\WebConfiguration;
 use Derafu\Auth\Authentication\LoginThrottle;
 use Derafu\Auth\Authorization\AccessRules;
+use Derafu\Auth\Authorization\AuthorizationMiddleware;
 use Derafu\Auth\Contract\AccessRulesInterface;
 use Derafu\Auth\Contract\AuthenticationInterface as DerafuAuthenticationInterface;
 use Derafu\Auth\Contract\ChannelInterface;
@@ -47,6 +49,7 @@ use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psr\Cache\CacheItemPoolInterface;
+use Psr\Http\Server\MiddlewareInterface;
 use ReflectionProperty;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\Config\FileLocator;
@@ -608,6 +611,25 @@ final class ServicesTest extends TestCase
             $this->assertInstanceOf(GuestUser::class, $this->property($api, 'anonymousUser'), $services);
             $this->assertInstanceOf(GuestUser::class, $this->property($web, 'anonymousUser'), $services);
             $this->assertInstanceOf(GuestUser::class, $this->property($this->property($web, 'flow'), 'anonymousUser'), $services);
+        }
+    }
+
+    #[Test]
+    public function theMiddlewaresOfAPipelineAreTheOnesOfThePackageInEveryProvider(): void
+    {
+        foreach (['auth-keycloak-services.yaml', 'auth-database-services.yaml', 'auth-htpasswd-services.yaml'] as $services) {
+            $container = $this->container($services, true);
+            $container->getDefinition(AuthenticationMiddleware::class)->setPublic(true);
+            $container->getDefinition(AuthorizationMiddleware::class)->setPublic(true);
+            $container->compile(true);
+
+            $this->assertInstanceOf(MiddlewareInterface::class, $container->get(AuthenticationMiddleware::class), $services);
+            $this->assertInstanceOf(MiddlewareInterface::class, $container->get(AuthorizationMiddleware::class), $services);
+            $this->assertInstanceOf(AuthenticationMiddleware::class, $this->real($container->get(AuthenticationMiddleware::class)), $services);
+            $this->assertInstanceOf(AuthorizationMiddleware::class, $this->real($container->get(AuthorizationMiddleware::class)), $services);
+            // The ones of Mezzio are not the ones of the pipeline.
+            $this->assertFalse($container->has('Mezzio\\Authentication\\AuthenticationMiddleware'), $services);
+            $this->assertFalse($container->has('Mezzio\\Authorization\\AuthorizationMiddleware'), $services);
         }
     }
 }
