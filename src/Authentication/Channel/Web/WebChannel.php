@@ -18,6 +18,7 @@ use Derafu\Auth\Contract\ChannelInterface;
 use Derafu\Auth\Contract\SessionManagerInterface;
 use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Contract\WebFlowInterface;
+use Derafu\Auth\Exception\ConfigurationException;
 use Laminas\Diactoros\Response\RedirectResponse;
 use Mezzio\Session\SessionInterface;
 use Mezzio\Session\SessionMiddleware;
@@ -186,10 +187,19 @@ final class WebChannel implements ChannelInterface
             return $this->anonymousUser;
         }
 
+        // A provider that is not configured can not tell who the session is, so
+        // what the session says is not believed (the user may have logged in when
+        // it was configured): the visitor is the anonymous one. The pages that
+        // nobody protects keep working, and where the provider is needed (a
+        // protected page, the login) it says which variable is missing.
+        try {
+            $this->flow->validate();
+        } catch (ConfigurationException) {
+            return $this->anonymousUser;
+        }
+
         // The authenticated user of the session, or the anonymous one if the
         // provider can not tell.
-        $this->flow->validate();
-
         return $this->flow->userFromSession($session) ?? $this->anonymousUser;
     }
 

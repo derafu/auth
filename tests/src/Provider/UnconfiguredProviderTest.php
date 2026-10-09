@@ -106,10 +106,11 @@ final class UnconfiguredProviderTest extends TestCase
 
     /**
      * Each provider with nothing configured: the authentication, the path of its
-     * login, the variable that its error names, and the credentials of the header
-     * that the API reads.
+     * login, the variable that its error names, the credentials of the header
+     * that the API reads, and what the session of a user that logged in before
+     * has (the configuration was there then).
      *
-     * @return array<string, array{callable(): AuthenticationInterface, string, string, string}>
+     * @return array<string, array{callable(): AuthenticationInterface, string, string, string, array<string, mixed>}>
      */
     public static function provideProviders(): array
     {
@@ -123,6 +124,7 @@ final class UnconfiguredProviderTest extends TestCase
                 '/auth/callback',
                 'AUTH_KEYCLOAK_URL',
                 'Bearer a-token',
+                ['oauth2_token' => ['access_token' => 'x'], 'user' => ['identity' => 'ana']],
             ],
             'database' => [
                 static function (): AuthenticationInterface {
@@ -138,6 +140,7 @@ final class UnconfiguredProviderTest extends TestCase
                 '/auth/login',
                 'AUTH_DATABASE_URL',
                 'Basic ' . 'YW5hOnNlY3JldA==',
+                ['user' => ['identity' => 'ana', 'roles' => ['admin'], 'details' => []]],
             ],
             'htpasswd' => [
                 static function (): AuthenticationInterface {
@@ -153,6 +156,7 @@ final class UnconfiguredProviderTest extends TestCase
                 '/auth/login',
                 'AUTH_HTPASSWD_PATH',
                 'Basic ' . 'YW5hOnNlY3JldA==',
+                ['user' => ['identity' => 'ana']],
             ],
         ];
     }
@@ -162,7 +166,7 @@ final class UnconfiguredProviderTest extends TestCase
      */
     #[Test]
     #[DataProvider('provideProviders')]
-    public function aPageThatNobodyProtectsIsAnsweredWithoutTheProvider(callable $authentication, string $login, string $variable, string $credentials): void
+    public function aPageThatNobodyProtectsIsAnsweredWithoutTheProvider(callable $authentication, string $login, string $variable, string $credentials, array $session): void
     {
         $response = $this->app->handleAuthenticated($this->app->request('/'), $authentication(), fn () => null);
 
@@ -174,7 +178,7 @@ final class UnconfiguredProviderTest extends TestCase
      */
     #[Test]
     #[DataProvider('provideProviders')]
-    public function aProtectedPageSaysWhichVariableIsMissing(callable $authentication, string $login, string $variable, string $credentials): void
+    public function aProtectedPageSaysWhichVariableIsMissing(callable $authentication, string $login, string $variable, string $credentials, array $session): void
     {
         $this->expectException(ConfigurationException::class);
         $this->expectExceptionMessage($variable);
@@ -187,7 +191,7 @@ final class UnconfiguredProviderTest extends TestCase
      */
     #[Test]
     #[DataProvider('provideProviders')]
-    public function theLoginPageSaysWhichVariableIsMissingBeforeTheUserFillsAnything(callable $authentication, string $login, string $variable, string $credentials): void
+    public function theLoginPageSaysWhichVariableIsMissingBeforeTheUserFillsAnything(callable $authentication, string $login, string $variable, string $credentials, array $session): void
     {
         $this->expectException(ConfigurationException::class);
         $this->expectExceptionMessage($variable);
@@ -200,7 +204,7 @@ final class UnconfiguredProviderTest extends TestCase
      */
     #[Test]
     #[DataProvider('provideProviders')]
-    public function theLogoutNeedsNoConfiguration(callable $authentication, string $login, string $variable, string $credentials): void
+    public function theLogoutNeedsNoConfiguration(callable $authentication, string $login, string $variable, string $credentials, array $session): void
     {
         $response = $this->app->handleAuthenticated(
             $this->app->request('/auth/logout', body: []),
@@ -216,7 +220,7 @@ final class UnconfiguredProviderTest extends TestCase
      */
     #[Test]
     #[DataProvider('provideProviders')]
-    public function theCredentialsOfTheApiSayWhichVariableIsMissing(callable $authentication, string $login, string $variable, string $credentials): void
+    public function theCredentialsOfTheApiSayWhichVariableIsMissing(callable $authentication, string $login, string $variable, string $credentials, array $session): void
     {
         $this->expectException(ConfigurationException::class);
         $this->expectExceptionMessage($variable);
@@ -233,11 +237,54 @@ final class UnconfiguredProviderTest extends TestCase
      */
     #[Test]
     #[DataProvider('provideProviders')]
-    public function aRequestToTheApiWithoutCredentialsIsA401NotAnError(callable $authentication, string $login, string $variable, string $credentials): void
+    public function aRequestToTheApiWithoutCredentialsIsA401NotAnError(callable $authentication, string $login, string $variable, string $credentials, array $session): void
     {
         $response = $this->app->handleAuthenticated($this->app->request('/api/items'), $authentication(), fn () => null);
 
         $this->assertSame(401, $response->getStatusCode());
         $this->assertNotSame('', $response->getHeaderLine('WWW-Authenticate'));
+    }
+
+    /**
+     * @param callable(): AuthenticationInterface $authentication
+     * @param array<string, mixed> $session
+     */
+    #[Test]
+    #[DataProvider('provideProviders')]
+    public function aSessionThatWasOpenedWhenTheProviderWasConfiguredDoesNotTakeDownThePagesThatNobodyProtects(callable $authentication, string $login, string $variable, string $credentials, array $session): void
+    {
+        $this->app->persistence->store[SessionApp::KNOWN] = $session;
+
+        $user = null;
+        $response = $this->app->handleAuthenticated(
+            $this->app->request('/'),
+            $authentication(),
+            function ($request) use (&$user): null {
+                $user = $request->getAttribute(\Mezzio\Authentication\UserInterface::class);
+
+                return null;
+            }
+        );
+
+        $this->assertSame(200, $response->getStatusCode());
+        // What the session says can not be checked without the provider, so it is
+        // not believed: the visitor is the anonymous one.
+        $this->assertTrue($user?->isAnonymous());
+    }
+
+    /**
+     * @param callable(): AuthenticationInterface $authentication
+     * @param array<string, mixed> $session
+     */
+    #[Test]
+    #[DataProvider('provideProviders')]
+    public function aSessionThatWasOpenedBeforeStillSaysWhichVariableIsMissingWhereTheProviderIsNeeded(callable $authentication, string $login, string $variable, string $credentials, array $session): void
+    {
+        $this->app->persistence->store[SessionApp::KNOWN] = $session;
+
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage($variable);
+
+        $this->app->handleAuthenticated($this->app->request('/private/page'), $authentication(), fn () => null);
     }
 }
