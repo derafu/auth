@@ -200,9 +200,9 @@ class KeycloakConfiguration
         }
 
         if ($this->redirectUri === '') {
-            throw new ConfigurationException('The redirect URI of Keycloak is not configured: set AUTH_KEYCLOAK_REDIRECT_URI.');
+            throw new ConfigurationException('The redirect URI of Keycloak is not configured: set AUTH_KEYCLOAK_WEB_REDIRECT_URI.');
         }
-        $this->validateAddress($this->redirectUri, 'AUTH_KEYCLOAK_REDIRECT_URI');
+        $this->validateAddress($this->redirectUri, 'AUTH_KEYCLOAK_WEB_REDIRECT_URI');
     }
 
     /**

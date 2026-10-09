@@ -153,8 +153,8 @@ final class KeycloakConfigurationTest extends TestCase
             'no realm' => [['realm' => ''], 'The realm of Keycloak is not configured: set AUTH_KEYCLOAK_REALM.'],
             'no client' => [['client_id' => ''], 'The client of Keycloak is not configured: set AUTH_KEYCLOAK_CLIENT_ID.'],
             'no secret' => [['client_secret' => ''], 'The secret of the client of Keycloak is not configured: set AUTH_KEYCLOAK_CLIENT_SECRET.'],
-            'no redirect URI' => [['redirect_uri' => ''], 'The redirect URI of Keycloak is not configured: set AUTH_KEYCLOAK_REDIRECT_URI.'],
-            'a redirect URI that is a path' => [['redirect_uri' => '/auth/callback'], 'The value of AUTH_KEYCLOAK_REDIRECT_URI "/auth/callback" is not valid: it must be an address that starts with http:// or https://.'],
+            'no redirect URI' => [['redirect_uri' => ''], 'The redirect URI of Keycloak is not configured: set AUTH_KEYCLOAK_WEB_REDIRECT_URI.'],
+            'a redirect URI that is a path' => [['redirect_uri' => '/auth/callback'], 'The value of AUTH_KEYCLOAK_WEB_REDIRECT_URI "/auth/callback" is not valid: it must be an address that starts with http:// or https://.'],
         ];
     }
 

@@ -30,8 +30,8 @@ return [
         'El cliente de Keycloak no está configurado: define AUTH_KEYCLOAK_CLIENT_ID.',
     'The secret of the client of Keycloak is not configured: set AUTH_KEYCLOAK_CLIENT_SECRET.' =>
         'El secreto del cliente de Keycloak no está configurado: define AUTH_KEYCLOAK_CLIENT_SECRET.',
-    'The redirect URI of Keycloak is not configured: set AUTH_KEYCLOAK_REDIRECT_URI.' =>
-        'La URI de redirección de Keycloak no está configurada: define AUTH_KEYCLOAK_REDIRECT_URI.',
+    'The redirect URI of Keycloak is not configured: set AUTH_KEYCLOAK_WEB_REDIRECT_URI.' =>
+        'La URI de redirección de Keycloak no está configurada: define AUTH_KEYCLOAK_WEB_REDIRECT_URI.',
     'The value of {variable} "{value}" is not valid: it must be an address that starts with http:// or https://.' =>
         'El valor de {variable} "{value}" no es válido: debe ser una dirección que empiece con http:// o https://.',
     'The audience of the API is not configured: set AUTH_KEYCLOAK_API_AUDIENCE, or the client with AUTH_KEYCLOAK_CLIENT_ID.' =>
