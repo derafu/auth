@@ -185,6 +185,20 @@ class KeycloakSessionManager extends SessionManager implements SessionManagerInt
     }
 
     /**
+     * Gets the access token that the session has (the one of the user, that is
+     * renewed when it is due).
+     *
+     * @param SessionInterface $session The session.
+     * @return string|null The access token, or null if there is none.
+     */
+    public function getAccessToken(SessionInterface $session): ?string
+    {
+        $token = $session->get('oauth2_token');
+
+        return is_string($token) ? $token : null;
+    }
+
+    /**
      * Clears what the login in progress stored: the state, the nonce and the PKCE
      * code.
      *

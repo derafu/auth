@@ -65,6 +65,7 @@ use PHPUnit\Framework\TestCase;
 #[CoversClass(AuthenticationManager::class)]
 #[CoversClass(WebChannel::class)]
 #[CoversClass(ApiChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\SameOrigin::class)]
 #[UsesClass(Identification::class)]
 #[UsesClass(AnonymousUser::class)]
 #[UsesClass(User::class)]

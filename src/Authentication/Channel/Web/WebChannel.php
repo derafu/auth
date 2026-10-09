@@ -14,6 +14,7 @@ namespace Derafu\Auth\Authentication\Channel\Web;
 
 use Derafu\Auth\AnonymousUser;
 use Derafu\Auth\Authentication\Identification;
+use Derafu\Auth\Authentication\SameOrigin;
 use Derafu\Auth\Contract\ChannelInterface;
 use Derafu\Auth\Contract\SessionManagerInterface;
 use Derafu\Auth\Contract\UserInterface;
@@ -240,35 +241,7 @@ final class WebChannel implements ChannelInterface
      */
     private function isLogoutRequest(ServerRequestInterface $request): bool
     {
-        return strtoupper($request->getMethod()) === 'POST' && $this->isSameOrigin($request);
-    }
-
-    /**
-     * Checks if a request comes from the same origin, by what the browser says.
-     *
-     * @return bool True if it does, or if it does not say (it is not a browser).
-     */
-    private function isSameOrigin(ServerRequestInterface $request): bool
-    {
-        $site = $request->getHeaderLine('Sec-Fetch-Site');
-        if ($site !== '') {
-            return in_array($site, ['same-origin', 'none'], true);
-        }
-
-        $origin = $request->getHeaderLine('Origin');
-        if ($origin === '') {
-            return true;
-        }
-
-        $port = static fn (?string $scheme, ?int $port): ?int => $port
-            ?? ['http' => 80, 'https' => 443][strtolower((string) $scheme)] ?? null;
-
-        $from = parse_url($origin);
-        $uri = $request->getUri();
-
-        return strtolower((string) ($from['scheme'] ?? '')) === strtolower($uri->getScheme())
-            && strtolower((string) ($from['host'] ?? '')) === strtolower($uri->getHost())
-            && $port($from['scheme'] ?? null, $from['port'] ?? null) === $port($uri->getScheme(), $uri->getPort());
+        return strtoupper($request->getMethod()) === 'POST' && SameOrigin::of($request);
     }
 
     /**

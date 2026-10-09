@@ -353,6 +353,17 @@ class KeycloakConfiguration
     }
 
     /**
+     * Gets the address of the account console of the realm, where the user edits
+     * its data.
+     *
+     * @return string The address.
+     */
+    public function getAccountUrl(): string
+    {
+        return $this->getRealmUrl() . '/account';
+    }
+
+    /**
      * Gets the Keycloak HTTP client options.
      *
      * @return array The Keycloak HTTP client options.

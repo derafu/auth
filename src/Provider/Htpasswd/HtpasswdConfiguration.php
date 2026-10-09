@@ -21,6 +21,8 @@ class HtpasswdConfiguration
 {
     private string $htpasswdPath = '';
 
+    private string $groupPath = '';
+
     /**
      * Creates a new htpasswd configuration.
      *
@@ -29,11 +31,17 @@ class HtpasswdConfiguration
     public function __construct(array $config)
     {
         $this->htpasswdPath = (string) ($config['htpasswd_path'] ?? $this->htpasswdPath);
+        $this->groupPath = (string) ($config['group_path'] ?? $this->groupPath);
         if (!empty($config['project_dir'])) {
             $this->htpasswdPath = str_replace(
                 '%kernel.project_dir%',
                 $config['project_dir'],
                 $this->htpasswdPath
+            );
+            $this->groupPath = str_replace(
+                '%kernel.project_dir%',
+                $config['project_dir'],
+                $this->groupPath
             );
         }
     }
@@ -46,6 +54,17 @@ class HtpasswdConfiguration
         if ($this->htpasswdPath === '') {
             throw new ConfigurationException('The path of the htpasswd file is not configured: set AUTH_HTPASSWD_PATH.');
         }
+    }
+
+    /**
+     * Gets the path of the group file (`.htgroup`), which gives the roles of the
+     * users, or an empty text if there is none: the users have no roles.
+     *
+     * @return string The path of the group file.
+     */
+    public function getGroupPath(): string
+    {
+        return $this->groupPath;
     }
 
     /**

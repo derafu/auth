@@ -1,0 +1,18 @@
+{% import 'auth/profile/_macros.html.twig' as macros %}
+{% trans_default_domain 'auth+intl-icu' %}
+
+<div class="card mb-3">
+    <div class="card-header">{{ 'PHP session'|trans }}</div>
+    <div class="card-body">
+        {{ macros.fields(phpSession) }}
+    </div>
+</div>
+
+{% for section in providerSession %}
+    <div class="card mb-3">
+        <div class="card-header">{{ section.title|trans }}</div>
+        <div class="card-body">
+            {{ macros.fields(section.fields) }}
+        </div>
+    </div>
+{% endfor %}

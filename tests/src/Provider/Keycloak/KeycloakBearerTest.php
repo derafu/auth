@@ -65,6 +65,7 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
 #[UsesClass(\Derafu\Auth\Exception\AuthenticationException::class)]
 #[UsesClass(\Derafu\Auth\Exception\ConfigurationException::class)]
 #[UsesClass(KeycloakConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Provider\Keycloak\TokenClaims::class)]
 #[UsesClass(KeycloakSessionManager::class)]
 #[UsesClass(KeycloakUserRepository::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\SessionManager::class)]

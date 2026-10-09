@@ -14,6 +14,9 @@ namespace Derafu\TestsAuth\Authorization;
 
 use Derafu\Auth\Authorization\AccessRules;
 use Derafu\Auth\Exception\ConfigurationException;
+use Derafu\Routing\ValueObject\Route;
+use Derafu\Routing\ValueObject\RouteMatch;
+use Laminas\Diactoros\ServerRequest;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
@@ -269,5 +272,49 @@ final class AccessRulesTest extends TestCase
         $this->expectExceptionMessage('The protected path "/a/../b" is not valid.');
 
         $this->config(['/a/../b' => ['admin']]);
+    }
+
+    /**
+     * A request to a path that matched a route with these defaults.
+     *
+     * @param array<string, mixed> $defaults
+     */
+    private function requestOfRoute(string $path, array $defaults): ServerRequest
+    {
+        return (new ServerRequest([], [], 'https://app.test' . $path, 'GET'))->withAttribute(
+            AccessRules::ROUTE_ATTRIBUTE,
+            new RouteMatch(new Route('profile', $path, 'Controller::action', $defaults))
+        );
+    }
+
+    #[Test]
+    public function aRouteThatNeedsAUserIsProtectedEvenIfNoRuleListsItsPath(): void
+    {
+        $rules = $this->config([]);
+        $request = $this->requestOfRoute('/auth/profile', [AccessRules::REQUIRES_USER => true]);
+
+        $this->assertTrue($rules->requiresAuthentication($request));
+        // A user is enough: it asks for no role.
+        $this->assertSame([], $rules->requiredRoles($request));
+    }
+
+    #[Test]
+    public function aRouteThatNeedsAUserIsProtectedEvenIfTheRulesAreNotEnforced(): void
+    {
+        $request = $this->requestOfRoute('/auth/profile', [AccessRules::REQUIRES_USER => true]);
+
+        $this->assertTrue($this->config(['/private'], enabled: false)->requiresAuthentication($request));
+    }
+
+    #[Test]
+    public function aRouteThatDoesNotSayItIsNotProtected(): void
+    {
+        $rules = $this->config([]);
+
+        $this->assertFalse($rules->requiresAuthentication($this->requestOfRoute('/page', [])));
+        $this->assertFalse($rules->requiresAuthentication($this->requestOfRoute('/page', [AccessRules::REQUIRES_USER => false])));
+        // Only a real true counts: a text is not a promise.
+        $this->assertFalse($rules->requiresAuthentication($this->requestOfRoute('/page', [AccessRules::REQUIRES_USER => 'yes'])));
+        $this->assertFalse($rules->requiresAuthentication(new ServerRequest([], [], 'https://app.test/page', 'GET')));
     }
 }

@@ -44,6 +44,7 @@ use Psr\Http\Message\ServerRequestInterface;
  */
 #[CoversClass(SessionManager::class)]
 #[CoversClass(DatabaseWebFlow::class)]
+#[UsesClass(\Derafu\Auth\Authentication\SameOrigin::class)]
 #[UsesClass(\Derafu\Auth\Authentication\LoginThrottle::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationManager::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Identification::class)]

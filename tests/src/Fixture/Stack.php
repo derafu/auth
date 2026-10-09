@@ -39,6 +39,7 @@ use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
 use Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager;
 use Derafu\Auth\Provider\Keycloak\Web\KeycloakWebFlow;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 use WeakMap;
 
@@ -305,13 +306,14 @@ final class Stack
         KeycloakSessionManager $sessionManager,
         UserInterface $anonymousUser = new AnonymousUser(),
         ?TranslatorInterface $translator = null,
-        array $settings = []
+        array $settings = [],
+        ?CacheItemPoolInterface $cache = null
     ): AuthenticationManager {
         $settings += self::settingsOf($config);
 
         return self::manager(
             new KeycloakWebFlow($userRepository, $config, self::web($settings), $sessionManager, $anonymousUser),
-            new KeycloakBearerScheme($userRepository, $config),
+            new KeycloakBearerScheme($userRepository, $config, $cache),
             $sessionManager,
             $anonymousUser,
             $translator,

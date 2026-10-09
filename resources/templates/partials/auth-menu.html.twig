@@ -1,0 +1,25 @@
+{% trans_default_domain 'auth+intl-icu' %}
+
+{#
+    The menu of the user, for the header of a site: a button to log in, or the name of
+    the user with its profile and the logout. It needs the variable `app` of the
+    templates (`app.user`).
+#}
+{% if app.user %}
+    <div class="dropdown">
+        <button class="btn btn-outline-primary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+            {{ app.user.name ?? app.user.identity }}
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="{{ profile_path() }}">{{ 'Profile'|trans }}</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li>
+                <form method="post" action="{{ logout_path() }}">
+                    <button type="submit" class="dropdown-item">{{ 'Logout'|trans }}</button>
+                </form>
+            </li>
+        </ul>
+    </div>
+{% else %}
+    <a class="btn btn-outline-primary btn-sm" href="{{ login_path() }}">{{ 'Login'|trans }}</a>
+{% endif %}

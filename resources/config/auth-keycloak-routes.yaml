@@ -6,3 +6,26 @@ auth_logout:
     path: /auth/logout
     methods: [POST]
     handler: Derafu\Auth\Provider\Keycloak\Web\KeycloakController::logout
+
+auth_login:
+    path: /auth/login
+    methods: [GET]
+    handler: Derafu\Auth\Provider\Keycloak\Web\KeycloakLoginController::login
+
+auth_profile:
+    path: /auth/profile
+    methods: [GET]
+    defaults: { requires_user: true }
+    handler: Derafu\Auth\Account\AccountController::profile
+
+auth_token_create:
+    path: /auth/profile/tokens
+    methods: [POST]
+    defaults: { requires_user: true }
+    handler: Derafu\Auth\Account\AccountController::tokenCreate
+
+auth_token_revoke:
+    path: /auth/profile/tokens/{id}/revoke
+    methods: [POST]
+    defaults: { requires_user: true }
+    handler: Derafu\Auth\Account\AccountController::tokenRevoke

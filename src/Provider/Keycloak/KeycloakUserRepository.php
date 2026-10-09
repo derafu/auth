@@ -271,6 +271,72 @@ class KeycloakUserRepository implements UserRepositoryInterface
     }
 
     /**
+     * Asks Keycloak for an offline token for a user that gives its password: the
+     * token of the API that the user makes in its profile.
+     *
+     * Each token is an offline session of its own (the one that a login of a browser
+     * makes is the session of the user, which every token of it would share, and
+     * revoking one would revoke them all), and the password is asked again, so a
+     * session cookie that was stolen is not enough. It needs the client of the
+     * application to have the direct access grants (the grant `password`) on.
+     *
+     * @param string $username The user name (the claim `preferred_username`).
+     * @param string $password Its password.
+     * @param string|null $otp The code of its second factor, if it has one.
+     * @return array<string, mixed> What Keycloak gives: `refresh_token` is the offline
+     * token.
+     * @throws AuthenticationException If Keycloak does not accept the credentials, or
+     * it does not give an offline token.
+     * @throws ProviderUnavailableException If Keycloak can not answer.
+     */
+    public function requestOfflineToken(string $username, string $password, ?string $otp = null): array
+    {
+        try {
+            $response = $this->httpClient->request('POST', $this->config->getRealmUrl() . '/protocol/openid-connect/token', [
+                'form_params' => array_filter([
+                    'grant_type' => 'password',
+                    'client_id' => $this->config->getClientId(),
+                    'client_secret' => $this->config->getClientSecret(),
+                    'username' => $username,
+                    'password' => $password,
+                    'totp' => $otp,
+                    'scope' => 'openid offline_access',
+                ], fn ($value) => $value !== null && $value !== ''),
+                'headers' => ['Accept' => 'application/json'],
+                'http_errors' => false,
+            ]);
+            $status = $response->getStatusCode();
+            $answer = json_decode((string) $response->getBody(), true);
+        } catch (Exception $e) {
+            throw new ProviderUnavailableException(['Failed to ask Keycloak for a token: {error}', 'error' => $e->getMessage()], 0, $e);
+        }
+
+        if ($status >= 500 || !is_array($answer)) {
+            throw new ProviderUnavailableException(['Failed to ask Keycloak for a token: {error}', 'error' => 'HTTP status ' . $status]);
+        }
+
+        if ($status !== 200) {
+            // The client has no direct access grants: it is the configuration of the
+            // application, not a mistake of the user.
+            if (in_array($answer['error'] ?? '', ['unauthorized_client', 'invalid_client'], true)) {
+                throw new AuthenticationException(
+                    'Keycloak does not let this application make tokens with a password: turn on the direct access grants of its client.',
+                    400
+                );
+            }
+
+            throw new AuthenticationException('The password is not valid.', 401);
+        }
+
+        $token = $answer['refresh_token'] ?? null;
+        if (!is_string($token) || !TokenClaims::isOffline($token)) {
+            throw new AuthenticationException('The token that Keycloak gave is not one for the API.', 400);
+        }
+
+        return $answer;
+    }
+
+    /**
      * Creates an authorization URL for OAuth2 flow.
      *
      * It has the `state` (against CSRF), the `nonce` (that the ID token must

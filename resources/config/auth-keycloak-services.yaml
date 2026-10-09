@@ -72,3 +72,14 @@ services:
     # Keycloak controller.
     Derafu\Auth\Provider\Keycloak\Web\KeycloakController:
         public: true
+
+    # The account: the data in the account console of the realm, the tokens of the
+    # API (offline tokens) that the user makes and revokes, and the route that
+    # starts the login.
+    Derafu\Auth\Provider\Keycloak\Account\KeycloakAccountClient: ~
+    Derafu\Auth\Provider\Keycloak\Account\KeycloakApiTokenManager: ~
+    Derafu\Auth\Contract\AccountInterface:
+        class: Derafu\Auth\Provider\Keycloak\Account\KeycloakAccount
+        lazy: true
+    Derafu\Auth\Provider\Keycloak\Web\KeycloakLoginController:
+        public: true

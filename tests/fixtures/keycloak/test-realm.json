@@ -3,6 +3,8 @@
   "enabled": true,
   "sslRequired": "none",
   "registrationAllowed": false,
+  "revokeRefreshToken": false,
+  "offlineSessionIdleTimeout": 315360000,
   "roles": {
     "realm": [
       {
@@ -37,7 +39,7 @@
       "publicClient": false,
       "secret": "test-secret",
       "standardFlowEnabled": true,
-      "directAccessGrantsEnabled": false,
+      "directAccessGrantsEnabled": true,
       "serviceAccountsEnabled": false,
       "redirectUris": [
         "https://app.test/auth/callback"
@@ -142,6 +144,34 @@
         ],
         "account": [
           "view-profile"
+        ],
+        "derafu-api": [
+          "writer"
+        ]
+      }
+    },
+    {
+      "username": "otto",
+      "email": "otto@example.com",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Otto",
+      "lastName": "Rojas",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "secret",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "admin",
+        "offline_access"
+      ],
+      "clientRoles": {
+        "account": [
+          "view-profile",
+          "manage-account"
         ],
         "derafu-api": [
           "writer"

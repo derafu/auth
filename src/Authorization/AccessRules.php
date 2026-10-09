@@ -29,6 +29,10 @@ use Psr\Http\Message\ServerRequestInterface;
  *   - The ones of the protected path that matches, if it has roles (the site
  *     decides over the routes that it imports).
  *   - Otherwise, the ones that the matched route declares.
+ *
+ * A route can also say that it needs an authenticated user with no particular
+ * role (the default `requires_user`), and it is protected even when the site did
+ * not list its path.
  */
 class AccessRules implements AccessRulesInterface
 {
@@ -36,6 +40,13 @@ class AccessRules implements AccessRulesInterface
      * The attribute name used to store the matched route.
      */
     public const ROUTE_ATTRIBUTE = 'derafu.route';
+
+    /**
+     * The default of a route that says that it needs an authenticated user (any
+     * user, no role), whether the site listed its path or not: the pages of the
+     * account of the user (`/auth/profile`) are the ones that declare it.
+     */
+    public const REQUIRES_USER = 'requires_user';
 
     /**
      * The protected paths.
@@ -111,6 +122,21 @@ class AccessRules implements AccessRulesInterface
     }
 
     /**
+     * Tells whether the matched route says that it needs an authenticated user
+     * (see `REQUIRES_USER`).
+     *
+     * @param ServerRequestInterface $request The request.
+     */
+    public static function routeNeedsUser(ServerRequestInterface $request): bool
+    {
+        $route = $request->getAttribute(self::ROUTE_ATTRIBUTE);
+
+        return $route instanceof RouteMatchInterface
+            && ($route->getDefaults()[self::REQUIRES_USER] ?? false) === true
+        ;
+    }
+
+    /**
      * {@inheritDoc}
      */
     public function isEnabled(): bool
@@ -141,13 +167,14 @@ class AccessRules implements AccessRulesInterface
      * escaped separator, a control character...) is protected: it can not be told
      * which rule it is under, so it is not let in without a user.
      *
-     * A route that declares roles is protected, even when the site did not list
-     * its path.
+     * A route that declares roles, or that says that it needs a user, is
+     * protected, even when the site did not list its path.
      */
     public function requiresAuthentication(ServerRequestInterface $request): bool
     {
         return $this->isProtected($request->getUri()->getPath())
             || self::routeRoles($request) !== []
+            || self::routeNeedsUser($request)
         ;
     }
 

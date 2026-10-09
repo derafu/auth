@@ -1,0 +1,26 @@
+{% extends 'layouts/default.html.twig' %}
+{% trans_default_domain 'auth+intl-icu' %}
+
+{# The token that was just made: it is shown here and nowhere else, and this page is not cached. #}
+
+{% block content %}
+<div class="my-5 container">
+    <h1 class="border-bottom mb-4">{% block title %}{{ 'Your token'|trans }}{% endblock %}</h1>
+
+    <div class="alert alert-warning" role="alert">
+        {{ 'Copy it now: it is shown only once. Treat it as a password, whoever has it acts as you.'|trans }}
+    </div>
+
+    <div class="mb-4">
+        <label for="token" class="form-label">{{ 'Token'|trans }}</label>
+        <textarea id="token" class="form-control font-monospace" rows="6" readonly onclick="this.select()">{{ token }}</textarea>
+    </div>
+
+    <p>{{ 'Send it in the header of each request:'|trans }}</p>
+    <pre class="border rounded p-2 small overflow-auto"><code>curl -H "Authorization: {{ apiScheme }} TOKEN" {{ baseUrl }}/api/...</code></pre>
+
+    <p class="mt-4">
+        <a href="{{ profile_path() }}?tab=api" class="btn btn-primary">{{ 'Back to the profile'|trans }}</a>
+    </p>
+</div>
+{% endblock %}

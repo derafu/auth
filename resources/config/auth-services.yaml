@@ -106,3 +106,11 @@ services:
         lazy: Derafu\Auth\Contract\ChannelInterface
         tags:
             - { name: derafu_auth.channel, priority: 100 }
+
+    # The pages of the account of the user (the profile and the tokens of the API):
+    # the same for every provider, what changes is the `AccountInterface` that the
+    # provider gives. The functions of Twig (`is_granted`, `logout_path`...) are an
+    # extension that the application adds to the ones of its renderer.
+    Derafu\Auth\Account\AccountController:
+        public: true
+    Derafu\Auth\Twig\AuthExtension: ~

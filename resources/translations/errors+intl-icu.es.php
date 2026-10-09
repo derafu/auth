@@ -118,4 +118,27 @@ return [
         'La autenticación falló: {error}',
     'The session can not be renewed in place: use the session of Mezzio\\Session\\SessionMiddleware.' =>
         'La sesión no se puede renovar en el lugar: usa la sesión de Mezzio\\Session\\SessionMiddleware.',
+
+    // The account of the user.
+    'You must be logged in to access the requested page {path}' => 'Debes iniciar sesión para acceder a la página solicitada {path}',
+    'The request has no session.' => 'La solicitud no tiene sesión.',
+    'This provider has no tokens for the API.' => 'Este proveedor no tiene tokens para la API.',
+    'The request does not come from this site.' => 'La solicitud no viene de este sitio.',
+
+    // The group file of the `.htpasswd` provider.
+    'The group file "{path}" can not be read.' => 'El archivo de grupos "{path}" no se puede leer.',
+
+    // The tokens of the API of Keycloak.
+    'The token is not for the user of this session.' => 'El token no es del usuario de esta sesión.',
+    'The token that Keycloak gave is not one for the API.' => 'El token que entregó Keycloak no es uno para la API.',
+    'Keycloak did not revoke the token (HTTP status {status}).' => 'Keycloak no revocó el token (estado HTTP {status}).',
+    'Keycloak did not let the sessions be read (HTTP status {status}).' => 'Keycloak no dejó leer las sesiones (estado HTTP {status}).',
+    'Failed to read the account of Keycloak: {error}' => 'No se pudo leer la cuenta en Keycloak: {error}',
+    'The password is not valid.' => 'La contraseña no es válida.',
+    'Keycloak does not let this application make tokens with a password: turn on the direct access grants of its client.' =>
+        'Keycloak no deja que esta aplicación cree tokens con una contraseña: activa los direct access grants de su cliente.',
+    'Failed to ask Keycloak for a token: {error}' => 'No se pudo pedir el token a Keycloak: {error}',
+    'The user has no such token.' => 'El usuario no tiene ese token.',
+    'There is no session with Keycloak.' => 'No hay una sesión con Keycloak.',
+    'There is no user in the session.' => 'No hay un usuario en la sesión.',
 ];

@@ -72,3 +72,7 @@ services:
     # Database controller.
     Derafu\Auth\Provider\Database\Web\DatabaseController:
         public: true
+
+    # The account: a user and a password, no tokens.
+    Derafu\Auth\Contract\AccountInterface:
+        class: Derafu\Auth\Account\BasicAccount

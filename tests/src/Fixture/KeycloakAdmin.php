@@ -104,6 +104,33 @@ final class KeycloakAdmin
         $this->request('DELETE', '/users/' . $this->userId($username) . '/role-mappings/realm', [$this->role($role)]);
     }
 
+    /**
+     * Gives a role of a client to the user (the roles of the client `account` that
+     * a realm gives by default to its users, which the test realm does not).
+     */
+    public function addClientRole(string $username, string $client, string $role): void
+    {
+        $uuid = $this->clientId($client);
+        $found = $this->request('GET', '/clients/' . $uuid . '/roles/' . rawurlencode($role));
+
+        $this->request(
+            'POST',
+            '/users/' . $this->userId($username) . '/role-mappings/clients/' . $uuid,
+            [['id' => $found['id'], 'name' => $found['name']]]
+        );
+    }
+
+    /**
+     * How many offline sessions (tokens of the API) the user has for a client.
+     */
+    public function offlineSessions(string $username, string $client): int
+    {
+        return count($this->request(
+            'GET',
+            '/users/' . $this->userId($username) . '/offline-sessions/' . $this->clientId($client)
+        ));
+    }
+
     public function setEnabled(string $username, bool $enabled): void
     {
         $this->request('PUT', '/users/' . $this->userId($username), ['enabled' => $enabled]);
@@ -118,7 +145,7 @@ final class KeycloakAdmin
     }
 
     /**
-     * Leaves the realm and the user `ana` as the file of the realm has them.
+     * Leaves the realm and the users `ana` and `otto` as the file of the realm has them.
      */
     public function reset(): void
     {
@@ -131,6 +158,20 @@ final class KeycloakAdmin
         $this->setProfileVerification(true);
         $this->setEnabled('ana', true);
 
+        // The roles of the client `account` that a test gave, and the offline
+        // sessions that it made.
+        $account = $this->clientId('account');
+        $given = array_column($this->request('GET', '/users/' . $this->userId('ana') . '/role-mappings/clients/' . $account), 'name');
+        foreach (array_diff($given, ['view-profile']) as $role) {
+            $found = $this->request('GET', '/clients/' . $account . '/roles/' . rawurlencode($role));
+            $this->request(
+                'DELETE',
+                '/users/' . $this->userId('ana') . '/role-mappings/clients/' . $account,
+                [['id' => $found['id'], 'name' => $found['name']]]
+            );
+        }
+        $this->deleteConsent('ana', 'derafu-auth');
+
         $roles = array_column($this->request('GET', '/users/' . $this->userId('ana') . '/role-mappings/realm'), 'name');
         foreach (array_diff($roles, ['admin', 'default-roles-test', 'offline_access', 'uma_authorization']) as $role) {
             $this->removeRealmRole('ana', $role);
@@ -139,6 +180,15 @@ final class KeycloakAdmin
             $this->addRealmRole('ana', 'admin');
         }
         $this->logOut('ana');
+
+        $this->setEnabled('otto', true);
+        $this->deleteConsent('otto', 'derafu-auth');
+        foreach (array_column($this->request('GET', '/users/' . $this->userId('otto') . '/role-mappings/realm'), 'name') as $role) {
+            if (!in_array($role, ['admin', 'default-roles-test', 'offline_access', 'uma_authorization'], true)) {
+                $this->removeRealmRole('otto', $role);
+            }
+        }
+        $this->logOut('otto');
     }
 
     /**
@@ -151,6 +201,28 @@ final class KeycloakAdmin
     private function updateRealm(array $changes): void
     {
         $this->request('PUT', '', $changes);
+    }
+
+    /**
+     * Removes what the user granted to a client, which ends its offline sessions.
+     */
+    private function deleteConsent(string $username, string $client): void
+    {
+        $response = $this->http->request(
+            'DELETE',
+            $this->url . '/admin/realms/' . self::REALM . '/users/' . $this->userId($username) . '/consents/' . rawurlencode($client),
+            ['headers' => ['Authorization' => 'Bearer ' . $this->token()]]
+        );
+        if ($response->getStatusCode() >= 300 && $response->getStatusCode() !== 404) {
+            throw new RuntimeException('The consent could not be removed: ' . $response->getStatusCode());
+        }
+    }
+
+    private function clientId(string $client): string
+    {
+        $clients = $this->request('GET', '/clients?clientId=' . rawurlencode($client));
+
+        return $clients[0]['id'] ?? throw new RuntimeException('The client "' . $client . '" is not in the realm.');
     }
 
     private function userId(string $username): string

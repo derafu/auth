@@ -60,6 +60,7 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
 #[CoversClass(KeycloakTokenVerifier::class)]
 #[CoversClass(KeycloakUserRepository::class)]
 #[CoversClass(KeycloakSessionManager::class)]
+#[UsesClass(\Derafu\Auth\Authentication\SameOrigin::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationManager::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Identification::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]

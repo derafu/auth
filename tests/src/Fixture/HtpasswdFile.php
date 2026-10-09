@@ -54,6 +54,37 @@ final class HtpasswdFile
         file_put_contents($this->path, $line . "\n", FILE_APPEND);
     }
 
+    /**
+     * The group file (`.htgroup`) next to the file: a line of each role, with the
+     * identities that have it. The configuration of this file uses it.
+     *
+     * @param array<string, list<string>> $roles The identities of each role.
+     */
+    public function groups(array $roles): void
+    {
+        $lines = '';
+        foreach ($roles as $role => $identities) {
+            $lines .= $role . ': ' . implode(' ', $identities) . "\n";
+        }
+        file_put_contents($this->path . '.group', $lines);
+    }
+
+    /**
+     * Adds a line to the group file as it is.
+     */
+    public function appendGroup(string $line): void
+    {
+        file_put_contents($this->path . '.group', $line . "\n", FILE_APPEND);
+    }
+
+    /**
+     * The path of the group file.
+     */
+    public function groupPath(): string
+    {
+        return $this->path . '.group';
+    }
+
     public function path(): string
     {
         return $this->path;
@@ -64,13 +95,18 @@ final class HtpasswdFile
      */
     public function config(array $config = []): HtpasswdConfiguration
     {
-        return Stack::htpasswdConfiguration($config + ['htpasswd_path' => $this->path]);
+        return Stack::htpasswdConfiguration($config + [
+            'htpasswd_path' => $this->path,
+            'group_path' => is_file($this->path . '.group') ? $this->path . '.group' : '',
+        ]);
     }
 
     public function remove(): void
     {
-        if (is_file($this->path)) {
-            unlink($this->path);
+        foreach ([$this->path, $this->path . '.group'] as $file) {
+            if (is_file($file)) {
+                unlink($file);
+            }
         }
     }
 }

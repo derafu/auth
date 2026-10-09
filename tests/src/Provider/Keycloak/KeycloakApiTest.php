@@ -60,6 +60,7 @@ use Psr\Http\Message\ServerRequestInterface;
 #[UsesClass(\Derafu\Auth\User::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationMiddleware::class)]
+#[UsesClass(\Derafu\Auth\Provider\Keycloak\TokenClaims::class)]
 final class KeycloakApiTest extends TestCase
 {
     private static RealKeycloak $keycloak;

@@ -61,7 +61,7 @@ final class AuthMessagesTest extends TestCase
             {
                 return array_map(
                     fn (string $name) => new TwigFunction($name, fn () => ''),
-                    ['path', 'form_start', 'form_element', 'form_captcha', 'form_csrf', 'form_end']
+                    ['path', 'form_start', 'form_element', 'form_captcha', 'form_csrf', 'form_end', 'is_granted', 'login_path', 'logout_path', 'profile_path']
                 );
             }
         };
@@ -78,6 +78,13 @@ final class AuthMessagesTest extends TestCase
             messageMethods: [
                 new MessageMethod(Flash::class, 'error', domain: 'auth', id: 1),
                 new MessageMethod(Flash::class, 'success', domain: 'auth', id: 1),
+            ],
+            // The examples of a call to the API are code, not prose: they are not
+            // translated.
+            allowedTexts: [
+                'curl -u USERNAME:PASSWORD /api/...',
+                'curl -H "Authorization: Bearer TOKEN" /api/...',
+                'curl -H "Authorization: TOKEN" /api/...',
             ]
         );
 
@@ -113,6 +120,10 @@ final class AuthMessagesTest extends TestCase
 
         $this->assertSame(
             [
+                'Derafu\\Auth\\Account\\AccountController::tokenCreate: '
+                    . '\\Derafu\\Auth\\Authentication\\Channel\\Web\\Flash::error($request, $e->getTranslatableMessage())',
+                'Derafu\\Auth\\Account\\AccountController::tokenRevoke: '
+                    . '\\Derafu\\Auth\\Authentication\\Channel\\Web\\Flash::error($request, $e->getTranslatableMessage())',
                 'Derafu\\Auth\\Authentication\\Channel\\Web\\Flash::message: '
                     . 'new \\Derafu\\Translation\\TranslatableMessage($message, $parameters, \'auth\')',
                 'Derafu\\Auth\\Authentication\\Channel\\Web\\FormManager::processForm: '
@@ -121,6 +132,10 @@ final class AuthMessagesTest extends TestCase
                     . '\\Derafu\\Auth\\Authentication\\Channel\\Web\\Flash::error($request, $e->getTranslatableMessage(), now: true)',
                 'Derafu\\Auth\\Provider\\Htpasswd\\Web\\HtpasswdWebFlow::login: '
                     . '\\Derafu\\Auth\\Authentication\\Channel\\Web\\Flash::error($request, $e->getTranslatableMessage(), now: true)',
+                'auth/profile/_macros.html.twig: <th scope="row" class="w-25">{{ field.label|trans }}</th>',
+                'auth/profile/_session.html.twig: <div class="card-header">{{ section.title|trans }}</div>',
+                'auth/profile/_tokens.html.twig: <div class="alert alert-warning small" role="alert">{{ tokensError|trans }}</div>',
+                'auth/profile/_tokens.html.twig: <label for="token-{{ field.name }}" class="form-label">{{ field.label|trans }}</label>',
                 'partials/flash-messages.html.twig: '
                     . '{% set text = message.message|trans(parameters, message.domain ?? null) %}',
             ],

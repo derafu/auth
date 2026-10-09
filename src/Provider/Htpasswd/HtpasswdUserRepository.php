@@ -26,9 +26,15 @@ use Derafu\Auth\UserFactory;
  * `{SHA}`, `crypt`) is ignored, as if the user was not in the file. So are the
  * blank lines and the ones that start with `#`.
  *
- * The file only says who the user is: the user has no roles and no details. The
- * file is read every time it is needed, so a change in it is what the next
- * request sees. A user that does not exist takes as long as one that does (the
+ * The roles of the users are in a second file, the group file (`.htgroup`, the
+ * one of `AuthGroupFile` of Apache, see `HtpasswdConfiguration::getGroupPath()`):
+ * a line is `role: identity identity...`, and the blank lines and the ones that
+ * start with `#` are ignored. A user that is in a group and not in the
+ * `.htpasswd` is not a user, so it is ignored too. Without a group file the users
+ * have no roles, and they have no details.
+ *
+ * The files are read every time they are needed, so a change in them is what the
+ * next request sees. A user that does not exist takes as long as one that does (the
  * password is verified against a hash anyway), so the time it takes does not say
  * which identities exist.
  */
@@ -75,7 +81,7 @@ class HtpasswdUserRepository implements UserRepositoryInterface
             return null;
         }
 
-        return $this->userFactory->create($credential);
+        return $this->userFactory->create($credential, $this->rolesOf($credential));
     }
 
     /**
@@ -90,7 +96,7 @@ class HtpasswdUserRepository implements UserRepositoryInterface
     public function find(string $identity): ?UserInterface
     {
         return isset($this->read()[$identity])
-            ? $this->userFactory->create($identity)
+            ? $this->userFactory->create($identity, $this->rolesOf($identity))
             : null
         ;
     }
@@ -126,6 +132,45 @@ class HtpasswdUserRepository implements UserRepositoryInterface
         }
 
         return $users;
+    }
+
+    /**
+     * The roles of a user: the groups of the group file that have it.
+     *
+     * @return list<string>
+     * @throws ConfigurationException If there is a group file and it can not be
+     * read: a user does not go in with fewer roles than the ones it has.
+     */
+    private function rolesOf(string $identity): array
+    {
+        $path = $this->config->getGroupPath();
+        if ($path === '') {
+            return [];
+        }
+
+        $lines = is_file($path) ? @file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) : false;
+        if ($lines === false) {
+            throw new ConfigurationException([
+                'The group file "{path}" can not be read.',
+                'path' => $path,
+            ]);
+        }
+
+        $roles = [];
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line === '' || $line[0] === '#' || !str_contains($line, ':')) {
+                continue;
+            }
+
+            [$role, $members] = explode(':', $line, 2);
+            $role = trim($role);
+            if ($role !== '' && in_array($identity, preg_split('/\s+/', trim($members)) ?: [], true)) {
+                $roles[] = $role;
+            }
+        }
+
+        return array_values(array_unique($roles));
     }
 
     /**

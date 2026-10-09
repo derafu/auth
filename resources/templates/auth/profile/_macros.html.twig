@@ -1,0 +1,37 @@
+{% trans_default_domain 'auth+intl-icu' %}
+
+{#
+    How a value of the profile is shown: a boolean as yes or no, a list as a row of
+    badges, a map as its JSON, nothing as a dash, and the rest as text.
+#}
+{% macro value(value) %}
+    {% if value is same as(true) %}
+        {{ 'Yes'|trans }}
+    {% elseif value is same as(false) %}
+        {{ 'No'|trans }}
+    {% elseif value is null or value is same as('') %}
+        <span class="text-body-secondary">&mdash;</span>
+    {% elseif value is iterable %}
+        {% if value|keys == value|keys|sort and value|keys|first is same as(0) %}
+            {% for item in value %}<span class="badge text-bg-secondary me-1">{{ item is iterable ? item|json_encode : item }}</span>{% endfor %}
+        {% else %}
+            <code>{{ value|json_encode }}</code>
+        {% endif %}
+    {% else %}
+        {{ value }}
+    {% endif %}
+{% endmacro %}
+
+{# A table of fields: each one has a label (its text in English) and a value. #}
+{% macro fields(fields) %}
+    <table class="table table-sm align-middle mb-0">
+        <tbody>
+            {% for field in fields %}
+                <tr>
+                    <th scope="row" class="w-25">{{ field.label|trans }}</th>
+                    <td>{{ _self.value(field.value) }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endmacro %}

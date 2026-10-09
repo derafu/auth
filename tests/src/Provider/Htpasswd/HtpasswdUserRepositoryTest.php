@@ -205,4 +205,91 @@ final class HtpasswdUserRepositoryTest extends TestCase
         $config->validate();
         $this->assertSame('/app/etc/.htpasswd', $config->getHtpasswdPath());
     }
+
+    #[Test]
+    public function theRolesAreTheGroupsOfTheGroupFileThatHaveTheUser(): void
+    {
+        $this->file->groups(['admin' => ['ana', 'beto'], 'editor' => ['ana']]);
+        $repository = $this->repository();
+
+        $this->assertSame(['admin', 'editor'], $repository->authenticate('ana', 'secret')?->getRoles());
+        $this->assertSame(['admin'], $repository->authenticate('beto', 'other')?->getRoles());
+        // A session finds the user again with the same roles.
+        $this->assertSame(['admin', 'editor'], $repository->find('ana')?->getRoles());
+    }
+
+    #[Test]
+    public function aUserThatIsInNoGroupHasNoRoles(): void
+    {
+        $this->file->groups(['admin' => ['beto']]);
+
+        $this->assertSame([], $this->repository()->authenticate('ana', 'secret')?->getRoles());
+    }
+
+    #[Test]
+    public function theGroupFileIgnoresCommentsBlankLinesAndWhatIsNotAGroup(): void
+    {
+        $this->file->groups([]);
+        $this->file->appendGroup('# who can do what');
+        $this->file->appendGroup('');
+        $this->file->appendGroup('not a group');
+        $this->file->appendGroup(": ana");
+        $this->file->appendGroup("admin:   ana \t beto  ");
+        $this->file->appendGroup('admin: ana');
+
+        $repository = $this->repository();
+
+        $this->assertSame(['admin'], $repository->find('ana')?->getRoles());
+        $this->assertSame(['admin'], $repository->find('beto')?->getRoles());
+    }
+
+    #[Test]
+    public function aUserThatIsInAGroupAndNotInTheHtpasswdIsNotAUser(): void
+    {
+        $this->file->groups(['admin' => ['ana', 'ghost']]);
+        $repository = $this->repository();
+
+        $this->assertNull($repository->find('ghost'));
+        $this->assertNull($repository->authenticate('ghost', 'secret'));
+    }
+
+    #[Test]
+    public function aChangeInTheGroupFileIsSeenByTheNextRequest(): void
+    {
+        $this->file->groups(['admin' => ['ana']]);
+        $repository = $this->repository();
+        $before = $repository->find('ana');
+
+        $this->file->groups(['editor' => ['ana']]);
+        $after = $repository->find('ana');
+
+        $this->assertSame(['admin'], $before?->getRoles());
+        $this->assertSame(['editor'], $after?->getRoles());
+    }
+
+    #[Test]
+    public function aGroupFileThatCanNotBeReadIsAConfigurationError(): void
+    {
+        $repository = new HtpasswdUserRepository(Stack::htpasswdConfiguration([
+            'htpasswd_path' => $this->file->path(),
+            'group_path' => $this->file->path() . '.missing',
+        ]));
+
+        $this->expectException(ConfigurationException::class);
+
+        $repository->authenticate('ana', 'secret');
+    }
+
+    #[Test]
+    public function theGroupPathCanUseTheProjectDirectory(): void
+    {
+        $config = Stack::htpasswdConfiguration([
+            'htpasswd_path' => '%kernel.project_dir%/.htpasswd',
+            'group_path' => '%kernel.project_dir%/.htgroup',
+            'project_dir' => '/app',
+        ]);
+
+        $this->assertSame('/app/.htpasswd', $config->getHtpasswdPath());
+        $this->assertSame('/app/.htgroup', $config->getGroupPath());
+    }
 }

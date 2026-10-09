@@ -44,6 +44,7 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
  * with the login (the form, the credentials) and with the unauthorized.
  */
 #[CoversClass(DatabaseWebFlow::class)]
+#[UsesClass(\Derafu\Auth\Authentication\SameOrigin::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationManager::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Identification::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]

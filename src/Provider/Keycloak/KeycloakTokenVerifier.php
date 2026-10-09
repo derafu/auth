@@ -148,7 +148,9 @@ class KeycloakTokenVerifier
      * is its audience, so it must have the configured one (see
      * `KeycloakConfiguration::getApiAudience()`). Apart from the signature, the
      * issuer and the expiration, it must be an access token (an ID token, a
-     * refresh token or an offline token are not one, they must not open the API).
+     * refresh token or an offline token are not one, they must not open the API by
+     * themselves: an offline token is exchanged for an access token first, see
+     * `KeycloakBearerScheme`).
      *
      * It is verified only by what it says: a token that was not revoked, of a
      * user that was disabled after it was given, is valid until it expires.
