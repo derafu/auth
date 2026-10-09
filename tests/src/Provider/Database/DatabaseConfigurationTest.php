@@ -12,7 +12,6 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth\Provider\Database;
 
-use Derafu\Auth\Abstract\AbstractProviderConfiguration;
 use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Auth\Provider\Database\DatabaseConfiguration;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -21,11 +20,10 @@ use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 
 /**
- * The configuration of the database provider and the base one that every
- * provider shares (protected paths, login and logout, redirects and enabled).
+ * The configuration of the database provider: where the database is and how its
+ * users are read.
  */
 #[CoversClass(DatabaseConfiguration::class)]
-#[CoversClass(AbstractProviderConfiguration::class)]
 #[UsesClass(ConfigurationException::class)]
 final class DatabaseConfigurationTest extends TestCase
 {
@@ -146,7 +144,7 @@ final class DatabaseConfigurationTest extends TestCase
     public function aDatabaseUrlIsRequired(): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage('Database URL is required.');
+        $this->expectExceptionMessage('The database URL is not configured: set AUTH_DATABASE_URL (or DATABASE_URL).');
 
         (new DatabaseConfiguration([]))->validate();
     }
@@ -157,136 +155,6 @@ final class DatabaseConfigurationTest extends TestCase
         (new DatabaseConfiguration(['database_url' => 'sqlite::memory:']))->validate();
 
         $this->addToAssertionCount(1);
-    }
-
-    #[Test]
-    public function theValuesAreReadByKeyAndAsAnArray(): void
-    {
-        $config = new DatabaseConfiguration([
-            'database_url' => 'sqlite::memory:',
-            'login_path' => '/in',
-        ]);
-
-        $this->assertSame('sqlite::memory:', $config->get('database_url'));
-        $this->assertSame('user', $config->get('user_repository')['table']);
-        $this->assertSame('/in', $config->get('login_path'));
-        $this->assertSame('default', $config->get('nothing', 'default'));
-        $this->assertSame('sqlite::memory:', $config->toArray()['database_url']);
-        $this->assertSame('/in', $config->toArray()['login_path']);
-    }
-
-    #[Test]
-    public function theBaseConfigurationHasDefaults(): void
-    {
-        $config = new DatabaseConfiguration(['database_url' => 'sqlite::memory:']);
-
-        $this->assertSame([], $config->getProtectedPaths());
-        $this->assertSame('/auth/login', $config->getLoginPath());
-        $this->assertSame('/auth/logout', $config->getLogoutPath());
-        $this->assertSame('/', $config->getLoginRedirectPath());
-        $this->assertSame('/', $config->getLogoutRedirectPath());
-        $this->assertSame('/', $config->getUnauthorizedRedirectPath());
-        $this->assertTrue($config->isEnabled());
-    }
-
-    #[Test]
-    public function theProtectedPathsAreAListOrAMapWithTheirRoles(): void
-    {
-        $config = new DatabaseConfiguration([
-            'database_url' => 'sqlite::memory:',
-            'protected_paths' => ['/private', '/admin' => 'admin', '/staff' => ['editor', 'admin']],
-        ]);
-
-        $this->assertSame(
-            ['/private' => [], '/admin' => ['admin'], '/staff' => ['editor', 'admin']],
-            $config->getProtectedPaths()
-        );
-    }
-
-    #[Test]
-    public function aPathRequiresAuthenticationWhenItStartsWithAProtectedPath(): void
-    {
-        $config = new DatabaseConfiguration([
-            'database_url' => 'sqlite::memory:',
-            'protected_paths' => ['/private', '/admin' => 'admin'],
-        ]);
-
-        $this->assertTrue($config->requiresAuth('/private'));
-        $this->assertTrue($config->requiresAuth('/private/page'));
-        $this->assertTrue($config->requiresAuth('/admin/users'));
-        $this->assertFalse($config->requiresAuth('/public'));
-        $this->assertFalse($config->requiresAuth('/'));
-
-        $this->assertSame([], $config->allowedRoles('/private/page'));
-        $this->assertSame(['admin'], $config->allowedRoles('/admin/users'));
-        $this->assertSame([], $config->allowedRoles('/public'));
-    }
-
-    #[Test]
-    public function aDisabledAuthenticationProtectsNothing(): void
-    {
-        $config = new DatabaseConfiguration([
-            'database_url' => 'sqlite::memory:',
-            'protected_paths' => ['/admin' => 'admin'],
-            'enabled' => false,
-        ]);
-
-        $this->assertFalse($config->isEnabled());
-        $this->assertFalse($config->requiresAuth('/admin/users'));
-        $this->assertSame([], $config->allowedRoles('/admin/users'));
-    }
-
-    #[Test]
-    public function thePathsAndTheRedirectsCanBeConfigured(): void
-    {
-        $config = new DatabaseConfiguration([
-            'database_url' => 'sqlite::memory:',
-            'login_path' => '/in',
-            'logout_path' => '/out',
-            'login_redirect_path' => '/home',
-            'logout_redirect_path' => '/bye',
-            'unauthorized_redirect_path' => '/in',
-        ]);
-
-        $this->assertSame('/in', $config->getLoginPath());
-        $this->assertSame('/out', $config->getLogoutPath());
-        $this->assertSame('/home', $config->getLoginRedirectPath());
-        $this->assertSame('/bye', $config->getLogoutRedirectPath());
-        $this->assertSame('/in', $config->getUnauthorizedRedirectPath());
-    }
-
-    #[Test]
-    public function theRefreshIntervalIsFiveMinutesByDefault(): void
-    {
-        $config = new DatabaseConfiguration(['database_url' => 'sqlite::memory:']);
-
-        $this->assertSame(300, $config->getRefreshInterval());
-        $this->assertSame(300, $config->get('refresh_interval'));
-        $this->assertSame(300, $config->toArray()['refresh_interval']);
-    }
-
-    #[Test]
-    public function theRefreshIntervalCanBeConfiguredAndZeroIsTheDefault(): void
-    {
-        $this->assertSame(
-            45,
-            (new DatabaseConfiguration(['database_url' => 'sqlite::memory:', 'refresh_interval' => 45]))
-                ->getRefreshInterval()
-        );
-        $this->assertSame(
-            300,
-            (new DatabaseConfiguration(['database_url' => 'sqlite::memory:', 'refresh_interval' => 0]))
-                ->getRefreshInterval()
-        );
-    }
-
-    #[Test]
-    public function aNegativeRefreshIntervalIsAConfigurationError(): void
-    {
-        $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage('The refresh interval must be a number of seconds, 0 or more.');
-
-        new DatabaseConfiguration(['database_url' => 'sqlite::memory:', 'refresh_interval' => -1]);
     }
 
     #[Test]

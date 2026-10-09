@@ -12,7 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth\Translation;
 
-use Derafu\Auth\Abstract\AbstractProviderAuthentication;
+use Derafu\Auth\Authentication\Channel\Web\Flash;
 use Derafu\Auth\Translation\AuthTranslationResourceProvider;
 use Derafu\Form\Lint\FormTranslationAudit;
 use Derafu\Translation\Lint\MessageMethod;
@@ -76,8 +76,8 @@ final class AuthMessagesTest extends TestCase
                 'extensions' => [$application],
             ]))->getTwig(),
             messageMethods: [
-                new MessageMethod(AbstractProviderAuthentication::class, 'addErrorFlash', domain: 'auth', id: 1),
-                new MessageMethod(AbstractProviderAuthentication::class, 'addSuccessFlash', domain: 'auth', id: 1),
+                new MessageMethod(Flash::class, 'error', domain: 'auth', id: 1),
+                new MessageMethod(Flash::class, 'success', domain: 'auth', id: 1),
             ]
         );
 
@@ -89,7 +89,7 @@ final class AuthMessagesTest extends TestCase
         // templates, so the audit of the templates sees them as not used: they
         // are the ones that the audit of the form finds.
         $forms = (new FormTranslationAudit())->audit(
-            $root . '/src/Provider/Database/Form',
+            $root . '/src/Provider/Database/Web/Form',
             new AuthTranslationResourceProvider()
         );
         $this->assertFalse($forms->nothingFound);
@@ -113,12 +113,14 @@ final class AuthMessagesTest extends TestCase
 
         $this->assertSame(
             [
-                'Derafu\\Auth\\FormManager::processForm: '
+                'Derafu\\Auth\\Authentication\\Channel\\Web\\Flash::message: '
+                    . 'new \\Derafu\\Translation\\TranslatableMessage($message, $parameters, \'auth\')',
+                'Derafu\\Auth\\Authentication\\Channel\\Web\\FormManager::processForm: '
                     . 'new \\Derafu\\Auth\\Exception\\FormException($formError, 400)',
-                'Derafu\\Auth\\Provider\\Database\\DatabaseAuthentication::handleLogin: '
-                    . '$this->addErrorFlash($request, $e->getTranslatableMessage(), now: true)',
-                'Derafu\\Auth\\Provider\\Htpasswd\\HtpasswdAuthentication::handleLogin: '
-                    . '$this->addErrorFlash($request, $e->getTranslatableMessage(), now: true)',
+                'Derafu\\Auth\\Provider\\Database\\Web\\DatabaseWebFlow::login: '
+                    . '\\Derafu\\Auth\\Authentication\\Channel\\Web\\Flash::error($request, $e->getTranslatableMessage(), now: true)',
+                'Derafu\\Auth\\Provider\\Htpasswd\\Web\\HtpasswdWebFlow::login: '
+                    . '\\Derafu\\Auth\\Authentication\\Channel\\Web\\Flash::error($request, $e->getTranslatableMessage(), now: true)',
                 'partials/flash-messages.html.twig: '
                     . '{% set text = message.message|trans(parameters, message.domain ?? null) %}',
             ],

@@ -12,19 +12,20 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth\Provider;
 
-use Derafu\Auth\Abstract\AbstractProviderAuthentication;
 use Derafu\Auth\AnonymousUser;
+use Derafu\Auth\Authentication\AuthenticationManager;
 use Derafu\Auth\Contract\FormManagerInterface;
 use Derafu\Auth\Contract\SessionManagerInterface;
-use Derafu\Auth\Provider\Database\DatabaseAuthentication;
 use Derafu\Auth\Provider\Database\DatabaseConfiguration;
 use Derafu\Auth\Provider\Database\DatabaseUserRepository;
-use Derafu\Auth\Provider\Keycloak\KeycloakAuthentication;
+use Derafu\Auth\Provider\Database\Web\DatabaseWebFlow;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
-use Derafu\Auth\Provider\Keycloak\KeycloakSessionManager;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
+use Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager;
+use Derafu\Auth\Provider\Keycloak\Web\KeycloakWebFlow;
 use Derafu\Auth\Translation\AuthTranslationResourceProvider;
 use Derafu\Auth\User;
+use Derafu\TestsAuth\Fixture\Stack;
 use Derafu\Translation\TranslatorFactory;
 use Laminas\Diactoros\ServerRequest;
 use Laminas\Diactoros\Uri;
@@ -38,48 +39,43 @@ use Symfony\Contracts\Translation\TranslatorInterface;
  * The providers give their translator to the authentication, so the response to
  * an unauthenticated request to the API is in the language of the application.
  */
-#[CoversClass(DatabaseAuthentication::class)]
-#[CoversClass(KeycloakAuthentication::class)]
-#[UsesClass(AbstractProviderAuthentication::class)]
+#[CoversClass(DatabaseWebFlow::class)]
+#[CoversClass(KeycloakWebFlow::class)]
+#[UsesClass(AuthenticationManager::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Identification::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authorization\AccessRules::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\Scheme\BasicScheme::class)]
+#[UsesClass(\Derafu\Auth\Provider\Database\Api\DatabaseBasicScheme::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\Scheme\BearerScheme::class)]
+#[UsesClass(\Derafu\Auth\Provider\Keycloak\Api\KeycloakBearerScheme::class)]
 #[UsesClass(AnonymousUser::class)]
 #[UsesClass(User::class)]
 #[UsesClass(AuthTranslationResourceProvider::class)]
 final class AuthenticationTranslatorTest extends TestCase
 {
     /**
-     * A configuration that has the path of the API that the tests ask for.
-     *
-     * @template T of \Derafu\Auth\Contract\ConfigurationInterface
-     * @param class-string<T> $class
-     * @return T&\PHPUnit\Framework\MockObject\Stub
-     */
-    private static function configuration(self $test, string $class): object
-    {
-        $config = $test->createStub($class);
-        $config->method('getApiPaths')->willReturn(['/api']);
-
-        return $config;
-    }
-
-    /**
-     * @return array<string, array{callable(self, TranslatorInterface|null): AbstractProviderAuthentication}>
+     * @return array<string, array{callable(self, TranslatorInterface|null): AuthenticationManager}>
      */
     public static function provideProviders(): array
     {
         return [
             'database' => [
-                fn (self $test, ?TranslatorInterface $translator) => new DatabaseAuthentication(
+                fn (self $test, ?TranslatorInterface $translator) => Stack::database(
                     $test->createStub(DatabaseUserRepository::class),
-                    self::configuration($test, DatabaseConfiguration::class),
+                    $test->createStub(DatabaseConfiguration::class),
                     $test->createStub(SessionManagerInterface::class),
                     $test->createStub(FormManagerInterface::class),
                     translator: $translator
                 ),
             ],
             'keycloak' => [
-                fn (self $test, ?TranslatorInterface $translator) => new KeycloakAuthentication(
+                fn (self $test, ?TranslatorInterface $translator) => Stack::keycloak(
                     $test->createStub(KeycloakUserRepository::class),
-                    self::configuration($test, KeycloakConfiguration::class),
+                    $test->createStub(KeycloakConfiguration::class),
                     $test->createStub(KeycloakSessionManager::class),
                     translator: $translator
                 ),
@@ -88,7 +84,7 @@ final class AuthenticationTranslatorTest extends TestCase
     }
 
     /**
-     * @param callable(self, TranslatorInterface|null): AbstractProviderAuthentication $provider
+     * @param callable(self, TranslatorInterface|null): AuthenticationManager $provider
      */
     #[DataProvider('provideProviders')]
     public function testTheResponseOfTheApiIsInTheLanguageOfTheTranslator(callable $provider): void

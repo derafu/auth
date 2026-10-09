@@ -88,7 +88,7 @@ final class UsersDatabase
      */
     public function config(array $config = []): DatabaseConfiguration
     {
-        return new DatabaseConfiguration($config + [
+        return Stack::databaseConfiguration($config + [
             'database_url' => 'sqlite:' . $this->file,
             'user_repository' => [
                 'table' => $this->table,

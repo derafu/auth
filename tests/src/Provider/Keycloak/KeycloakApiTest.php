@@ -12,15 +12,16 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth\Provider\Keycloak;
 
-use Derafu\Auth\Authorization;
+use Derafu\Auth\Authorization\AuthorizationManager;
 use Derafu\Auth\Contract\AuthenticationInterface;
-use Derafu\Auth\Provider\Keycloak\KeycloakAuthentication;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
-use Derafu\Auth\Provider\Keycloak\KeycloakSessionManager;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
+use Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager;
+use Derafu\Auth\Provider\Keycloak\Web\KeycloakWebFlow;
 use Derafu\TestsAuth\Fixture\KeycloakTokens;
 use Derafu\TestsAuth\Fixture\RealKeycloak;
 use Derafu\TestsAuth\Fixture\SessionApp;
+use Derafu\TestsAuth\Fixture\Stack;
 use Mezzio\Authentication\UserInterface as MezzioUserInterface;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -36,18 +37,26 @@ use Psr\Http\Message\ServerRequestInterface;
  * audience) and the clients that call it: the one of a service, the one of a person,
  * and one whose tokens are not for the API.
  */
-#[CoversClass(KeycloakAuthentication::class)]
+#[CoversClass(KeycloakWebFlow::class)]
 #[CoversClass(KeycloakUserRepository::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderAuthentication::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authentication\AuthenticationManager::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Identification::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\Flash::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authorization\AccessRules::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\Scheme\BearerScheme::class)]
+#[UsesClass(\Derafu\Auth\Provider\Keycloak\Api\KeycloakBearerScheme::class)]
 #[UsesClass(\Derafu\Auth\AnonymousUser::class)]
-#[UsesClass(\Derafu\Auth\Authorization::class)]
+#[UsesClass(\Derafu\Auth\Authorization\AuthorizationManager::class)]
 #[UsesClass(\Derafu\Auth\Exception\AuthenticationException::class)]
 #[UsesClass(\Derafu\Auth\Exception\ProviderUnavailableException::class)]
 #[UsesClass(KeycloakConfiguration::class)]
 #[UsesClass(KeycloakSessionManager::class)]
 #[UsesClass(\Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier::class)]
-#[UsesClass(\Derafu\Auth\SessionManager::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\SessionManager::class)]
 #[UsesClass(\Derafu\Auth\User::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
 final class KeycloakApiTest extends TestCase
@@ -87,7 +96,7 @@ final class KeycloakApiTest extends TestCase
      */
     private function api(array $config = []): AuthenticationInterface
     {
-        $config = new KeycloakConfiguration($config + [
+        $config = Stack::keycloakConfiguration($config + [
             'keycloak_url' => self::$keycloak->url(),
             'realm' => 'test',
             'client_id' => 'derafu-api',
@@ -97,7 +106,7 @@ final class KeycloakApiTest extends TestCase
             'protected_paths' => ['/api'],
         ]);
 
-        return new KeycloakAuthentication(
+        return Stack::keycloak(
             new KeycloakUserRepository($config),
             $config,
             new KeycloakSessionManager()
@@ -184,14 +193,14 @@ final class KeycloakApiTest extends TestCase
     #[Test]
     public function theRolesOfTheUserDecideWhatThePathNeeds(): void
     {
-        $config = new KeycloakConfiguration([
+        $config = Stack::keycloakConfiguration([
             'keycloak_url' => self::$keycloak->url(),
             'client_id' => 'derafu-api',
             'enabled' => true,
             'protected_paths' => ['/api', '/api/admin' => ['admin'], '/api/data' => ['reader', 'writer']],
         ]);
         $authentication = $this->api(['protected_paths' => ['/api', '/api/admin' => ['admin'], '/api/data' => ['reader', 'writer']]]);
-        $authorization = new Authorization($config);
+        $authorization = new AuthorizationManager(Stack::accessOf($config));
 
         // A service has `editor` and `reader`: it reads the data, it is not an admin.
         $service = $this->call($authentication, $this->serviceToken())['user'];
@@ -230,7 +239,7 @@ final class KeycloakApiTest extends TestCase
 
         // The ID token of the login of a client has the audience of that client: it
         // must not open the API of a client that is the same.
-        $api = $this->api(['client_id' => 'derafu-cli', 'client_secret' => '', 'api_audience' => 'derafu-cli']);
+        $api = $this->api(['client_id' => 'derafu-cli', 'client_secret' => '', 'api_audience' => 'derafu-cli', 'api_introspection' => false]);
 
         $this->assertNull($this->call($api, (string) $answer['id_token'])['user']);
         $this->assertNull($this->call($this->api(), (string) $answer['refresh_token'])['user']);

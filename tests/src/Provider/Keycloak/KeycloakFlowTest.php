@@ -13,20 +13,22 @@ declare(strict_types=1);
 namespace Derafu\TestsAuth\Provider\Keycloak;
 
 use Derafu\Auth\AnonymousUser;
+use Derafu\Auth\Authentication\Channel\Web\SessionManager;
+use Derafu\Auth\Contract\AuthenticationInterface;
 use Derafu\Auth\Exception\AuthenticationException;
-use Derafu\Auth\Provider\Keycloak\KeycloakAuthentication;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
-use Derafu\Auth\Provider\Keycloak\KeycloakController;
-use Derafu\Auth\Provider\Keycloak\KeycloakSessionManager;
 use Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
-use Derafu\Auth\SessionManager;
+use Derafu\Auth\Provider\Keycloak\Web\KeycloakController;
+use Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager;
+use Derafu\Auth\Provider\Keycloak\Web\KeycloakWebFlow;
 use Derafu\Auth\Translation\AuthTranslationResourceProvider;
 use Derafu\Auth\User;
 use Derafu\TestsAuth\Fixture\KeycloakBrowser;
 use Derafu\TestsAuth\Fixture\RealKeycloak;
 use Derafu\TestsAuth\Fixture\RecordingHttpClient;
 use Derafu\TestsAuth\Fixture\SessionApp;
+use Derafu\TestsAuth\Fixture\Stack;
 use Derafu\Translation\TranslatorFactory;
 use Firebase\JWT\JWT;
 use GuzzleHttp\Psr7\HttpFactory;
@@ -53,13 +55,21 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
  * was requested. The logout closes the session of the application and the one
  * of Keycloak.
  */
-#[CoversClass(KeycloakAuthentication::class)]
+#[CoversClass(KeycloakWebFlow::class)]
 #[CoversClass(KeycloakController::class)]
 #[CoversClass(KeycloakTokenVerifier::class)]
 #[CoversClass(KeycloakUserRepository::class)]
 #[CoversClass(KeycloakSessionManager::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderAuthentication::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authentication\AuthenticationManager::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Identification::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\Flash::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authorization\AccessRules::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\Scheme\BearerScheme::class)]
+#[UsesClass(\Derafu\Auth\Provider\Keycloak\Api\KeycloakBearerScheme::class)]
 #[UsesClass(AnonymousUser::class)]
 #[UsesClass(AuthenticationException::class)]
 #[UsesClass(KeycloakConfiguration::class)]
@@ -96,11 +106,11 @@ final class KeycloakFlowTest extends TestCase
     /**
      * @param list<string> $protected
      * @param array<string, mixed> $config
-     * @return array{KeycloakAuthentication, KeycloakController, KeycloakUserRepository}
+     * @return array{AuthenticationInterface, KeycloakController, KeycloakUserRepository}
      */
     private function keycloak(array $protected = ['/private'], array $config = []): array
     {
-        $config = new KeycloakConfiguration($config + [
+        $config = Stack::keycloakConfiguration($config + [
             'keycloak_url' => self::$keycloak->url(),
             'realm' => 'test',
             'client_id' => 'derafu-auth',
@@ -115,8 +125,8 @@ final class KeycloakFlowTest extends TestCase
         $repository = new KeycloakUserRepository($config);
 
         return [
-            new KeycloakAuthentication($repository, $config, $sessionManager),
-            new KeycloakController($config, $sessionManager),
+            Stack::keycloak($repository, $config, $sessionManager),
+            new KeycloakController(Stack::webOf($config), $sessionManager),
             $repository,
         ];
     }
@@ -124,7 +134,7 @@ final class KeycloakFlowTest extends TestCase
     /**
      * The user asks for a protected page: where the authentication sends them.
      */
-    private function authorizationUrl(KeycloakAuthentication $authentication): string
+    private function authorizationUrl(AuthenticationInterface $authentication): string
     {
         $response = $this->app->handleAuthenticated(
             $this->app->request('/private/page', ['tab' => '2']),
@@ -145,7 +155,7 @@ final class KeycloakFlowTest extends TestCase
      * @param array<string, string> $query
      */
     private function handleCallback(
-        KeycloakAuthentication $authentication,
+        AuthenticationInterface $authentication,
         KeycloakController $controller,
         array $query,
         ?string $sid = null
@@ -160,7 +170,7 @@ final class KeycloakFlowTest extends TestCase
     /**
      * The whole login: the page, Keycloak and the callback.
      */
-    private function logIn(KeycloakAuthentication $authentication, KeycloakController $controller): ResponseInterface
+    private function logIn(AuthenticationInterface $authentication, KeycloakController $controller): ResponseInterface
     {
         $query = $this->browser->logIn($this->authorizationUrl($authentication));
 
@@ -318,7 +328,7 @@ final class KeycloakFlowTest extends TestCase
     public function anIdTokenOfAnotherUserThanTheAccessTokenIsRejected(): void
     {
         [, $controller, ] = $this->keycloak();
-        $config = new KeycloakConfiguration([
+        $config = Stack::keycloakConfiguration([
             'keycloak_url' => self::$keycloak->url(),
             'realm' => 'test',
             'client_id' => 'derafu-auth',
@@ -335,7 +345,7 @@ final class KeycloakFlowTest extends TestCase
                 return array_merge(parent::verifyIdToken($idToken, $nonce), ['sub' => 'another-user']);
             }
         };
-        $authentication = new KeycloakAuthentication($swapper, $config, new KeycloakSessionManager());
+        $authentication = Stack::keycloak($swapper, $config, new KeycloakSessionManager());
 
         $this->expectException(AuthenticationException::class);
         $this->expectExceptionMessage('The user of the ID token is not the user of the access token.');
@@ -719,7 +729,7 @@ final class KeycloakFlowTest extends TestCase
 
         return [
             $this->app->persistence->store[$sid]['oauth2_token'],
-            new KeycloakConfiguration([
+            Stack::keycloakConfiguration([
                 'keycloak_url' => self::$keycloak->url(),
                 'realm' => 'test',
                 'client_id' => 'derafu-auth',

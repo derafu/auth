@@ -12,16 +12,18 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth\Provider;
 
+use Derafu\Auth\Authentication\Channel\Web\FormManager;
+use Derafu\Auth\Authentication\Channel\Web\SessionManager;
+use Derafu\Auth\Contract\AuthenticationInterface;
 use Derafu\Auth\Exception\AuthenticationException;
-use Derafu\Auth\FormManager;
-use Derafu\Auth\Provider\Database\DatabaseAuthentication;
 use Derafu\Auth\Provider\Database\DatabaseUserRepository;
-use Derafu\Auth\SessionManager;
+use Derafu\Auth\Provider\Database\Web\DatabaseWebFlow;
 use Derafu\Form\Factory\FormFactory;
 use Derafu\Form\Type\TypeProvider;
 use Derafu\Form\Type\TypeRegistry;
 use Derafu\Form\Type\TypeResolver;
 use Derafu\TestsAuth\Fixture\SessionApp;
+use Derafu\TestsAuth\Fixture\Stack;
 use Derafu\TestsAuth\Fixture\UsersDatabase;
 use Laminas\Diactoros\Response\RedirectResponse;
 use Mezzio\Session\Session;
@@ -41,15 +43,24 @@ use Psr\Http\Message\ServerRequestInterface;
  * renewal in Keycloak is tested with its flow (`KeycloakFlowTest`).
  */
 #[CoversClass(SessionManager::class)]
-#[CoversClass(DatabaseAuthentication::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderAuthentication::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderConfiguration::class)]
+#[CoversClass(DatabaseWebFlow::class)]
+#[UsesClass(\Derafu\Auth\Authentication\LoginThrottle::class)]
+#[UsesClass(\Derafu\Auth\Authentication\AuthenticationManager::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Identification::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\Flash::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authorization\AccessRules::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\Scheme\BasicScheme::class)]
+#[UsesClass(\Derafu\Auth\Provider\Database\Api\DatabaseBasicScheme::class)]
 #[UsesClass(\Derafu\Auth\AnonymousUser::class)]
 #[UsesClass(AuthenticationException::class)]
 #[UsesClass(FormManager::class)]
 #[UsesClass(\Derafu\Auth\Provider\Database\DatabaseConfiguration::class)]
 #[UsesClass(DatabaseUserRepository::class)]
-#[UsesClass(\Derafu\Auth\Provider\Database\Form\LoginForm::class)]
+#[UsesClass(\Derafu\Auth\Provider\Database\Web\Form\LoginForm::class)]
 #[UsesClass(\Derafu\Auth\User::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
 final class SessionRenewalTest extends TestCase
@@ -72,12 +83,12 @@ final class SessionRenewalTest extends TestCase
         $this->database = null;
     }
 
-    private function database(): DatabaseAuthentication
+    private function database(): AuthenticationInterface
     {
         $this->database = new UsersDatabase();
         $config = $this->database->config(['enabled' => true, 'protected_paths' => ['/private']]);
 
-        return new DatabaseAuthentication(
+        return Stack::database(
             new DatabaseUserRepository($config),
             $config,
             new SessionManager(),

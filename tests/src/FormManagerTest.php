@@ -17,10 +17,10 @@ use AltchaOrg\Altcha\Altcha;
 use AltchaOrg\Altcha\Challenge;
 use AltchaOrg\Altcha\Payload;
 use AltchaOrg\Altcha\SolveChallengeOptions;
+use Derafu\Auth\Authentication\Channel\Web\FormManager;
 use Derafu\Auth\Exception\FormException;
-use Derafu\Auth\FormManager;
 use Derafu\Auth\Provider\Database\DatabaseConfiguration;
-use Derafu\Auth\Provider\Database\Form\LoginForm;
+use Derafu\Auth\Provider\Database\Web\Form\LoginForm;
 use Derafu\Captcha\Provider\AltchaProvider;
 use Derafu\Csrf\SessionCsrfTokenManager;
 use Derafu\DataProcessor\ProcessorFactory;
@@ -30,6 +30,7 @@ use Derafu\Form\Processor\FormRulesResolver;
 use Derafu\Form\Type\TypeProvider;
 use Derafu\Form\Type\TypeRegistry;
 use Derafu\Form\Type\TypeResolver;
+use Derafu\TestsAuth\Fixture\Stack;
 use Mezzio\Session\Session;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -43,7 +44,6 @@ use PHPUnit\Framework\TestCase;
 #[CoversClass(FormManager::class)]
 #[UsesClass(LoginForm::class)]
 #[UsesClass(DatabaseConfiguration::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderConfiguration::class)]
 #[UsesClass(FormException::class)]
 final class FormManagerTest extends TestCase
 {
@@ -97,7 +97,7 @@ final class FormManagerTest extends TestCase
         return new FormManager(
             new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
             new FormDataProcessor(new FormRulesResolver(), (new ProcessorFactory())->create(), csrfTokenManager: $this->csrf, captchaProvider: $this->captcha),
-            new DatabaseConfiguration($config + ['database_url' => 'sqlite::memory:'])
+            Stack::databaseConfiguration($config + ['database_url' => 'sqlite::memory:'])
         );
     }
 

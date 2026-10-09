@@ -1,8 +1,8 @@
 auth_callback:
     path: /auth/callback
-    handler: Derafu\Auth\Provider\Keycloak\KeycloakController::handle
+    handler: Derafu\Auth\Provider\Keycloak\Web\KeycloakController::handle
 
 auth_logout:
     path: /auth/logout
     methods: [POST]
-    handler: Derafu\Auth\Provider\Keycloak\KeycloakController::logout
+    handler: Derafu\Auth\Provider\Keycloak\Web\KeycloakController::logout

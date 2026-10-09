@@ -20,6 +20,7 @@ use Derafu\Auth\UserFactory;
 use Derafu\TestsAuth\Fixture\CustomUser;
 use Derafu\TestsAuth\Fixture\CustomUserFactory;
 use Derafu\TestsAuth\Fixture\HtpasswdFile;
+use Derafu\TestsAuth\Fixture\Stack;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
@@ -31,7 +32,6 @@ use PHPUnit\Framework\TestCase;
  */
 #[CoversClass(HtpasswdUserRepository::class)]
 #[CoversClass(HtpasswdConfiguration::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderConfiguration::class)]
 #[UsesClass(User::class)]
 #[UsesClass(UserFactory::class)]
 #[UsesClass(ConfigurationException::class)]
@@ -116,7 +116,7 @@ final class HtpasswdUserRepositoryTest extends TestCase
     public function aFileThatWasMadeByAToolOutsideOfThePackageIsRead(): void
     {
         // Two users created with a tool of the web that makes `.htpasswd` files.
-        $repository = new HtpasswdUserRepository(new HtpasswdConfiguration([
+        $repository = new HtpasswdUserRepository(Stack::htpasswdConfiguration([
             'htpasswd_path' => dirname(__DIR__, 3) . '/fixtures/htpasswd/admin_user.htpasswd',
         ]));
 
@@ -172,7 +172,7 @@ final class HtpasswdUserRepositoryTest extends TestCase
     {
         $this->expectException(ConfigurationException::class);
 
-        (new HtpasswdUserRepository(new HtpasswdConfiguration(['htpasswd_path' => sys_get_temp_dir()])))
+        (new HtpasswdUserRepository(Stack::htpasswdConfiguration(['htpasswd_path' => sys_get_temp_dir()])))
             ->authenticate('ana', 'secret');
     }
 
@@ -189,25 +189,20 @@ final class HtpasswdUserRepositoryTest extends TestCase
     public function theConfigurationNeedsTheFile(): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage('The path of the htpasswd file is required.');
+        $this->expectExceptionMessage('The path of the htpasswd file is not configured: set AUTH_HTPASSWD_PATH.');
 
-        (new HtpasswdConfiguration([]))->validate();
+        (Stack::htpasswdConfiguration([]))->validate();
     }
 
     #[Test]
-    public function theConfigurationGivesThePathAndTheDefaultInterval(): void
+    public function theConfigurationGivesThePath(): void
     {
-        $config = new HtpasswdConfiguration([
+        $config = Stack::htpasswdConfiguration([
             'htpasswd_path' => '%kernel.project_dir%/etc/.htpasswd',
             'project_dir' => '/app',
         ]);
 
         $config->validate();
         $this->assertSame('/app/etc/.htpasswd', $config->getHtpasswdPath());
-        $this->assertSame('/app/etc/.htpasswd', $config->get('htpasswd_path'));
-        $this->assertSame('/app/etc/.htpasswd', $config->toArray()['htpasswd_path']);
-        $this->assertSame('fallback', $config->get('other', 'fallback'));
-        $this->assertSame(300, $config->getRefreshInterval());
-        $this->assertSame(60, (new HtpasswdConfiguration(['refresh_interval' => 60]))->getRefreshInterval());
     }
 }

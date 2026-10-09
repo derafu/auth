@@ -1,8 +1,25 @@
 # Optional wiring for apps using symfony/dependency-injection.
-# Import it from your own services.yaml:
 #
-#   imports:
-#       - { resource: '../vendor/derafu/auth/resources/config/auth-services.yaml' }
+# It is imported by the file of each provider (auth-keycloak-services.yaml,
+# auth-database-services.yaml, auth-htpasswd-services.yaml): import the one of the
+# provider that the application uses, not this one.
+#
+# What is here is what every provider shares:
+#
+#   - The authentication (`AuthenticationManager`): the one entry point of
+#     Mezzio. It asks the channels, which are the services tagged
+#     `derafu_auth.channel` (the API one first, the web one last). To add a
+#     channel, tag its service with its priority: nothing else changes.
+#   - The authorization (`AuthorizationManager`) and the rules of access, the
+#     one authority on which path needs a user and which roles.
+#   - The web channel and the API channel, with their configuration:
+#     `AUTH_WEB_*` and `AUTH_API_*`.
+#
+# What the provider gives (its flow of the web, its scheme of the API, its
+# configuration and its users) is in its own file.
+#
+# Every service is lazy: what is not used by a request is not made, so a
+# configuration that is wrong fails where it is used and not in every page.
 
 services:
 
@@ -18,3 +35,70 @@ services:
     # explicit because _instanceof does not propagate across imported files.
     Derafu\Auth\Translation\AuthTranslationResourceProvider:
         tags: ['derafu_translation.resource_provider']
+
+    # The users that the provider gives are made by this factory: an application
+    # that has its own class of user registers its factory in its place.
+    Derafu\Auth\UserFactory: ~
+    Derafu\Auth\Contract\UserFactoryInterface:
+        alias: Derafu\Auth\UserFactory
+
+    # Who may enter which path: the protected paths with their roles
+    # (AUTH_PROTECTED_PATHS) and whether they are enforced (AUTH_ENABLED).
+    Derafu\Auth\Contract\AccessRulesInterface:
+        class: Derafu\Auth\Authorization\AccessRules
+        lazy: true
+        arguments:
+            $config:
+                protected_paths: '%env(default::json:AUTH_PROTECTED_PATHS)%'
+                enabled: '%env(default::bool:AUTH_ENABLED)%'
+
+    # The authentication: who is asking. The channels are asked in the order of
+    # their priority.
+    Derafu\Auth\Contract\AuthenticationInterface:
+        class: Derafu\Auth\Authentication\AuthenticationManager
+        lazy: true
+        arguments:
+            $channels: !tagged_iterator derafu_auth.channel
+    Mezzio\Authentication\AuthenticationInterface:
+        alias: Derafu\Auth\Contract\AuthenticationInterface
+    Mezzio\Authentication\AuthenticationMiddleware: ~
+
+    # The authorization: may who is asking enter here.
+    Derafu\Auth\Contract\AuthorizationInterface:
+        class: Derafu\Auth\Authorization\AuthorizationManager
+        lazy: true
+    Mezzio\Authorization\AuthorizationInterface:
+        alias: Derafu\Auth\Contract\AuthorizationInterface
+    Derafu\Auth\UnauthorizedResponseFactory: ~
+    Mezzio\Authorization\AuthorizationMiddleware:
+        arguments:
+            $responseFactory: '@Derafu\Auth\UnauthorizedResponseFactory'
+
+    # The web channel: a session. It is the last one that is asked (the lowest
+    # priority): it is the channel of every request that is not of another one.
+    Derafu\Auth\Authentication\Channel\Web\WebConfiguration:
+        lazy: true
+        arguments:
+            $config:
+                logout_path: '%env(default::string:AUTH_WEB_LOGOUT_PATH)%'
+                login_redirect_path: '%env(default::string:AUTH_WEB_LOGIN_REDIRECT_PATH)%'
+                logout_redirect_path: '%env(default::string:AUTH_WEB_LOGOUT_REDIRECT_PATH)%'
+                unauthorized_redirect_path: '%env(default::string:AUTH_WEB_UNAUTHORIZED_REDIRECT_PATH)%'
+                refresh_interval: '%env(default::int:AUTH_WEB_REFRESH_INTERVAL_SECONDS)%'
+    Derafu\Auth\Authentication\Channel\Web\WebChannel:
+        lazy: Derafu\Auth\Contract\ChannelInterface
+        tags:
+            - { name: derafu_auth.channel, priority: 0 }
+
+    # The API channel: credentials in the header of each request, no session. It
+    # is asked before the web one.
+    Derafu\Auth\Authentication\Channel\Api\ApiConfiguration:
+        lazy: true
+        arguments:
+            $config:
+                paths: '%env(default::json:AUTH_API_PATHS)%'
+                realm: '%env(default::string:AUTH_API_REALM)%'
+    Derafu\Auth\Authentication\Channel\Api\ApiChannel:
+        lazy: Derafu\Auth\Contract\ChannelInterface
+        tags:
+            - { name: derafu_auth.channel, priority: 100 }

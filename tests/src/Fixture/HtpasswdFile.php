@@ -64,7 +64,7 @@ final class HtpasswdFile
      */
     public function config(array $config = []): HtpasswdConfiguration
     {
-        return new HtpasswdConfiguration($config + ['htpasswd_path' => $this->path]);
+        return Stack::htpasswdConfiguration($config + ['htpasswd_path' => $this->path]);
     }
 
     public function remove(): void

@@ -12,8 +12,8 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Tests\Provider\Keycloak;
 
-use Derafu\Auth\Contract\ConfigurationInterface;
-use Derafu\Auth\Provider\Keycloak\KeycloakSessionManager;
+use Derafu\Auth\Authentication\Channel\Web\WebConfiguration;
+use Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager;
 use Mezzio\Session\Session;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -72,7 +72,7 @@ class KeycloakSessionManagerTest extends TestCase
         // default interval does (it used to be never).
         $this->sessionManager->storeUserInfo($session, ['sub' => 'user-1']);
         $this->assertFalse($this->sessionManager->isRefreshDue($session, null));
-        $session->set('auth_checked_at', time() - ConfigurationInterface::DEFAULT_REFRESH_INTERVAL - 1);
+        $session->set('auth_checked_at', time() - WebConfiguration::DEFAULT_REFRESH_INTERVAL - 1);
         $this->assertTrue($this->sessionManager->isRefreshDue($session, null));
     }
 

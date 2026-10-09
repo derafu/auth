@@ -13,19 +13,30 @@ declare(strict_types=1);
 namespace Derafu\Auth\Contract;
 
 use Mezzio\Authentication\AuthenticationInterface as MezzioAuthenticationInterface;
-use Mezzio\Authentication\UserInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
  * Authentication interface that extends Mezzio's AuthenticationInterface.
  *
- * Provides a clear contract for authentication adapters while maintaining full
- * compatibility with Mezzio's authentication system.
- *
- * @method UserInterface|null authenticate(ServerRequestInterface $request)
- * @method ResponseInterface unauthorizedResponse(ServerRequestInterface $request)
+ * It is the one entry point of the authentication for Mezzio, whose middleware
+ * asks it who is making the request. It says it with our own user (the one that
+ * can tell it is anonymous), and `null` to a request that needs a user and has
+ * none: then Mezzio asks for the response of the unauthorized request.
  */
 interface AuthenticationInterface extends MezzioAuthenticationInterface
 {
+    /**
+     * Authenticates a request.
+     *
+     * @return UserInterface|null The user (the anonymous one if nobody is
+     * authenticated and the path does not need one), or null if the path needs a
+     * user and there is none.
+     */
+    public function authenticate(ServerRequestInterface $request): ?UserInterface;
+
+    /**
+     * Gets the response to a request that is not authenticated.
+     */
+    public function unauthorizedResponse(ServerRequestInterface $request): ResponseInterface;
 }

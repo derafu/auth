@@ -12,11 +12,12 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth\Provider\Database;
 
-use Derafu\Auth\FormManager;
-use Derafu\Auth\LoginThrottle;
-use Derafu\Auth\Provider\Database\DatabaseAuthentication;
+use Derafu\Auth\Authentication\Channel\Web\FormManager;
+use Derafu\Auth\Authentication\Channel\Web\SessionManager;
+use Derafu\Auth\Authentication\LoginThrottle;
+use Derafu\Auth\Contract\AuthenticationInterface;
 use Derafu\Auth\Provider\Database\DatabaseUserRepository;
-use Derafu\Auth\SessionManager;
+use Derafu\Auth\Provider\Database\Web\DatabaseWebFlow;
 use Derafu\Auth\User;
 use Derafu\Form\Factory\FormFactory;
 use Derafu\Form\Type\TypeProvider;
@@ -25,6 +26,7 @@ use Derafu\Form\Type\TypeResolver;
 use Derafu\Routing\ValueObject\Route;
 use Derafu\Routing\ValueObject\RouteMatch;
 use Derafu\TestsAuth\Fixture\SessionApp;
+use Derafu\TestsAuth\Fixture\Stack;
 use Derafu\TestsAuth\Fixture\UsersDatabase;
 use Laminas\Diactoros\Response\RedirectResponse;
 use Mezzio\Flash\FlashMessageMiddleware;
@@ -41,18 +43,26 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
  * the session and flash middlewares: who is the user in each path, what happens
  * with the login (the form, the credentials) and with the unauthorized.
  */
-#[CoversClass(DatabaseAuthentication::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderAuthentication::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderConfiguration::class)]
+#[CoversClass(DatabaseWebFlow::class)]
+#[UsesClass(\Derafu\Auth\Authentication\AuthenticationManager::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Identification::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\Flash::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authorization\AccessRules::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\Scheme\BasicScheme::class)]
+#[UsesClass(\Derafu\Auth\Provider\Database\Api\DatabaseBasicScheme::class)]
 #[UsesClass(\Derafu\Auth\AnonymousUser::class)]
-#[UsesClass(\Derafu\Auth\Authorization::class)]
+#[UsesClass(\Derafu\Auth\Authorization\AuthorizationManager::class)]
 #[UsesClass(\Derafu\Auth\Exception\FormException::class)]
-#[UsesClass(\Derafu\Auth\FormManager::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\FormManager::class)]
 #[UsesClass(\Derafu\Auth\Provider\Database\DatabaseConfiguration::class)]
 #[UsesClass(\Derafu\Auth\Provider\Database\DatabaseUserRepository::class)]
 #[UsesClass(LoginThrottle::class)]
-#[UsesClass(\Derafu\Auth\Provider\Database\Form\LoginForm::class)]
-#[UsesClass(\Derafu\Auth\SessionManager::class)]
+#[UsesClass(\Derafu\Auth\Provider\Database\Web\Form\LoginForm::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\SessionManager::class)]
 #[UsesClass(User::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
 final class DatabaseAuthenticationTest extends TestCase
@@ -67,7 +77,7 @@ final class DatabaseAuthenticationTest extends TestCase
 
     private UsersDatabase $database;
 
-    private DatabaseAuthentication $authentication;
+    private AuthenticationInterface $authentication;
 
     protected function setUp(): void
     {
@@ -80,7 +90,7 @@ final class DatabaseAuthenticationTest extends TestCase
             'unauthorized_redirect_path' => '/auth/login',
         ]);
 
-        $this->authentication = new DatabaseAuthentication(
+        $this->authentication = Stack::database(
             new DatabaseUserRepository($config),
             $config,
             new SessionManager(),
@@ -463,7 +473,7 @@ final class DatabaseAuthenticationTest extends TestCase
             'enabled' => true,
             'protected_paths' => ['/auth'],
         ]);
-        $authentication = new DatabaseAuthentication(
+        $authentication = Stack::database(
             new DatabaseUserRepository($config),
             $config,
             new SessionManager(),
@@ -570,7 +580,7 @@ final class DatabaseAuthenticationTest extends TestCase
      * An authentication that limits the failed attempts to 3 in ten minutes, and
      * the repository that it uses, that counts the passwords that it checked.
      *
-     * @return array{DatabaseAuthentication, object, ArrayAdapter}
+     * @return array{AuthenticationInterface, object, ArrayAdapter}
      */
     private function throttled(): array
     {
@@ -588,7 +598,7 @@ final class DatabaseAuthenticationTest extends TestCase
         $cache = new ArrayAdapter();
 
         return [
-            new DatabaseAuthentication(
+            Stack::database(
                 $repository,
                 $config,
                 new SessionManager(),
@@ -610,7 +620,7 @@ final class DatabaseAuthenticationTest extends TestCase
      * @return array{user: \Derafu\Auth\Contract\UserInterface|null, flashes: array<string, mixed>}
      */
     private function tryToLogIn(
-        DatabaseAuthentication $authentication,
+        AuthenticationInterface $authentication,
         string $password,
         string $address = '203.0.113.7',
         ?string $network = null,
@@ -840,11 +850,11 @@ final class DatabaseAuthenticationTest extends TestCase
         return $this->app->persistence->store[SessionApp::KNOWN]['auth_redirect'] ?? null;
     }
 
-    private function authenticationWithProtected(string $path): DatabaseAuthentication
+    private function authenticationWithProtected(string $path): AuthenticationInterface
     {
         $config = $this->database->config(['enabled' => true, 'protected_paths' => [$path]]);
 
-        return new DatabaseAuthentication(
+        return Stack::database(
             new DatabaseUserRepository($config),
             $config,
             new SessionManager(),

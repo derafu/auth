@@ -70,7 +70,7 @@ interface SessionManagerInterface
      *
      * @param SessionInterface $session The session.
      * @param int|null $interval The seconds between two checks, or null if the
-     * provider decides (see `ConfigurationInterface::getRefreshInterval()`).
+     * provider decides (see `WebConfiguration::getRefreshInterval()`).
      * @return bool True if the user has to be asked again.
      */
     public function isRefreshDue(SessionInterface $session, ?int $interval): bool;

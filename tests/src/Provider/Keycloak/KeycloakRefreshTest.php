@@ -13,19 +13,21 @@ declare(strict_types=1);
 namespace Derafu\TestsAuth\Provider\Keycloak;
 
 use Derafu\Auth\AnonymousUser;
+use Derafu\Auth\Authentication\Channel\Web\SessionManager;
+use Derafu\Auth\Contract\AuthenticationInterface;
 use Derafu\Auth\Exception\AuthenticationException;
-use Derafu\Auth\Provider\Keycloak\KeycloakAuthentication;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
-use Derafu\Auth\Provider\Keycloak\KeycloakController;
-use Derafu\Auth\Provider\Keycloak\KeycloakSessionManager;
 use Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
-use Derafu\Auth\SessionManager;
+use Derafu\Auth\Provider\Keycloak\Web\KeycloakController;
+use Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager;
+use Derafu\Auth\Provider\Keycloak\Web\KeycloakWebFlow;
 use Derafu\Auth\Translation\AuthTranslationResourceProvider;
 use Derafu\Auth\User;
 use Derafu\TestsAuth\Fixture\KeycloakBrowser;
 use Derafu\TestsAuth\Fixture\RealKeycloak;
 use Derafu\TestsAuth\Fixture\SessionApp;
+use Derafu\TestsAuth\Fixture\Stack;
 use Laminas\Diactoros\Response\RedirectResponse;
 use Mezzio\Authentication\UserInterface as MezzioUserInterface;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -45,11 +47,19 @@ use Psr\Http\Message\ServerRequestInterface;
  * away, disables the user, ends its sessions) is done through the REST API of
  * Keycloak, as a person would.
  */
-#[CoversClass(KeycloakAuthentication::class)]
+#[CoversClass(KeycloakWebFlow::class)]
 #[CoversClass(KeycloakUserRepository::class)]
 #[CoversClass(KeycloakSessionManager::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderAuthentication::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authentication\AuthenticationManager::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Identification::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\Flash::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authorization\AccessRules::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\Scheme\BearerScheme::class)]
+#[UsesClass(\Derafu\Auth\Provider\Keycloak\Api\KeycloakBearerScheme::class)]
 #[UsesClass(AnonymousUser::class)]
 #[UsesClass(AuthenticationException::class)]
 #[UsesClass(KeycloakConfiguration::class)]
@@ -92,11 +102,11 @@ final class KeycloakRefreshTest extends TestCase
 
     /**
      * @param array<string, mixed> $config
-     * @return array{KeycloakAuthentication, KeycloakController}
+     * @return array{AuthenticationInterface, KeycloakController}
      */
     private function keycloak(array $config = []): array
     {
-        $config = new KeycloakConfiguration($config + [
+        $config = Stack::keycloakConfiguration($config + [
             'keycloak_url' => self::$keycloak->url(),
             'realm' => 'test',
             'client_id' => 'derafu-auth',
@@ -108,8 +118,8 @@ final class KeycloakRefreshTest extends TestCase
         $sessionManager = new KeycloakSessionManager();
 
         return [
-            new KeycloakAuthentication(new KeycloakUserRepository($config), $config, $sessionManager),
-            new KeycloakController($config, $sessionManager),
+            Stack::keycloak(new KeycloakUserRepository($config), $config, $sessionManager),
+            new KeycloakController(Stack::webOf($config), $sessionManager),
         ];
     }
 
@@ -117,7 +127,7 @@ final class KeycloakRefreshTest extends TestCase
      * The whole login of `ana`: the page, Keycloak and the callback. It gives the
      * identifier of the session.
      *
-     * @param array{KeycloakAuthentication, KeycloakController} $keycloak
+     * @param array{AuthenticationInterface, KeycloakController} $keycloak
      */
     private function logIn(array $keycloak): string
     {
@@ -147,7 +157,7 @@ final class KeycloakRefreshTest extends TestCase
      * @return array{ResponseInterface, \Derafu\Auth\Contract\UserInterface|null} The response
      * and the user that the page got (null if it did not get to run).
      */
-    private function visit(KeycloakAuthentication $authentication, string $sid): array
+    private function visit(AuthenticationInterface $authentication, string $sid): array
     {
         $user = null;
         $response = $this->app->handleAuthenticated(

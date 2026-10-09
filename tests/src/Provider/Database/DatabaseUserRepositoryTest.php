@@ -19,6 +19,7 @@ use Derafu\Auth\User;
 use Derafu\Auth\UserFactory;
 use Derafu\TestsAuth\Fixture\CustomUser;
 use Derafu\TestsAuth\Fixture\CustomUserFactory;
+use Derafu\TestsAuth\Fixture\Stack;
 use Derafu\TestsAuth\Fixture\UsersDatabase;
 use PDOException;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -34,7 +35,6 @@ use PHPUnit\Framework\TestCase;
  */
 #[CoversClass(DatabaseUserRepository::class)]
 #[UsesClass(DatabaseConfiguration::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderConfiguration::class)]
 #[UsesClass(User::class)]
 #[UsesClass(UserFactory::class)]
 #[UsesClass(ConfigurationException::class)]
@@ -249,7 +249,7 @@ final class DatabaseUserRepositoryTest extends TestCase
     #[Test]
     public function theConnectionIsMadeWhenItIsNeededNotBefore(): void
     {
-        $config = new DatabaseConfiguration(['database_url' => 'sqlite:/a/directory/that/does/not/exist/users.db']);
+        $config = Stack::databaseConfiguration(['database_url' => 'sqlite:/a/directory/that/does/not/exist/users.db']);
 
         // It is built: it does not connect.
         $repository = new DatabaseUserRepository($config);

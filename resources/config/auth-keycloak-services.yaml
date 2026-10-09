@@ -14,76 +14,61 @@ services:
         autoconfigure: true
         public: false
 
-    # The users that the provider gives are made by this factory: an application
-    # that has its own class of user registers its factory in its place.
-    Derafu\Auth\UserFactory: ~
-    Derafu\Auth\Contract\UserFactoryInterface:
-        alias: Derafu\Auth\UserFactory
-
-    # Authentication configuration.
-    Mezzio\Authentication\AuthenticationMiddleware: ~
-    Mezzio\Authentication\AuthenticationInterface:
-        class: Derafu\Auth\Provider\Keycloak\KeycloakAuthentication
-
-    # Authorization configuration.
-    Mezzio\Authorization\AuthorizationMiddleware:
-        arguments:
-            $responseFactory: '@Derafu\Auth\UnauthorizedResponseFactory'
-    Mezzio\Authorization\AuthorizationInterface:
-        class: Derafu\Auth\Authorization
-    Derafu\Auth\UnauthorizedResponseFactory: ~
-
-    # Session manager configuration for keycloak provider.
-    Derafu\Auth\Provider\Keycloak\KeycloakSessionManager: ~
+    # What Keycloak gives to the web channel: the login of the user in Keycloak,
+    # and its session.
+    Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager:
+        lazy: true
     Derafu\Auth\Contract\SessionManagerInterface:
-        alias: Derafu\Auth\Provider\Keycloak\KeycloakSessionManager
+        alias: Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager
+    Derafu\Auth\Contract\WebFlowInterface:
+        class: Derafu\Auth\Provider\Keycloak\Web\KeycloakWebFlow
+        lazy: true
 
-    # Keycloak configuration.
-    Derafu\Auth\Contract\ConfigurationInterface:
-        alias: Derafu\Auth\Provider\Keycloak\KeycloakConfiguration
+    # What Keycloak gives to the API channel: the access tokens that it gives to
+    # a client, `Bearer`.
+    Derafu\Auth\Contract\ApiSchemeInterface:
+        class: Derafu\Auth\Provider\Keycloak\Api\KeycloakBearerScheme
+        lazy: true
+
     # Verifies the tokens with the keys of the realm. The keys are cached in the
     # PSR-6 pool of the application if it has one (Psr\Cache\CacheItemPoolInterface).
     # The client that reads them is made from the options of the configuration
     # (verification of the certificate, timeouts), not the one of the application.
     Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier:
+        lazy: true
         arguments:
             $http: ~
             $requestFactory: ~
-    Derafu\Auth\Provider\Keycloak\KeycloakUserRepository: ~
+    Derafu\Auth\Provider\Keycloak\KeycloakUserRepository:
+        lazy: true
     Derafu\Auth\Provider\Keycloak\KeycloakConfiguration:
+        lazy: true
         arguments:
             $config:
-                # Configuration of keycloak authentication provider.
+                # What every use of Keycloak needs.
                 keycloak_url: '%env(default::string:AUTH_KEYCLOAK_URL)%'
                 realm: '%env(default::string:AUTH_KEYCLOAK_REALM)%'
                 client_id: '%env(default::string:AUTH_KEYCLOAK_CLIENT_ID)%'
                 client_secret: '%env(default::string:AUTH_KEYCLOAK_CLIENT_SECRET)%'
-                redirect_uri: '%env(default::string:AUTH_KEYCLOAK_REDIRECT_URI)%'
-                scopes: '%env(default::json:AUTH_KEYCLOAK_SCOPES)%'
-                callback_path: '%env(default::string:AUTH_KEYCLOAK_CALLBACK_PATH)%'
                 issuer: '%env(default::string:AUTH_KEYCLOAK_ISSUER)%'
-                end_session: '%env(default::bool:AUTH_KEYCLOAK_END_SESSION)%'
-                post_logout_redirect_uri: '%env(default::string:AUTH_KEYCLOAK_POST_LOGOUT_REDIRECT_URI)%'
                 http_client_options:
                     timeout: '%env(default::int:AUTH_KEYCLOAK_HTTP_TIMEOUT_SECONDS)%'
                     connect_timeout: '%env(default::int:AUTH_KEYCLOAK_HTTP_CONNECT_TIMEOUT_SECONDS)%'
                     verify: '%env(default::bool:AUTH_KEYCLOAK_HTTP_VERIFY)%'
 
-                # Base configuration for all providers.
-                protected_paths: '%env(default::json:AUTH_PROTECTED_PATHS)%'
-                logout_path: '%env(default::string:AUTH_LOGOUT_PATH)%'
-                login_redirect_path: '%env(default::string:AUTH_LOGIN_REDIRECT_PATH)%'
-                logout_redirect_path: '%env(default::string:AUTH_LOGOUT_REDIRECT_PATH)%'
-                unauthorized_redirect_path: '%env(default::string:AUTH_UNAUTHORIZED_REDIRECT_PATH)%'
-                enabled: '%env(default::bool:AUTH_ENABLED)%'
-                refresh_interval: '%env(default::int:AUTH_REFRESH_INTERVAL_SECONDS)%'
-                api_paths: '%env(default::json:AUTH_API_PATHS)%'
-                api_realm: '%env(default::string:AUTH_API_REALM)%'
+                # The login of the user (the web channel).
+                redirect_uri: '%env(default::string:AUTH_KEYCLOAK_WEB_REDIRECT_URI)%'
+                scopes: '%env(default::json:AUTH_KEYCLOAK_WEB_SCOPES)%'
+                callback_path: '%env(default::string:AUTH_KEYCLOAK_WEB_CALLBACK_PATH)%'
+                end_session: '%env(default::bool:AUTH_KEYCLOAK_WEB_END_SESSION)%'
+                post_logout_redirect_uri: '%env(default::string:AUTH_KEYCLOAK_WEB_POST_LOGOUT_REDIRECT_URI)%'
+
+                # The tokens of the clients of the API (the API channel).
                 api_audience: '%env(default::string:AUTH_KEYCLOAK_API_AUDIENCE)%'
                 api_client_id: '%env(default::string:AUTH_KEYCLOAK_API_CLIENT_ID)%'
                 api_client_secret: '%env(default::string:AUTH_KEYCLOAK_API_CLIENT_SECRET)%'
                 api_introspection: '%env(bool:AUTH_KEYCLOAK_API_INTROSPECTION)%'
 
     # Keycloak controller.
-    Derafu\Auth\Provider\Keycloak\KeycloakController:
+    Derafu\Auth\Provider\Keycloak\Web\KeycloakController:
         public: true

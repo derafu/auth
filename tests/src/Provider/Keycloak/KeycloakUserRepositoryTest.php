@@ -16,6 +16,7 @@ use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\ProviderUnavailableException;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
+use Derafu\TestsAuth\Fixture\Stack;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
@@ -45,7 +46,7 @@ class KeycloakUserRepositoryTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->config = new KeycloakConfiguration([
+        $this->config = Stack::keycloakConfiguration([
             'keycloak_url' => 'https://auth.example.com',
             'realm' => 'test-realm',
             'client_id' => 'test-client',
@@ -77,7 +78,7 @@ class KeycloakUserRepositoryTest extends TestCase
     public function testCreateAuthorizationUrlWithCustomScopes(): void
     {
         // Test with custom scopes in configuration
-        $customConfig = new KeycloakConfiguration([
+        $customConfig = Stack::keycloakConfiguration([
             'keycloak_url' => 'https://auth.example.com',
             'realm' => 'test-realm',
             'client_id' => 'test-client',
@@ -178,7 +179,7 @@ class KeycloakUserRepositoryTest extends TestCase
         // They were given to a client that the provider threw away for one of its
         // own, so a server that did not answer was waited for with no end, and a
         // certificate that was not to be verified was verified.
-        $repository = new KeycloakUserRepository(new KeycloakConfiguration([
+        $repository = new KeycloakUserRepository(Stack::keycloakConfiguration([
             'keycloak_url' => 'https://auth.example.com',
             'realm' => 'test-realm',
             'client_id' => 'test-client',
@@ -199,7 +200,7 @@ class KeycloakUserRepositoryTest extends TestCase
      */
     private function repositoryAnswering(Response|Throwable ...$answers): KeycloakUserRepository
     {
-        return new KeycloakUserRepository(new KeycloakConfiguration([
+        return new KeycloakUserRepository(Stack::keycloakConfiguration([
             'keycloak_url' => 'https://auth.example.com',
             'realm' => 'test-realm',
             'client_id' => 'test-client',

@@ -12,11 +12,11 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth\Provider\Htpasswd;
 
-use Derafu\Auth\FormManager;
-use Derafu\Auth\Provider\Htpasswd\HtpasswdAuthentication;
-use Derafu\Auth\Provider\Htpasswd\HtpasswdController;
+use Derafu\Auth\Authentication\Channel\Web\FormManager;
+use Derafu\Auth\Authentication\Channel\Web\SessionManager;
+use Derafu\Auth\Contract\AuthenticationInterface;
 use Derafu\Auth\Provider\Htpasswd\HtpasswdUserRepository;
-use Derafu\Auth\SessionManager;
+use Derafu\Auth\Provider\Htpasswd\Web\HtpasswdController;
 use Derafu\Auth\Translation\AuthTranslationResourceProvider;
 use Derafu\Form\Factory\FormFactory;
 use Derafu\Form\Factory\TranslatingFormFactory;
@@ -28,6 +28,7 @@ use Derafu\Form\Type\TypeResolver;
 use Derafu\Renderer\Factory\RendererFactory;
 use Derafu\TestsAuth\Fixture\HtpasswdFile;
 use Derafu\TestsAuth\Fixture\SessionApp;
+use Derafu\TestsAuth\Fixture\Stack;
 use Derafu\Translation\TranslatorFactory;
 use Derafu\Twig\Extension\TranslationExtension;
 use Laminas\Diactoros\Response\RedirectResponse;
@@ -45,15 +46,23 @@ use Twig\TwigFunction;
  * left for the next request.
  */
 #[CoversClass(HtpasswdController::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderAuthentication::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authentication\AuthenticationManager::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Identification::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\Flash::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authorization\AccessRules::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\Scheme\BasicScheme::class)]
+#[UsesClass(\Derafu\Auth\Provider\Htpasswd\Api\HtpasswdBasicScheme::class)]
 #[UsesClass(\Derafu\Auth\AnonymousUser::class)]
-#[UsesClass(\Derafu\Auth\FormManager::class)]
-#[UsesClass(\Derafu\Auth\Provider\Htpasswd\HtpasswdAuthentication::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\FormManager::class)]
+#[UsesClass(\Derafu\Auth\Provider\Htpasswd\Web\HtpasswdWebFlow::class)]
 #[UsesClass(\Derafu\Auth\Provider\Htpasswd\HtpasswdConfiguration::class)]
 #[UsesClass(\Derafu\Auth\Provider\Htpasswd\HtpasswdUserRepository::class)]
-#[UsesClass(\Derafu\Auth\Provider\Htpasswd\Form\LoginForm::class)]
-#[UsesClass(\Derafu\Auth\SessionManager::class)]
+#[UsesClass(\Derafu\Auth\Provider\Htpasswd\Web\Form\LoginForm::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\SessionManager::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
 #[UsesClass(\Derafu\Auth\User::class)]
 #[UsesClass(AuthTranslationResourceProvider::class)]
@@ -63,7 +72,7 @@ final class HtpasswdControllerTest extends TestCase
 
     private HtpasswdFile $file;
 
-    private HtpasswdAuthentication $authentication;
+    private AuthenticationInterface $authentication;
 
     private HtpasswdController $controller;
 
@@ -93,7 +102,7 @@ final class HtpasswdControllerTest extends TestCase
             $config
         );
 
-        $this->authentication = new HtpasswdAuthentication(
+        $this->authentication = Stack::htpasswd(
             new HtpasswdUserRepository($config),
             $config,
             new SessionManager(),
@@ -125,7 +134,7 @@ final class HtpasswdControllerTest extends TestCase
                 ],
             ]),
             $formManager,
-            $config,
+            Stack::webOf($config),
             new SessionManager()
         );
     }

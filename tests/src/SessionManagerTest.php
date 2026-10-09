@@ -12,7 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth;
 
-use Derafu\Auth\SessionManager;
+use Derafu\Auth\Authentication\Channel\Web\SessionManager;
 use Mezzio\Session\Session;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;

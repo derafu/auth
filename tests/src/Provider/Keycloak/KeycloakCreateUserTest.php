@@ -19,6 +19,7 @@ use Derafu\Auth\User;
 use Derafu\Auth\UserFactory;
 use Derafu\TestsAuth\Fixture\CustomUser;
 use Derafu\TestsAuth\Fixture\CustomUserFactory;
+use Derafu\TestsAuth\Fixture\Stack;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
@@ -32,7 +33,6 @@ use PHPUnit\Framework\TestCase;
  */
 #[CoversClass(KeycloakUserRepository::class)]
 #[UsesClass(KeycloakConfiguration::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderConfiguration::class)]
 #[UsesClass(\Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier::class)]
 #[UsesClass(AuthenticationException::class)]
 #[UsesClass(User::class)]
@@ -42,7 +42,7 @@ final class KeycloakCreateUserTest extends TestCase
     private function repository(?string $clientId = 'my-client', ?CustomUserFactory $factory = null): KeycloakUserRepository
     {
         return new KeycloakUserRepository(
-            new KeycloakConfiguration([
+            Stack::keycloakConfiguration([
                 'keycloak_url' => 'https://auth.example.com',
                 'realm' => 'test',
                 'client_id' => $clientId ?? '',

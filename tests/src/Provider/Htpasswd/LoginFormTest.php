@@ -12,7 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth\Provider\Htpasswd;
 
-use Derafu\Auth\Provider\Htpasswd\Form\LoginForm;
+use Derafu\Auth\Provider\Htpasswd\Web\Form\LoginForm;
 use Derafu\Auth\Translation\AuthTranslationResourceProvider;
 use Derafu\Form\Factory\FormFactory;
 use Derafu\Form\Factory\TranslatingFormFactory;

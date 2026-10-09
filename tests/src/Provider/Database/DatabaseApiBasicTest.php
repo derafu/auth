@@ -12,17 +12,20 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth\Provider\Database;
 
+use Derafu\Auth\Authentication\Channel\Web\FormManager;
+use Derafu\Auth\Authentication\Channel\Web\SessionManager;
+use Derafu\Auth\Authentication\LoginThrottle;
+use Derafu\Auth\Authorization\AccessRules;
+use Derafu\Auth\Authorization\AuthorizationManager;
 use Derafu\Auth\Contract\AuthenticationInterface;
-use Derafu\Auth\FormManager;
-use Derafu\Auth\LoginThrottle;
-use Derafu\Auth\Provider\Database\DatabaseAuthentication;
 use Derafu\Auth\Provider\Database\DatabaseUserRepository;
-use Derafu\Auth\SessionManager;
+use Derafu\Auth\Provider\Database\Web\DatabaseWebFlow;
 use Derafu\Form\Factory\FormFactory;
 use Derafu\Form\Type\TypeProvider;
 use Derafu\Form\Type\TypeRegistry;
 use Derafu\Form\Type\TypeResolver;
 use Derafu\TestsAuth\Fixture\SessionApp;
+use Derafu\TestsAuth\Fixture\Stack;
 use Derafu\TestsAuth\Fixture\UsersDatabase;
 use Derafu\TestsAuth\Provider\ApiBasicTests;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -35,15 +38,23 @@ use PHPUnit\Framework\TestCase;
  * provider: what every provider does with it, and what is of the database (the
  * roles, the users that are not active).
  */
-#[CoversClass(DatabaseAuthentication::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderAuthentication::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderConfiguration::class)]
+#[CoversClass(DatabaseWebFlow::class)]
+#[UsesClass(\Derafu\Auth\Authentication\AuthenticationManager::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Identification::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\Flash::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authorization\AccessRules::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\Scheme\BasicScheme::class)]
+#[UsesClass(\Derafu\Auth\Provider\Database\Api\DatabaseBasicScheme::class)]
 #[UsesClass(\Derafu\Auth\AnonymousUser::class)]
-#[UsesClass(\Derafu\Auth\Authorization::class)]
+#[UsesClass(\Derafu\Auth\Authorization\AuthorizationManager::class)]
 #[UsesClass(FormManager::class)]
 #[UsesClass(\Derafu\Auth\Provider\Database\DatabaseConfiguration::class)]
 #[UsesClass(DatabaseUserRepository::class)]
-#[UsesClass(\Derafu\Auth\Provider\Database\Form\LoginForm::class)]
+#[UsesClass(\Derafu\Auth\Provider\Database\Web\Form\LoginForm::class)]
 #[UsesClass(LoginThrottle::class)]
 #[UsesClass(SessionManager::class)]
 #[UsesClass(\Derafu\Auth\User::class)]
@@ -85,7 +96,7 @@ final class DatabaseApiBasicTest extends TestCase
             'unauthorized_redirect_path' => '/auth/login',
         ]);
 
-        return new DatabaseAuthentication(
+        return Stack::database(
             new DatabaseUserRepository($config),
             $config,
             new SessionManager(),
@@ -136,12 +147,12 @@ final class DatabaseApiBasicTest extends TestCase
     #[Test]
     public function theRolesOfTheUserDecideWhatThePathNeeds(): void
     {
-        $config = $this->database->config(['enabled' => true, 'protected_paths' => ['/api', '/api/admin' => ['admin'], '/api/billing' => ['billing']]]);
+        $rules = new AccessRules(['enabled' => true, 'protected_paths' => ['/api', '/api/admin' => ['admin'], '/api/billing' => ['billing']]]);
 
-        $this->assertSame(['admin'], $config->allowedRoles('/api/admin/users'));
+        $this->assertSame(['admin'], $rules->rolesOf('/api/admin/users'));
 
         $user = $this->call($this->basic(), $this->basicHeader('ana@example.com', 'secret'))['user'];
-        $authorization = new \Derafu\Auth\Authorization($config);
+        $authorization = new AuthorizationManager($rules);
         $request = $this->app->request('/api/admin/users');
 
         $this->assertTrue($authorization->isGranted((string) $user?->getRoles()[0], $request));

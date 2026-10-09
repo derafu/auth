@@ -13,13 +13,14 @@ declare(strict_types=1);
 namespace Derafu\TestsAuth\Provider\Database;
 
 use Derafu\Auth\Provider\Database\DatabaseConfiguration;
-use Derafu\Auth\Provider\Database\Form\LoginForm;
+use Derafu\Auth\Provider\Database\Web\Form\LoginForm;
 use Derafu\Auth\Translation\AuthTranslationResourceProvider;
 use Derafu\Form\Factory\FormFactory;
 use Derafu\Form\Factory\TranslatingFormFactory;
 use Derafu\Form\Type\TypeProvider;
 use Derafu\Form\Type\TypeRegistry;
 use Derafu\Form\Type\TypeResolver;
+use Derafu\TestsAuth\Fixture\Stack;
 use Derafu\Translation\TranslatorFactory;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -40,7 +41,7 @@ final class LoginFormTest extends TestCase
      */
     private function definition(array $fields = []): array
     {
-        $config = new DatabaseConfiguration([
+        $config = Stack::databaseConfiguration([
             'database_url' => 'sqlite::memory:',
             'user_repository' => ['field' => $fields],
         ]);

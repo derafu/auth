@@ -329,15 +329,17 @@ class KeycloakUserRepository implements UserRepositoryInterface
      *
      * @param string|null $idToken The ID token of the session, that tells
      * Keycloak which session it is.
+     * @param string $logoutRedirectPath The page of the site that follows the
+     * logout, if the configuration has no post logout redirect URI.
      * @return string The URL, which sends the user back to the post logout
      * redirect URI of the configuration.
      */
-    public function getLogoutUrl(?string $idToken = null): string
+    public function getLogoutUrl(?string $idToken = null, string $logoutRedirectPath = '/'): string
     {
         return $this->config->getRealmUrl() . '/protocol/openid-connect/logout?' . http_build_query(array_filter([
             'client_id' => $this->config->getClientId(),
             'id_token_hint' => $idToken,
-            'post_logout_redirect_uri' => $this->config->getPostLogoutRedirectUri(),
+            'post_logout_redirect_uri' => $this->config->getPostLogoutRedirectUri($logoutRedirectPath),
         ]));
     }
 

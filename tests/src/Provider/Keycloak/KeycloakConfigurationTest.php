@@ -15,6 +15,7 @@ namespace Derafu\TestsAuth\Provider\Keycloak;
 use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
@@ -24,7 +25,6 @@ use PHPUnit\Framework\TestCase;
  * how the HTTP client is made and where the user goes after the logout.
  */
 #[CoversClass(KeycloakConfiguration::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderConfiguration::class)]
 #[UsesClass(ConfigurationException::class)]
 final class KeycloakConfigurationTest extends TestCase
 {
@@ -73,7 +73,7 @@ final class KeycloakConfigurationTest extends TestCase
         // In the site of the redirect URI (with its port).
         $this->assertSame(
             'https://app.example.com:8443/bye',
-            $this->config(['logout_redirect_path' => '/bye'])->getPostLogoutRedirectUri()
+            $this->config()->getPostLogoutRedirectUri('/bye')
         );
         $this->assertSame(
             'https://app.example.com:8443/',
@@ -90,7 +90,7 @@ final class KeycloakConfigurationTest extends TestCase
         );
         $this->assertSame(
             'https://other.example.com/bye',
-            $this->config(['logout_redirect_path' => 'https://other.example.com/bye'])->getPostLogoutRedirectUri()
+            $this->config()->getPostLogoutRedirectUri('https://other.example.com/bye')
         );
     }
 
@@ -114,78 +114,6 @@ final class KeycloakConfigurationTest extends TestCase
     }
 
     #[Test]
-    public function theValuesAreReadByKeyAndAsAnArray(): void
-    {
-        $config = $this->config(['logout_redirect_path' => '/bye']);
-
-        $this->assertSame('https://auth.example.com/realms/derafu', $config->get('issuer'));
-        $this->assertTrue($config->get('end_session'));
-        $this->assertSame('https://app.example.com:8443/bye', $config->get('post_logout_redirect_uri'));
-        $this->assertSame('app', $config->toArray()['client_id']);
-        $this->assertSame('https://auth.example.com/realms/derafu', $config->toArray()['issuer']);
-        $this->assertTrue($config->toArray()['end_session']);
-        $this->assertSame('https://app.example.com:8443/bye', $config->toArray()['post_logout_redirect_uri']);
-    }
-
-    #[Test]
-    public function theCallbackIsTheLoginPath(): void
-    {
-        $this->assertSame('/auth/callback', $this->config()->getLoginPath());
-        $this->assertSame('/in', $this->config(['callback_path' => '/in'])->getLoginPath());
-    }
-
-    #[Test]
-    public function theClientAndTheRealmAreRequired(): void
-    {
-        foreach ([
-            ['keycloak_url' => '', 'message' => 'Keycloak URL is required.'],
-            ['client_id' => '', 'message' => 'Client ID is required.'],
-            ['client_secret' => '', 'message' => 'Client secret is required.'],
-            ['redirect_uri' => '', 'message' => 'Redirect URI is required.'],
-        ] as $case) {
-            $message = $case['message'];
-            unset($case['message']);
-
-            try {
-                $this->config($case)->validate();
-                $this->fail('It should have failed: ' . $message);
-            } catch (ConfigurationException $e) {
-                $this->assertSame($message, $e->getMessage());
-            }
-        }
-
-        $this->config()->validate();
-    }
-
-    #[Test]
-    public function theRefreshIntervalIsAutomaticByDefaultWhichIsTheExpirationOfTheToken(): void
-    {
-        $config = $this->config();
-
-        $this->assertNull($config->getRefreshInterval());
-        $this->assertNull($config->get('refresh_interval'));
-        $this->assertArrayHasKey('refresh_interval', $config->toArray());
-        $this->assertNull($config->toArray()['refresh_interval']);
-    }
-
-    #[Test]
-    public function theRefreshIntervalCanBeConfiguredAndZeroIsAutomatic(): void
-    {
-        $this->assertSame(120, $this->config(['refresh_interval' => 120])->getRefreshInterval());
-        $this->assertSame(120, $this->config(['refresh_interval' => 120])->toArray()['refresh_interval']);
-        $this->assertNull($this->config(['refresh_interval' => 0])->getRefreshInterval());
-    }
-
-    #[Test]
-    public function aNegativeRefreshIntervalIsAConfigurationError(): void
-    {
-        $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage('The refresh interval must be a number of seconds, 0 or more.');
-
-        $this->config(['refresh_interval' => -5]);
-    }
-
-    #[Test]
     public function theClientOfTheApiIsTheClientOfTheApplicationUnlessItHasItsOwn(): void
     {
         $config = $this->config();
@@ -200,33 +128,6 @@ final class KeycloakConfigurationTest extends TestCase
         $this->assertSame('api-secret', $config->getApiClientSecret());
         $this->assertSame('billing-api', $config->getApiAudience(), 'The audience is the client that asks.');
         $this->assertSame('app', $config->getClientId(), 'The login keeps its client.');
-        $this->assertSame('billing-api', $config->get('api_client_id'));
-        $this->assertSame('api-secret', $config->get('api_client_secret'));
-        $this->assertSame('billing-api', $config->toArray()['api_client_id']);
-        $this->assertSame('api-secret', $config->toArray()['api_client_secret']);
-    }
-
-    #[Test]
-    public function theClientOfTheApiNeedsItsIdAndItsSecret(): void
-    {
-        foreach ([['api_client_id' => 'billing-api'], ['api_client_secret' => 'api-secret']] as $half) {
-            try {
-                $this->config($half);
-                $this->fail('A half of the client of the API was accepted.');
-            } catch (ConfigurationException $e) {
-                $this->assertStringContainsString('both', $e->getMessage());
-            }
-        }
-    }
-
-    #[Test]
-    public function theAudienceMustBeTheClientOfTheApiWhenKeycloakIsAsked(): void
-    {
-        $api = ['api_client_id' => 'billing-api', 'api_client_secret' => 'api-secret'];
-
-        // The client of the application is not the one that asks any more.
-        $this->expectException(ConfigurationException::class);
-        $this->config($api + ['api_audience' => 'app']);
     }
 
     #[Test]
@@ -239,5 +140,117 @@ final class KeycloakConfigurationTest extends TestCase
         ]);
 
         $this->assertSame('billing-api', $config->getApiAudience());
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>, string}>
+     */
+    public static function provideWhatTheWebNeeds(): array
+    {
+        return [
+            'no URL' => [['keycloak_url' => ''], 'The URL of Keycloak is not configured: set AUTH_KEYCLOAK_URL.'],
+            'a URL without scheme' => [['keycloak_url' => 'auth.example.com'], 'The value of AUTH_KEYCLOAK_URL "auth.example.com" is not valid: it must be an address that starts with http:// or https://.'],
+            'no realm' => [['realm' => ''], 'The realm of Keycloak is not configured: set AUTH_KEYCLOAK_REALM.'],
+            'no client' => [['client_id' => ''], 'The client of Keycloak is not configured: set AUTH_KEYCLOAK_CLIENT_ID.'],
+            'no secret' => [['client_secret' => ''], 'The secret of the client of Keycloak is not configured: set AUTH_KEYCLOAK_CLIENT_SECRET.'],
+            'no redirect URI' => [['redirect_uri' => ''], 'The redirect URI of Keycloak is not configured: set AUTH_KEYCLOAK_REDIRECT_URI.'],
+            'a redirect URI that is a path' => [['redirect_uri' => '/auth/callback'], 'The value of AUTH_KEYCLOAK_REDIRECT_URI "/auth/callback" is not valid: it must be an address that starts with http:// or https://.'],
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $case
+     */
+    #[Test]
+    #[DataProvider('provideWhatTheWebNeeds')]
+    public function theLoginNeedsTheUrlTheRealmAndTheClientAndSaysWhichVariable(array $case, string $message): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage($message);
+
+        $this->config($case)->validateWeb();
+    }
+
+    #[Test]
+    public function aConfigurationThatHasWhatTheLoginNeedsIsValid(): void
+    {
+        $this->config()->validateWeb();
+
+        $this->addToAssertionCount(1);
+    }
+
+    #[Test]
+    public function theApiDoesNotNeedWhatOnlyTheLoginNeeds(): void
+    {
+        // No redirect URI: a service that only verifies tokens does not log anybody in.
+        $this->config(['redirect_uri' => ''])->validateApi();
+
+        $this->addToAssertionCount(1);
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>, string}>
+     */
+    public static function provideWhatTheApiNeeds(): array
+    {
+        return [
+            'no URL' => [['keycloak_url' => ''], 'The URL of Keycloak is not configured: set AUTH_KEYCLOAK_URL.'],
+            'no realm' => [['realm' => ''], 'The realm of Keycloak is not configured: set AUTH_KEYCLOAK_REALM.'],
+            'a half of the client of the API' => [['api_client_id' => 'billing-api'], 'The client of the API needs its ID and its secret, both: set AUTH_KEYCLOAK_API_CLIENT_ID and AUTH_KEYCLOAK_API_CLIENT_SECRET.'],
+            'the other half' => [['api_client_secret' => 'api-secret'], 'The client of the API needs its ID and its secret, both: set AUTH_KEYCLOAK_API_CLIENT_ID and AUTH_KEYCLOAK_API_CLIENT_SECRET.'],
+            'no audience' => [['client_id' => ''], 'The audience of the API is not configured: set AUTH_KEYCLOAK_API_AUDIENCE, or the client with AUTH_KEYCLOAK_CLIENT_ID.'],
+            'no client to ask with' => [['client_secret' => ''], 'Keycloak is asked about the tokens with a client, and it is not configured: set AUTH_KEYCLOAK_CLIENT_ID and AUTH_KEYCLOAK_CLIENT_SECRET (or the ones of the API, AUTH_KEYCLOAK_API_CLIENT_ID and AUTH_KEYCLOAK_API_CLIENT_SECRET), or turn the introspection off with AUTH_KEYCLOAK_API_INTROSPECTION=false.'],
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $case
+     */
+    #[Test]
+    #[DataProvider('provideWhatTheApiNeeds')]
+    public function theApiNeedsTheRealmTheAudienceAndAClientAndSaysWhichVariable(array $case, string $message): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage($message);
+
+        $this->config($case)->validateApi();
+    }
+
+    #[Test]
+    public function withoutIntrospectionTheApiDoesNotNeedASecret(): void
+    {
+        $this->config(['client_secret' => '', 'api_introspection' => false])->validateApi();
+
+        $this->addToAssertionCount(1);
+    }
+
+    #[Test]
+    public function theAudienceMustBeTheClientOfTheApiWhenKeycloakIsAsked(): void
+    {
+        $api = ['api_client_id' => 'billing-api', 'api_client_secret' => 'api-secret'];
+
+        // The client of the application is not the one that asks any more.
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('The audience of the API "app" is not the client "billing-api"');
+
+        $this->config($api + ['api_audience' => 'app'])->validateApi();
+    }
+
+    #[Test]
+    public function anotherAudienceIsFineWhenKeycloakIsNotAsked(): void
+    {
+        $this->config(['api_audience' => 'billing', 'api_introspection' => false])->validateApi();
+
+        $this->addToAssertionCount(1);
+    }
+
+    #[Test]
+    public function aConfigurationThatIsNotValidDoesNotFailUntilItIsChecked(): void
+    {
+        // It is made in every request that uses the provider: it must not fail
+        // there, but where Keycloak is needed.
+        $config = $this->config(['api_client_id' => 'billing-api', 'api_audience' => 'app']);
+
+        $this->assertSame('app', $config->getApiAudience());
     }
 }

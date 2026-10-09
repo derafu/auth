@@ -13,19 +13,20 @@ declare(strict_types=1);
 namespace Derafu\TestsAuth\Provider\Keycloak;
 
 use Derafu\Auth\AnonymousUser;
+use Derafu\Auth\Authentication\Channel\Web\SessionManager;
 use Derafu\Auth\Exception\AuthenticationException;
-use Derafu\Auth\Provider\Keycloak\KeycloakAuthentication;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
-use Derafu\Auth\Provider\Keycloak\KeycloakController;
-use Derafu\Auth\Provider\Keycloak\KeycloakSessionManager;
 use Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
-use Derafu\Auth\SessionManager;
+use Derafu\Auth\Provider\Keycloak\Web\KeycloakController;
+use Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager;
+use Derafu\Auth\Provider\Keycloak\Web\KeycloakWebFlow;
 use Derafu\Auth\Translation\AuthTranslationResourceProvider;
 use Derafu\Auth\User;
 use Derafu\TestsAuth\Fixture\KeycloakBrowser;
 use Derafu\TestsAuth\Fixture\RealKeycloak;
 use Derafu\TestsAuth\Fixture\SessionApp;
+use Derafu\TestsAuth\Fixture\Stack;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
@@ -48,11 +49,19 @@ use Psr\Http\Message\ServerRequestInterface;
  * requests read the same refresh token, the second one is refused, and what
  * happens to the session depends on which request saves last.
  */
-#[CoversClass(KeycloakAuthentication::class)]
+#[CoversClass(KeycloakWebFlow::class)]
 #[UsesClass(KeycloakUserRepository::class)]
 #[UsesClass(KeycloakSessionManager::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderAuthentication::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authentication\AuthenticationManager::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Identification::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\Flash::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authorization\AccessRules::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\Scheme\BearerScheme::class)]
+#[UsesClass(\Derafu\Auth\Provider\Keycloak\Api\KeycloakBearerScheme::class)]
 #[UsesClass(AnonymousUser::class)]
 #[UsesClass(AuthenticationException::class)]
 #[UsesClass(KeycloakConfiguration::class)]
@@ -101,7 +110,7 @@ final class KeycloakConcurrentRefreshTest extends TestCase
     private function logIn(): array
     {
         $app = new SessionApp();
-        $config = new KeycloakConfiguration([
+        $config = Stack::keycloakConfiguration([
             'keycloak_url' => self::$keycloak->url(),
             'realm' => 'test',
             'client_id' => 'derafu-auth',
@@ -112,8 +121,8 @@ final class KeycloakConcurrentRefreshTest extends TestCase
         ]);
         $sessionManager = new KeycloakSessionManager();
         $repository = new KeycloakUserRepository($config);
-        $authentication = new KeycloakAuthentication($repository, $config, $sessionManager);
-        $controller = new KeycloakController($config, $sessionManager);
+        $authentication = Stack::keycloak($repository, $config, $sessionManager);
+        $controller = new KeycloakController(Stack::webOf($config), $sessionManager);
 
         $page = $app->handleAuthenticated($app->request('/private/page'), $authentication, fn (): null => null);
         $query = (new KeycloakBrowser())->logIn($page->getHeaderLine('Location'));

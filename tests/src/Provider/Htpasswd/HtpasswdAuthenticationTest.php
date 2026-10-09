@@ -12,12 +12,13 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth\Provider\Htpasswd;
 
+use Derafu\Auth\Authentication\Channel\Web\FormManager;
+use Derafu\Auth\Authentication\Channel\Web\SessionManager;
+use Derafu\Auth\Authentication\LoginThrottle;
+use Derafu\Auth\Contract\AuthenticationInterface;
 use Derafu\Auth\Contract\UserInterface;
-use Derafu\Auth\FormManager;
-use Derafu\Auth\LoginThrottle;
-use Derafu\Auth\Provider\Htpasswd\HtpasswdAuthentication;
 use Derafu\Auth\Provider\Htpasswd\HtpasswdUserRepository;
-use Derafu\Auth\SessionManager;
+use Derafu\Auth\Provider\Htpasswd\Web\HtpasswdWebFlow;
 use Derafu\Form\Factory\FormFactory;
 use Derafu\Form\Type\TypeProvider;
 use Derafu\Form\Type\TypeRegistry;
@@ -26,6 +27,7 @@ use Derafu\TestsAuth\Fixture\CustomUser;
 use Derafu\TestsAuth\Fixture\CustomUserFactory;
 use Derafu\TestsAuth\Fixture\HtpasswdFile;
 use Derafu\TestsAuth\Fixture\SessionApp;
+use Derafu\TestsAuth\Fixture\Stack;
 use Laminas\Diactoros\Response\RedirectResponse;
 use Mezzio\Flash\FlashMessageMiddleware;
 use Mezzio\Flash\FlashMessagesInterface;
@@ -42,16 +44,24 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
  * session knows about the user afterwards: nothing but who it is, and the file
  * is read again every `refresh_interval` seconds.
  */
-#[CoversClass(HtpasswdAuthentication::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderAuthentication::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderConfiguration::class)]
+#[CoversClass(HtpasswdWebFlow::class)]
+#[UsesClass(\Derafu\Auth\Authentication\AuthenticationManager::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Identification::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\Flash::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authorization\AccessRules::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\Scheme\BasicScheme::class)]
+#[UsesClass(\Derafu\Auth\Provider\Htpasswd\Api\HtpasswdBasicScheme::class)]
 #[UsesClass(\Derafu\Auth\AnonymousUser::class)]
-#[UsesClass(\Derafu\Auth\Authorization::class)]
+#[UsesClass(\Derafu\Auth\Authorization\AuthorizationManager::class)]
 #[UsesClass(\Derafu\Auth\Exception\FormException::class)]
 #[UsesClass(FormManager::class)]
 #[UsesClass(\Derafu\Auth\Provider\Htpasswd\HtpasswdConfiguration::class)]
 #[UsesClass(HtpasswdUserRepository::class)]
-#[UsesClass(\Derafu\Auth\Provider\Htpasswd\Form\LoginForm::class)]
+#[UsesClass(\Derafu\Auth\Provider\Htpasswd\Web\Form\LoginForm::class)]
 #[UsesClass(LoginThrottle::class)]
 #[UsesClass(SessionManager::class)]
 #[UsesClass(\Derafu\Auth\User::class)]
@@ -73,7 +83,7 @@ final class HtpasswdAuthenticationTest extends TestCase
         $this->file->remove();
     }
 
-    private function authentication(?LoginThrottle $throttle = null, bool $custom = false): HtpasswdAuthentication
+    private function authentication(?LoginThrottle $throttle = null, bool $custom = false): AuthenticationInterface
     {
         $config = $this->file->config([
             'enabled' => true,
@@ -82,7 +92,7 @@ final class HtpasswdAuthenticationTest extends TestCase
         ]);
         $factory = $custom ? new CustomUserFactory() : null;
 
-        return new HtpasswdAuthentication(
+        return Stack::htpasswd(
             new HtpasswdUserRepository($config, $factory),
             $config,
             new SessionManager(),
@@ -103,7 +113,7 @@ final class HtpasswdAuthenticationTest extends TestCase
      * @return array{user: UserInterface|null, flashes: array<string, mixed>, sid: string}
      */
     private function logIn(
-        HtpasswdAuthentication $authentication,
+        AuthenticationInterface $authentication,
         string $identity,
         string $password,
         string $address = '203.0.113.7',
@@ -139,7 +149,7 @@ final class HtpasswdAuthenticationTest extends TestCase
      *
      * @return array{ResponseInterface, UserInterface|null}
      */
-    private function visit(HtpasswdAuthentication $authentication, string $sid, string $path = '/private/page'): array
+    private function visit(AuthenticationInterface $authentication, string $sid, string $path = '/private/page'): array
     {
         $user = null;
         $response = $this->app->handle(

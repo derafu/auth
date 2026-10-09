@@ -12,18 +12,19 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth\Provider\Htpasswd;
 
+use Derafu\Auth\Authentication\Channel\Web\FormManager;
+use Derafu\Auth\Authentication\Channel\Web\SessionManager;
+use Derafu\Auth\Authentication\LoginThrottle;
 use Derafu\Auth\Contract\AuthenticationInterface;
-use Derafu\Auth\FormManager;
-use Derafu\Auth\LoginThrottle;
-use Derafu\Auth\Provider\Htpasswd\HtpasswdAuthentication;
 use Derafu\Auth\Provider\Htpasswd\HtpasswdUserRepository;
-use Derafu\Auth\SessionManager;
+use Derafu\Auth\Provider\Htpasswd\Web\HtpasswdWebFlow;
 use Derafu\Form\Factory\FormFactory;
 use Derafu\Form\Type\TypeProvider;
 use Derafu\Form\Type\TypeRegistry;
 use Derafu\Form\Type\TypeResolver;
 use Derafu\TestsAuth\Fixture\HtpasswdFile;
 use Derafu\TestsAuth\Fixture\SessionApp;
+use Derafu\TestsAuth\Fixture\Stack;
 use Derafu\TestsAuth\Provider\ApiBasicTests;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\UsesClass;
@@ -33,15 +34,23 @@ use PHPUnit\Framework\TestCase;
  * A client of the API that sends its user and its password to the provider of the
  * `.htpasswd` file.
  */
-#[CoversClass(HtpasswdAuthentication::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderAuthentication::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderConfiguration::class)]
+#[CoversClass(HtpasswdWebFlow::class)]
+#[UsesClass(\Derafu\Auth\Authentication\AuthenticationManager::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Identification::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\Flash::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authorization\AccessRules::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\Scheme\BasicScheme::class)]
+#[UsesClass(\Derafu\Auth\Provider\Htpasswd\Api\HtpasswdBasicScheme::class)]
 #[UsesClass(\Derafu\Auth\AnonymousUser::class)]
-#[UsesClass(\Derafu\Auth\Authorization::class)]
+#[UsesClass(\Derafu\Auth\Authorization\AuthorizationManager::class)]
 #[UsesClass(FormManager::class)]
 #[UsesClass(\Derafu\Auth\Provider\Htpasswd\HtpasswdConfiguration::class)]
 #[UsesClass(HtpasswdUserRepository::class)]
-#[UsesClass(\Derafu\Auth\Provider\Htpasswd\Form\LoginForm::class)]
+#[UsesClass(\Derafu\Auth\Provider\Htpasswd\Web\Form\LoginForm::class)]
 #[UsesClass(LoginThrottle::class)]
 #[UsesClass(SessionManager::class)]
 #[UsesClass(\Derafu\Auth\User::class)]
@@ -83,7 +92,7 @@ final class HtpasswdApiBasicTest extends TestCase
             'unauthorized_redirect_path' => '/auth/login',
         ]);
 
-        return new HtpasswdAuthentication(
+        return Stack::htpasswd(
             new HtpasswdUserRepository($config),
             $config,
             new SessionManager(),

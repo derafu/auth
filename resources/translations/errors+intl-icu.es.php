@@ -16,22 +16,30 @@ return [
         'Datos de formulario inválidos.',
 
     // Configuration.
-    'Database URL is required.' =>
-        'La URL de la base de datos es obligatoria.',
-    'The path of the htpasswd file is required.' =>
-        'La ruta del archivo htpasswd es obligatoria.',
+    'The database URL is not configured: set AUTH_DATABASE_URL (or DATABASE_URL).' =>
+        'La URL de la base de datos no está configurada: define AUTH_DATABASE_URL (o DATABASE_URL).',
+    'The path of the htpasswd file is not configured: set AUTH_HTPASSWD_PATH.' =>
+        'La ruta del archivo htpasswd no está configurada: define AUTH_HTPASSWD_PATH.',
     'The htpasswd file "{path}" can not be read.' =>
         'No se puede leer el archivo htpasswd "{path}".',
-    'Keycloak URL is required.' =>
-        'La URL de Keycloak es obligatoria.',
-    'Keycloak realm is required.' =>
-        'El realm de Keycloak es obligatorio.',
-    'Client ID is required.' =>
-        'El ID de cliente es obligatorio.',
-    'Client secret is required.' =>
-        'El secreto de cliente es obligatorio.',
-    'Redirect URI is required.' =>
-        'La URI de redirección es obligatoria.',
+    'The URL of Keycloak is not configured: set AUTH_KEYCLOAK_URL.' =>
+        'La URL de Keycloak no está configurada: define AUTH_KEYCLOAK_URL.',
+    'The realm of Keycloak is not configured: set AUTH_KEYCLOAK_REALM.' =>
+        'El realm de Keycloak no está configurado: define AUTH_KEYCLOAK_REALM.',
+    'The client of Keycloak is not configured: set AUTH_KEYCLOAK_CLIENT_ID.' =>
+        'El cliente de Keycloak no está configurado: define AUTH_KEYCLOAK_CLIENT_ID.',
+    'The secret of the client of Keycloak is not configured: set AUTH_KEYCLOAK_CLIENT_SECRET.' =>
+        'El secreto del cliente de Keycloak no está configurado: define AUTH_KEYCLOAK_CLIENT_SECRET.',
+    'The redirect URI of Keycloak is not configured: set AUTH_KEYCLOAK_REDIRECT_URI.' =>
+        'La URI de redirección de Keycloak no está configurada: define AUTH_KEYCLOAK_REDIRECT_URI.',
+    'The value of {variable} "{value}" is not valid: it must be an address that starts with http:// or https://.' =>
+        'El valor de {variable} "{value}" no es válido: debe ser una dirección que empiece con http:// o https://.',
+    'The audience of the API is not configured: set AUTH_KEYCLOAK_API_AUDIENCE, or the client with AUTH_KEYCLOAK_CLIENT_ID.' =>
+        'La audiencia de la API no está configurada: define AUTH_KEYCLOAK_API_AUDIENCE, o el cliente con AUTH_KEYCLOAK_CLIENT_ID.',
+    'Keycloak is asked about the tokens with a client, and it is not configured: set AUTH_KEYCLOAK_CLIENT_ID and AUTH_KEYCLOAK_CLIENT_SECRET (or the ones of the API, AUTH_KEYCLOAK_API_CLIENT_ID and AUTH_KEYCLOAK_API_CLIENT_SECRET), or turn the introspection off with AUTH_KEYCLOAK_API_INTROSPECTION=false.' =>
+        'A Keycloak se le consulta por los tokens con un cliente, y no está configurado: define AUTH_KEYCLOAK_CLIENT_ID y AUTH_KEYCLOAK_CLIENT_SECRET (o los de la API, AUTH_KEYCLOAK_API_CLIENT_ID y AUTH_KEYCLOAK_API_CLIENT_SECRET), o desactiva la introspección con AUTH_KEYCLOAK_API_INTROSPECTION=false.',
+    'No channel of authentication matches the request.' =>
+        'Ningún canal de autenticación corresponde a la petición.',
     'The query "sql_is_active" failed: {error}. If the table has no column "{column}", give your own query in "sql_is_active" or turn the check off with false.' =>
         'La consulta "sql_is_active" falló: {error}. Si la tabla no tiene la columna "{column}", entrega tu propia consulta en "sql_is_active" o desactiva la comprobación con false.',
     'The protected path "{path}" is not valid.' =>
@@ -78,8 +86,8 @@ return [
         'La audiencia de la API "{audience}" no es el cliente "{client}": a Keycloak se le consulta por los tokens de la API con el cliente, y solo responde por los tokens que lo tienen en su audiencia. Usa el cliente como audiencia, o desactiva la introspección.',
     'The token is not an access token.' =>
         'El token no es un token de acceso.',
-    'The client of the API needs its ID and its secret, both.' =>
-        'El cliente de la API necesita su ID y su secreto, los dos.',
+    'The client of the API needs its ID and its secret, both: set AUTH_KEYCLOAK_API_CLIENT_ID and AUTH_KEYCLOAK_API_CLIENT_SECRET.' =>
+        'El cliente de la API necesita su ID y su secreto, los dos: define AUTH_KEYCLOAK_API_CLIENT_ID y AUTH_KEYCLOAK_API_CLIENT_SECRET.',
     'The audience of the token is not this API.' =>
         'La audiencia del token no es esta API.',
     'The audience of the token is not this client.' =>

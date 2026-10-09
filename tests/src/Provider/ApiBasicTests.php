@@ -12,8 +12,8 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth\Provider;
 
+use Derafu\Auth\Authentication\LoginThrottle;
 use Derafu\Auth\Contract\AuthenticationInterface;
-use Derafu\Auth\LoginThrottle;
 use Derafu\TestsAuth\Fixture\SessionApp;
 use Mezzio\Authentication\UserInterface as MezzioUserInterface;
 use PHPUnit\Framework\Attributes\DataProvider;

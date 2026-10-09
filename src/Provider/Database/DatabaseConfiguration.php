@@ -12,14 +12,12 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Provider\Database;
 
-use Derafu\Auth\Abstract\AbstractProviderConfiguration;
-use Derafu\Auth\Contract\ConfigurationInterface;
 use Derafu\Auth\Exception\ConfigurationException;
 
 /**
  * Configuration class for Database authentication settings.
  */
-class DatabaseConfiguration extends AbstractProviderConfiguration implements ConfigurationInterface
+class DatabaseConfiguration
 {
     private string $databaseUrl = '';
 
@@ -40,8 +38,6 @@ class DatabaseConfiguration extends AbstractProviderConfiguration implements Con
      */
     public function __construct(array $config)
     {
-        parent::__construct($config);
-
         $this->databaseUrl = $config['database_url'] ?? $this->databaseUrl;
         if (!empty($config['project_dir'])) {
             $this->databaseUrl = str_replace(
@@ -62,50 +58,8 @@ class DatabaseConfiguration extends AbstractProviderConfiguration implements Con
     public function validate(): void
     {
         if (empty($this->databaseUrl)) {
-            throw new ConfigurationException('Database URL is required.');
+            throw new ConfigurationException('The database URL is not configured: set AUTH_DATABASE_URL (or DATABASE_URL).');
         }
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function get(string $key, mixed $default = null): mixed
-    {
-        $value = parent::get($key, $default);
-        if ($value !== null) {
-            return $value;
-        }
-
-        return match ($key) {
-            'database_url' => $this->getDatabaseUrl(),
-            'user_repository' => $this->getUserRepository(),
-            default => $default,
-        };
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function toArray(): array
-    {
-        $array = parent::toArray();
-
-        return array_merge($array, [
-            'database_url' => $this->getDatabaseUrl(),
-            'user_repository' => $this->getUserRepository(),
-        ]);
-    }
-
-    /**
-     * {@inheritDoc}
-     *
-     * The database has no token that expires, so it asks again every
-     * `DEFAULT_REFRESH_INTERVAL` seconds unless the configuration says another
-     * number.
-     */
-    public function getRefreshInterval(): int
-    {
-        return parent::getRefreshInterval() ?? self::DEFAULT_REFRESH_INTERVAL;
     }
 
     /**

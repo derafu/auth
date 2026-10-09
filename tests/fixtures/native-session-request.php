@@ -16,10 +16,10 @@ declare(strict_types=1);
  *   - `dump`: says what the session has (JSON).
  */
 
-use Derafu\Auth\Provider\Keycloak\KeycloakAuthentication;
-use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
-use Derafu\Auth\Provider\Keycloak\KeycloakSessionManager;
+use Derafu\Auth\Contract\AuthenticationInterface;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
+use Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager;
+use Derafu\TestsAuth\Fixture\Stack;
 use Laminas\Diactoros\Response;
 use Laminas\Diactoros\ServerRequest;
 use Laminas\Diactoros\Uri;
@@ -53,7 +53,7 @@ if ($mode === 'seed' || $mode === 'dump') {
     return;
 }
 
-$config = new KeycloakConfiguration([
+$config = Stack::keycloakConfiguration([
     'keycloak_url' => (string) getenv('TEST_KEYCLOAK_URL'),
     'realm' => 'test',
     'client_id' => 'derafu-auth',
@@ -63,7 +63,7 @@ $config = new KeycloakConfiguration([
     'protected_paths' => ['/private'],
     'refresh_interval' => 600,
 ]);
-$authentication = new KeycloakAuthentication(
+$authentication = Stack::keycloak(
     new KeycloakUserRepository($config),
     $config,
     new KeycloakSessionManager()
@@ -76,7 +76,7 @@ while (!file_exists((string) getenv('GO_FILE'))) {
 $result = new ArrayObject();
 $handler = new class ($authentication, $result) implements RequestHandlerInterface {
     public function __construct(
-        private readonly KeycloakAuthentication $authentication,
+        private readonly AuthenticationInterface $authentication,
         private readonly ArrayObject $result
     ) {
     }

@@ -12,11 +12,11 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth\Provider\Database;
 
-use Derafu\Auth\FormManager;
-use Derafu\Auth\Provider\Database\DatabaseAuthentication;
-use Derafu\Auth\Provider\Database\DatabaseController;
+use Derafu\Auth\Authentication\Channel\Web\FormManager;
+use Derafu\Auth\Authentication\Channel\Web\SessionManager;
+use Derafu\Auth\Contract\AuthenticationInterface;
 use Derafu\Auth\Provider\Database\DatabaseUserRepository;
-use Derafu\Auth\SessionManager;
+use Derafu\Auth\Provider\Database\Web\DatabaseController;
 use Derafu\Auth\Translation\AuthTranslationResourceProvider;
 use Derafu\Form\Factory\FormFactory;
 use Derafu\Form\Factory\TranslatingFormFactory;
@@ -27,6 +27,7 @@ use Derafu\Form\Type\TypeRegistry;
 use Derafu\Form\Type\TypeResolver;
 use Derafu\Renderer\Factory\RendererFactory;
 use Derafu\TestsAuth\Fixture\SessionApp;
+use Derafu\TestsAuth\Fixture\Stack;
 use Derafu\TestsAuth\Fixture\UsersDatabase;
 use Derafu\Translation\TranslatorFactory;
 use Derafu\Twig\Extension\TranslationExtension;
@@ -45,15 +46,23 @@ use Twig\TwigFunction;
  * left for the next request.
  */
 #[CoversClass(DatabaseController::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderAuthentication::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authentication\AuthenticationManager::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Identification::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\Flash::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authorization\AccessRules::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\Scheme\BasicScheme::class)]
+#[UsesClass(\Derafu\Auth\Provider\Database\Api\DatabaseBasicScheme::class)]
 #[UsesClass(\Derafu\Auth\AnonymousUser::class)]
-#[UsesClass(\Derafu\Auth\FormManager::class)]
-#[UsesClass(\Derafu\Auth\Provider\Database\DatabaseAuthentication::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\FormManager::class)]
+#[UsesClass(\Derafu\Auth\Provider\Database\Web\DatabaseWebFlow::class)]
 #[UsesClass(\Derafu\Auth\Provider\Database\DatabaseConfiguration::class)]
 #[UsesClass(\Derafu\Auth\Provider\Database\DatabaseUserRepository::class)]
-#[UsesClass(\Derafu\Auth\Provider\Database\Form\LoginForm::class)]
-#[UsesClass(\Derafu\Auth\SessionManager::class)]
+#[UsesClass(\Derafu\Auth\Provider\Database\Web\Form\LoginForm::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\SessionManager::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
 #[UsesClass(AuthTranslationResourceProvider::class)]
 final class DatabaseControllerTest extends TestCase
@@ -62,7 +71,7 @@ final class DatabaseControllerTest extends TestCase
 
     private UsersDatabase $database;
 
-    private DatabaseAuthentication $authentication;
+    private AuthenticationInterface $authentication;
 
     private DatabaseController $controller;
 
@@ -92,7 +101,7 @@ final class DatabaseControllerTest extends TestCase
             $config
         );
 
-        $this->authentication = new DatabaseAuthentication(
+        $this->authentication = Stack::database(
             new DatabaseUserRepository($config),
             $config,
             new SessionManager(),
@@ -124,7 +133,7 @@ final class DatabaseControllerTest extends TestCase
                 ],
             ]),
             $formManager,
-            $config,
+            Stack::webOf($config),
             new SessionManager()
         );
     }

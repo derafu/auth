@@ -12,13 +12,14 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth\Provider\Database;
 
+use Derafu\Auth\Authentication\Channel\Web\FormManager;
+use Derafu\Auth\Authentication\Channel\Web\SessionManager;
+use Derafu\Auth\Contract\AuthenticationInterface;
 use Derafu\Auth\Contract\UserFactoryInterface;
 use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Exception\ConfigurationException;
-use Derafu\Auth\FormManager;
-use Derafu\Auth\Provider\Database\DatabaseAuthentication;
 use Derafu\Auth\Provider\Database\DatabaseUserRepository;
-use Derafu\Auth\SessionManager;
+use Derafu\Auth\Provider\Database\Web\DatabaseWebFlow;
 use Derafu\Form\Factory\FormFactory;
 use Derafu\Form\Type\TypeProvider;
 use Derafu\Form\Type\TypeRegistry;
@@ -26,6 +27,7 @@ use Derafu\Form\Type\TypeResolver;
 use Derafu\TestsAuth\Fixture\CustomUser;
 use Derafu\TestsAuth\Fixture\CustomUserFactory;
 use Derafu\TestsAuth\Fixture\SessionApp;
+use Derafu\TestsAuth\Fixture\Stack;
 use Derafu\TestsAuth\Fixture\UsersDatabase;
 use Laminas\Diactoros\Response\RedirectResponse;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -41,18 +43,26 @@ use Psr\Http\Message\ServerRequestInterface;
  * asked again every `refresh_interval` seconds (5 minutes if nothing says
  * another number), with the identity that the session has.
  */
-#[CoversClass(DatabaseAuthentication::class)]
+#[CoversClass(DatabaseWebFlow::class)]
 #[CoversClass(DatabaseUserRepository::class)]
 #[UsesClass(SessionManager::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderAuthentication::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authentication\AuthenticationManager::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Identification::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\Flash::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authorization\AccessRules::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\Scheme\BasicScheme::class)]
+#[UsesClass(\Derafu\Auth\Provider\Database\Api\DatabaseBasicScheme::class)]
 #[UsesClass(\Derafu\Auth\AnonymousUser::class)]
-#[UsesClass(\Derafu\Auth\Authorization::class)]
+#[UsesClass(\Derafu\Auth\Authorization\AuthorizationManager::class)]
 #[UsesClass(\Derafu\Auth\Exception\FormException::class)]
 #[UsesClass(FormManager::class)]
 #[UsesClass(\Derafu\Auth\Provider\Database\DatabaseConfiguration::class)]
-#[UsesClass(\Derafu\Auth\LoginThrottle::class)]
-#[UsesClass(\Derafu\Auth\Provider\Database\Form\LoginForm::class)]
+#[UsesClass(\Derafu\Auth\Authentication\LoginThrottle::class)]
+#[UsesClass(\Derafu\Auth\Provider\Database\Web\Form\LoginForm::class)]
 #[UsesClass(\Derafu\Auth\User::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
 #[UsesClass(ConfigurationException::class)]
@@ -76,7 +86,7 @@ final class DatabaseRefreshTest extends TestCase
     /**
      * @param array<string, mixed> $config
      */
-    private function authentication(array $config = [], ?UserFactoryInterface $userFactory = null): DatabaseAuthentication
+    private function authentication(array $config = [], ?UserFactoryInterface $userFactory = null): AuthenticationInterface
     {
         $config = $this->database->config($config + [
             'enabled' => true,
@@ -84,7 +94,7 @@ final class DatabaseRefreshTest extends TestCase
             'unauthorized_redirect_path' => '/auth/login',
         ]);
 
-        return new DatabaseAuthentication(
+        return Stack::database(
             new DatabaseUserRepository($config, userFactory: $userFactory),
             $config,
             new SessionManager(),
@@ -100,7 +110,7 @@ final class DatabaseRefreshTest extends TestCase
     /**
      * The login of `ana`. It gives the identifier of the session.
      */
-    private function logIn(DatabaseAuthentication $authentication): string
+    private function logIn(AuthenticationInterface $authentication): string
     {
         $response = $this->app->handle(
             $this->app->request('/auth/login', body: ['email' => 'ana@example.com', 'password' => 'secret']),
@@ -116,7 +126,7 @@ final class DatabaseRefreshTest extends TestCase
      * @return array{ResponseInterface, UserInterface|null} The response and the
      * user that the page got (null if the user was sent away).
      */
-    private function visit(DatabaseAuthentication $authentication, string $sid): array
+    private function visit(AuthenticationInterface $authentication, string $sid): array
     {
         $user = null;
         $response = $this->app->handle(

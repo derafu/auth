@@ -14,12 +14,13 @@ namespace Derafu\TestsAuth\Provider\Keycloak;
 
 use ArrayObject;
 use Derafu\Auth\Contract\AuthenticationInterface;
-use Derafu\Auth\Provider\Keycloak\KeycloakAuthentication;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
-use Derafu\Auth\Provider\Keycloak\KeycloakSessionManager;
 use Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
+use Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager;
+use Derafu\Auth\Provider\Keycloak\Web\KeycloakWebFlow;
 use Derafu\TestsAuth\Fixture\SessionApp;
+use Derafu\TestsAuth\Fixture\Stack;
 use Firebase\JWT\JWT;
 use GuzzleHttp\Client as GuzzleClient;
 use GuzzleHttp\Exception\ConnectException;
@@ -47,18 +48,26 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
  * the keys of a realm that is not real, so every way in which a token can be
  * wrong is tried (the real realm is in `KeycloakApiTest`).
  */
-#[CoversClass(KeycloakAuthentication::class)]
+#[CoversClass(KeycloakWebFlow::class)]
 #[CoversClass(KeycloakTokenVerifier::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderAuthentication::class)]
-#[UsesClass(\Derafu\Auth\Abstract\AbstractProviderConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authentication\AuthenticationManager::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Identification::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\Flash::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Authorization\AccessRules::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\Scheme\BearerScheme::class)]
+#[UsesClass(\Derafu\Auth\Provider\Keycloak\Api\KeycloakBearerScheme::class)]
 #[UsesClass(\Derafu\Auth\AnonymousUser::class)]
-#[UsesClass(\Derafu\Auth\Authorization::class)]
+#[UsesClass(\Derafu\Auth\Authorization\AuthorizationManager::class)]
 #[UsesClass(\Derafu\Auth\Exception\AuthenticationException::class)]
 #[UsesClass(\Derafu\Auth\Exception\ConfigurationException::class)]
 #[UsesClass(KeycloakConfiguration::class)]
 #[UsesClass(KeycloakSessionManager::class)]
 #[UsesClass(KeycloakUserRepository::class)]
-#[UsesClass(\Derafu\Auth\SessionManager::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\SessionManager::class)]
 #[UsesClass(\Derafu\Auth\User::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
 final class KeycloakBearerTest extends TestCase
@@ -110,7 +119,7 @@ final class KeycloakBearerTest extends TestCase
      */
     private function authentication(array $config = [], ?ArrayAdapter $cache = null, ?GuzzleClient $keycloak = null): AuthenticationInterface
     {
-        $config = new KeycloakConfiguration($config + [
+        $config = Stack::keycloakConfiguration($config + [
             'keycloak_url' => self::URL,
             'realm' => 'test',
             'client_id' => 'derafu-auth',
@@ -124,7 +133,7 @@ final class KeycloakBearerTest extends TestCase
             'protected_paths' => ['/api', '/private'],
         ]);
 
-        return new KeycloakAuthentication(
+        return Stack::keycloak(
             new KeycloakUserRepository(
                 $config,
                 new KeycloakTokenVerifier($config, $cache, $this->http, new HttpFactory()),
@@ -579,7 +588,7 @@ final class KeycloakBearerTest extends TestCase
     #[Test]
     public function theIntrospectionIsOnWhenTheConfigurationDoesNotSayOtherwise(): void
     {
-        $config = new KeycloakConfiguration([
+        $config = Stack::keycloakConfiguration([
             'keycloak_url' => self::URL,
             'realm' => 'test',
             'client_id' => 'derafu-auth',
@@ -588,9 +597,7 @@ final class KeycloakBearerTest extends TestCase
         ]);
 
         $this->assertTrue($config->isApiIntrospection());
-        $this->assertTrue($config->get('api_introspection'));
-        $this->assertTrue($config->toArray()['api_introspection']);
-        $this->assertFalse((new KeycloakConfiguration(['api_introspection' => false] + $config->toArray()))->isApiIntrospection());
+        $this->assertFalse((Stack::keycloakConfiguration(['api_introspection' => false]))->isApiIntrospection());
     }
 
     #[Test]
@@ -599,11 +606,12 @@ final class KeycloakBearerTest extends TestCase
         // Keycloak says that a token is not active to every client but the ones of
         // its audience: it would close the API without a reason that shows.
         try {
-            new KeycloakConfiguration([
+            Stack::keycloakConfiguration([
                 'keycloak_url' => self::URL,
                 'client_id' => 'derafu-auth',
+                'client_secret' => 'a-secret',
                 'api_audience' => 'derafu-api',
-            ]);
+            ])->validateApi();
             $this->fail('The configuration was accepted.');
         } catch (\Derafu\Auth\Exception\ConfigurationException $e) {
             $this->assertStringContainsString('"derafu-api"', $e->getMessage());
@@ -611,9 +619,15 @@ final class KeycloakBearerTest extends TestCase
         }
 
         // It is fine with the introspection off, or when the audience is the client.
-        $this->assertSame('derafu-api', (new KeycloakConfiguration(['client_id' => 'derafu-auth', 'api_audience' => 'derafu-api', 'api_introspection' => false]))->getApiAudience());
-        $this->assertSame('derafu-api', (new KeycloakConfiguration(['client_id' => 'derafu-api', 'api_audience' => 'derafu-api']))->getApiAudience());
-        $this->assertSame('derafu-api', (new KeycloakConfiguration(['client_id' => 'derafu-api']))->getApiAudience());
+        foreach ([
+            ['client_id' => 'derafu-auth', 'api_audience' => 'derafu-api', 'api_introspection' => false],
+            ['client_id' => 'derafu-api', 'api_audience' => 'derafu-api'],
+            ['client_id' => 'derafu-api'],
+        ] as $case) {
+            $config = Stack::keycloakConfiguration($case + ['keycloak_url' => self::URL, 'client_secret' => 'a-secret']);
+            $config->validateApi();
+            $this->assertSame('derafu-api', $config->getApiAudience());
+        }
     }
 
     #[Test]

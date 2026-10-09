@@ -12,14 +12,12 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Provider\Keycloak;
 
-use Derafu\Auth\Abstract\AbstractProviderConfiguration;
-use Derafu\Auth\Contract\ConfigurationInterface;
 use Derafu\Auth\Exception\ConfigurationException;
 
 /**
  * Configuration class for Keycloak authentication settings.
  */
-class KeycloakConfiguration extends AbstractProviderConfiguration implements ConfigurationInterface
+class KeycloakConfiguration
 {
     /**
      * The Keycloak URL.
@@ -138,8 +136,6 @@ class KeycloakConfiguration extends AbstractProviderConfiguration implements Con
      */
     public function __construct(array $config)
     {
-        parent::__construct($config);
-
         $this->keycloakUrl = $config['keycloak_url']
             ?? $this->keycloakUrl
         ;
@@ -179,107 +175,111 @@ class KeycloakConfiguration extends AbstractProviderConfiguration implements Con
 
         $this->apiClientId = trim((string) ($config['api_client_id'] ?? $this->apiClientId));
         $this->apiClientSecret = (string) ($config['api_client_secret'] ?? $this->apiClientSecret);
+    }
+
+    /**
+     * Checks what the web flow needs: the login of the user in Keycloak.
+     *
+     * It is checked when the flow is used, not when the configuration is made, so
+     * a site that has it wrong fails where Keycloak is needed and not in every
+     * page.
+     *
+     * @throws ConfigurationException If something that the login needs is not
+     * configured, or is not a valid address.
+     */
+    public function validateWeb(): void
+    {
+        $this->validateRealm();
+
+        if ($this->clientId === '') {
+            throw new ConfigurationException('The client of Keycloak is not configured: set AUTH_KEYCLOAK_CLIENT_ID.');
+        }
+
+        if ($this->clientSecret === '') {
+            throw new ConfigurationException('The secret of the client of Keycloak is not configured: set AUTH_KEYCLOAK_CLIENT_SECRET.');
+        }
+
+        if ($this->redirectUri === '') {
+            throw new ConfigurationException('The redirect URI of Keycloak is not configured: set AUTH_KEYCLOAK_REDIRECT_URI.');
+        }
+        $this->validateAddress($this->redirectUri, 'AUTH_KEYCLOAK_REDIRECT_URI');
+    }
+
+    /**
+     * Checks what the API needs: to verify the tokens that Keycloak gave.
+     *
+     * Verifying a token needs the realm (its keys) and the audience. Asking
+     * Keycloak whether the token is still active (the introspection) needs a
+     * client that Keycloak accepts, and an audience that is that client.
+     *
+     * @throws ConfigurationException If something that the API needs is not
+     * configured, or is not valid.
+     */
+    public function validateApi(): void
+    {
+        $this->validateRealm();
 
         // The client of the API is both things or none: its secret is not the one
         // of the client of the application.
         if (($this->apiClientId === '') !== ($this->apiClientSecret === '')) {
-            throw new ConfigurationException('The client of the API needs its ID and its secret, both.');
+            throw new ConfigurationException('The client of the API needs its ID and its secret, both: set AUTH_KEYCLOAK_API_CLIENT_ID and AUTH_KEYCLOAK_API_CLIENT_SECRET.');
         }
 
-        // Keycloak answers about a token only to a client that is in its audience
-        // (to any other it says that the token is not active, to the client that
-        // asked for it too). The client that asks is the one of the API, or the
-        // one of the application, so an audience that is another one would close
-        // the API with no reason that shows.
-        if ($this->apiIntrospection && $this->apiAudience !== '' && $this->apiAudience !== $this->getApiClientId()) {
+        if ($this->getApiAudience() === '') {
+            throw new ConfigurationException('The audience of the API is not configured: set AUTH_KEYCLOAK_API_AUDIENCE, or the client with AUTH_KEYCLOAK_CLIENT_ID.');
+        }
+
+        if ($this->apiIntrospection) {
+            if ($this->getApiClientId() === '' || $this->getApiClientSecret() === '') {
+                throw new ConfigurationException('Keycloak is asked about the tokens with a client, and it is not configured: set AUTH_KEYCLOAK_CLIENT_ID and AUTH_KEYCLOAK_CLIENT_SECRET (or the ones of the API, AUTH_KEYCLOAK_API_CLIENT_ID and AUTH_KEYCLOAK_API_CLIENT_SECRET), or turn the introspection off with AUTH_KEYCLOAK_API_INTROSPECTION=false.');
+            }
+
+            // Keycloak answers about a token only to a client that is in its
+            // audience (to any other it says that the token is not active, to the
+            // client that asked for it too). The client that asks is the one of the
+            // API, or the one of the application, so an audience that is another one
+            // would close the API with no reason that shows.
+            if ($this->apiAudience !== '' && $this->apiAudience !== $this->getApiClientId()) {
+                throw new ConfigurationException([
+                    'The audience of the API "{audience}" is not the client "{client}": Keycloak is asked about the tokens of the API by the client, and it only answers about the tokens that have it in their audience. Use the client as the audience, or turn the introspection off.',
+                    'audience' => $this->apiAudience,
+                    'client' => $this->getApiClientId(),
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Checks the URL and the realm: what everything of Keycloak needs.
+     */
+    private function validateRealm(): void
+    {
+        if ($this->keycloakUrl === '') {
+            throw new ConfigurationException('The URL of Keycloak is not configured: set AUTH_KEYCLOAK_URL.');
+        }
+        $this->validateAddress($this->keycloakUrl, 'AUTH_KEYCLOAK_URL');
+
+        if ($this->realm === '') {
+            throw new ConfigurationException('The realm of Keycloak is not configured: set AUTH_KEYCLOAK_REALM.');
+        }
+    }
+
+    /**
+     * Checks that a value is an absolute address (`http` or `https`): without a
+     * scheme it would be a path of the site itself, and the user would be sent
+     * to a page that does not exist.
+     *
+     * @throws ConfigurationException If it is not an absolute address.
+     */
+    private function validateAddress(string $value, string $variable): void
+    {
+        if (!preg_match('#^https?://[^/\s]+#i', $value)) {
             throw new ConfigurationException([
-                'The audience of the API "{audience}" is not the client "{client}": Keycloak is asked about the tokens of the API by the client, and it only answers about the tokens that have it in their audience. Use the client as the audience, or turn the introspection off.',
-                'audience' => $this->apiAudience,
-                'client' => $this->getApiClientId(),
+                'The value of {variable} "{value}" is not valid: it must be an address that starts with http:// or https://.',
+                'variable' => $variable,
+                'value' => $value,
             ]);
         }
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function validate(): void
-    {
-        if (empty($this->keycloakUrl)) {
-            throw new ConfigurationException('Keycloak URL is required.');
-        }
-
-        if (empty($this->realm)) {
-            throw new ConfigurationException('Keycloak realm is required.');
-        }
-
-        if (empty($this->clientId)) {
-            throw new ConfigurationException('Client ID is required.');
-        }
-
-        if (empty($this->clientSecret)) {
-            throw new ConfigurationException('Client secret is required.');
-        }
-
-        if (empty($this->redirectUri)) {
-            throw new ConfigurationException('Redirect URI is required.');
-        }
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function get(string $key, mixed $default = null): mixed
-    {
-        $value = parent::get($key, $default);
-        if ($value !== null) {
-            return $value;
-        }
-
-        return match ($key) {
-            'keycloak_url' => $this->getKeycloakUrl(),
-            'realm' => $this->getRealm(),
-            'client_id' => $this->getClientId(),
-            'client_secret' => $this->clientSecret,
-            'redirect_uri' => $this->getRedirectUri(),
-            'scopes' => $this->getScopes(),
-            'callback_path' => $this->getCallbackPath(),
-            'http_client_options' => $this->getHttpClientOptions(),
-            'issuer' => $this->getIssuer(),
-            'end_session' => $this->isEndSession(),
-            'post_logout_redirect_uri' => $this->getPostLogoutRedirectUri(),
-            'api_audience' => $this->getApiAudience(),
-            'api_client_id' => $this->getApiClientId(),
-            'api_client_secret' => $this->getApiClientSecret(),
-            'api_introspection' => $this->isApiIntrospection(),
-            default => $default,
-        };
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function toArray(): array
-    {
-        $array = parent::toArray();
-
-        return array_merge($array, [
-            'keycloak_url' => $this->getKeycloakUrl(),
-            'realm' => $this->getRealm(),
-            'client_id' => $this->getClientId(),
-            'client_secret' => $this->getClientSecret(),
-            'redirect_uri' => $this->getRedirectUri(),
-            'scopes' => $this->getScopes(),
-            'callback_path' => $this->getCallbackPath(),
-            'http_client_options' => $this->getHttpClientOptions(),
-            'issuer' => $this->getIssuer(),
-            'end_session' => $this->isEndSession(),
-            'post_logout_redirect_uri' => $this->getPostLogoutRedirectUri(),
-            'api_audience' => $this->getApiAudience(),
-            'api_client_id' => $this->getApiClientId(),
-            'api_client_secret' => $this->getApiClientSecret(),
-            'api_introspection' => $this->isApiIntrospection(),
-        ]);
     }
 
     /**
@@ -395,16 +395,18 @@ class KeycloakConfiguration extends AbstractProviderConfiguration implements Con
     /**
      * Gets the URL where Keycloak sends the user after the logout.
      *
+     * @param string $logoutRedirectPath The page of the site that follows the
+     * logout (the one of the web channel), when no URL was configured.
      * @return string The URL: the one that was configured, or the page that
      * follows the logout in the site of the redirect URI.
      */
-    public function getPostLogoutRedirectUri(): string
+    public function getPostLogoutRedirectUri(string $logoutRedirectPath = '/'): string
     {
         if ($this->postLogoutRedirectUri !== '') {
             return $this->postLogoutRedirectUri;
         }
 
-        $route = $this->getLogoutRedirectPath();
+        $route = $logoutRedirectPath;
         if (preg_match('#^https?://#', $route)) {
             return $route;
         }
@@ -478,13 +480,5 @@ class KeycloakConfiguration extends AbstractProviderConfiguration implements Con
     public function isApiIntrospection(): bool
     {
         return $this->apiIntrospection;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function getLoginPath(): string
-    {
-        return $this->getCallbackPath();
     }
 }

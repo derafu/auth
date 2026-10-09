@@ -12,14 +12,21 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth;
 
+use Derafu\Auth\Authentication\AuthenticationManager;
+use Derafu\Auth\Authentication\Channel\Api\ApiChannel;
+use Derafu\Auth\Authentication\Channel\Api\ApiConfiguration;
+use Derafu\Auth\Authentication\Channel\Web\WebChannel;
+use Derafu\Auth\Authentication\Channel\Web\WebConfiguration;
+use Derafu\Auth\Authentication\LoginThrottle;
+use Derafu\Auth\Authorization\AccessRules;
+use Derafu\Auth\Contract\AccessRulesInterface;
+use Derafu\Auth\Contract\AuthenticationInterface as DerafuAuthenticationInterface;
+use Derafu\Auth\Contract\ChannelInterface;
 use Derafu\Auth\Contract\UserFactoryInterface;
-use Derafu\Auth\LoginThrottle;
-use Derafu\Auth\Provider\Database\DatabaseAuthentication;
+use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Provider\Database\DatabaseConfiguration;
 use Derafu\Auth\Provider\Database\DatabaseUserRepository;
-use Derafu\Auth\Provider\Htpasswd\HtpasswdAuthentication;
 use Derafu\Auth\Provider\Htpasswd\HtpasswdConfiguration;
-use Derafu\Auth\Provider\Keycloak\KeycloakAuthentication;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
@@ -34,6 +41,7 @@ use Derafu\Form\Type\TypeProvider;
 use Derafu\Form\Type\TypeRegistry;
 use Derafu\Form\Type\TypeResolver;
 use Derafu\TestsAuth\Fixture\CustomUserFactory;
+use Derafu\TestsAuth\Fixture\GuestUser;
 use Mezzio\Authentication\AuthenticationInterface;
 use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\Test;
@@ -45,6 +53,7 @@ use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
+use Symfony\Component\VarExporter\LazyObjectInterface;
 
 /**
  * The services of the package, as an application imports them: what the
@@ -105,9 +114,38 @@ final class ServicesTest extends TestCase
         return $container;
     }
 
+    /**
+     * The object that a lazy service is: the services are lazy, so what the
+     * container gives is a proxy of its interface until it is used.
+     */
+    private function real(object $object): object
+    {
+        return $object instanceof LazyObjectInterface ? $object->initializeLazyObject() : $object;
+    }
+
     private function property(object $object, string $name): mixed
     {
-        return (new ReflectionProperty($object::class, $name))->getValue($object);
+        $object = $this->real($object);
+
+        // The property of a class that the object extends (private there).
+        $class = $object::class;
+        while (!property_exists($class, $name)) {
+            $class = get_parent_class($class) ?: throw new \LogicException('No property ' . $name);
+        }
+
+        return (new ReflectionProperty($class, $name))->getValue($object);
+    }
+
+    /**
+     * The channels that the manager of the authentication asks, in order.
+     *
+     * @return list<ChannelInterface>
+     */
+    private function channels(ContainerBuilder $container): array
+    {
+        $manager = $container->get(DerafuAuthenticationInterface::class);
+
+        return [...$this->property($manager, 'channels')];
     }
 
     #[Test]
@@ -142,7 +180,7 @@ final class ServicesTest extends TestCase
         $this->environment('AUTH_KEYCLOAK_REALM', 'derafu');
         $this->environment('AUTH_KEYCLOAK_CLIENT_ID', 'app');
         $this->environment('AUTH_KEYCLOAK_CLIENT_SECRET', 'secret');
-        $this->environment('AUTH_KEYCLOAK_REDIRECT_URI', 'https://app.example.com/auth/callback');
+        $this->environment('AUTH_KEYCLOAK_WEB_REDIRECT_URI', 'https://app.example.com/auth/callback');
         $container = $this->container('auth-keycloak-services.yaml', true);
         $container->getDefinition(KeycloakConfiguration::class)->setPublic(true);
         $container->compile(true);
@@ -151,6 +189,7 @@ final class ServicesTest extends TestCase
 
         $this->assertSame('https://auth.example.com/realms/derafu', $config->getIssuer());
         $this->assertSame('app', $config->getClientId());
+        $this->assertSame('https://app.example.com/auth/callback', $config->getRedirectUri());
         // What the environment does not say is the default, and the defaults are
         // the safe ones: the certificate is verified and the session of Keycloak
         // ends at the logout.
@@ -162,9 +201,9 @@ final class ServicesTest extends TestCase
     #[Test]
     public function theEnvironmentCanChangeTheLogoutOfKeycloakAndTheIssuer(): void
     {
-        $this->environment('AUTH_KEYCLOAK_END_SESSION', 'false');
+        $this->environment('AUTH_KEYCLOAK_WEB_END_SESSION', 'false');
         $this->environment('AUTH_KEYCLOAK_ISSUER', 'https://public.example.com/realms/derafu');
-        $this->environment('AUTH_KEYCLOAK_POST_LOGOUT_REDIRECT_URI', 'https://app.example.com/goodbye');
+        $this->environment('AUTH_KEYCLOAK_WEB_POST_LOGOUT_REDIRECT_URI', 'https://app.example.com/goodbye');
         $this->environment('AUTH_KEYCLOAK_HTTP_VERIFY', 'false');
         $container = $this->container('auth-keycloak-services.yaml', true);
         $container->getDefinition(KeycloakConfiguration::class)->setPublic(true);
@@ -179,13 +218,53 @@ final class ServicesTest extends TestCase
     }
 
     #[Test]
-    public function theAuthenticationOfKeycloakIsTheOneThatMezzioGets(): void
+    public function theAuthenticationThatMezzioGetsIsTheManagerOfEveryProvider(): void
     {
-        $container = $this->container('auth-keycloak-services.yaml', true);
-        $container->getDefinition(AuthenticationInterface::class)->setPublic(true);
+        foreach (['auth-keycloak-services.yaml', 'auth-database-services.yaml', 'auth-htpasswd-services.yaml'] as $services) {
+            $container = $this->container($services, true);
+            $container->getAlias(AuthenticationInterface::class)->setPublic(true);
+            $container->compile(true);
+
+            $authentication = $container->get(AuthenticationInterface::class);
+
+            $this->assertInstanceOf(DerafuAuthenticationInterface::class, $authentication, $services);
+            $this->assertInstanceOf(AuthenticationManager::class, $this->real($authentication), $services);
+        }
+    }
+
+    #[Test]
+    public function theChannelsAreAskedTheApiOneFirstAndTheWebOneLast(): void
+    {
+        foreach (['auth-keycloak-services.yaml', 'auth-database-services.yaml', 'auth-htpasswd-services.yaml'] as $services) {
+            $container = $this->container($services, true);
+            $container->getDefinition(DerafuAuthenticationInterface::class)->setPublic(true);
+            $container->compile(true);
+
+            $channels = $this->channels($container);
+
+            $this->assertCount(2, $channels, $services);
+            $this->assertSame(['api', 'web'], array_map(fn (ChannelInterface $channel) => $channel->name(), $channels), $services);
+            $this->assertInstanceOf(ApiChannel::class, $this->real($channels[0]), $services);
+            $this->assertInstanceOf(WebChannel::class, $this->real($channels[1]), $services);
+        }
+    }
+
+    #[Test]
+    public function aChannelThatTheApplicationTagsIsAskedInItsPriority(): void
+    {
+        $container = $this->container('auth-database-services.yaml', true);
+        $container->register('app.channel', ApiChannel::class)
+            ->setArguments([new Definition(ApiConfiguration::class, [['paths' => ['/hooks']]]), new Definition(\Derafu\Auth\Provider\Database\Api\DatabaseBasicScheme::class, [
+                new Definition(DatabaseUserRepository::class, [new Definition(DatabaseConfiguration::class, [[]])]),
+                new Definition(DatabaseConfiguration::class, [[]]),
+            ])])
+            ->addTag('derafu_auth.channel', ['priority' => 50]);
+        $container->getDefinition(DerafuAuthenticationInterface::class)->setPublic(true);
         $container->compile(true);
 
-        $this->assertInstanceOf(KeycloakAuthentication::class, $container->get(AuthenticationInterface::class));
+        // Between the API one (100) and the web one (0).
+        $this->assertCount(3, $this->channels($container));
+        $this->assertSame('web', $this->channels($container)[2]->name());
     }
 
     #[Test]
@@ -193,17 +272,17 @@ final class ServicesTest extends TestCase
     {
         $container = $this->container('auth-database-services.yaml', true);
         $container->getDefinition(LoginThrottle::class)->setPublic(true);
-        $container->getDefinition(AuthenticationInterface::class)->setPublic(true);
+        $container->getDefinition(DerafuAuthenticationInterface::class)->setPublic(true);
         $container->compile(true);
 
         $throttle = $container->get(LoginThrottle::class);
         $this->assertSame(5, $this->property($throttle, 'maxAttempts'));
         $this->assertSame(900, $this->property($throttle, 'lockSeconds'));
 
-        // The authentication has it.
-        $authentication = $container->get(AuthenticationInterface::class);
-        $this->assertInstanceOf(DatabaseAuthentication::class, $authentication);
-        $this->assertSame($throttle, $this->property($authentication, 'throttle'));
+        // The form of the web and the scheme of the API have it.
+        [$api, $web] = $this->channels($container);
+        $this->assertSame($throttle, $this->real($this->property($this->property($web, 'flow'), 'throttle')));
+        $this->assertSame($throttle, $this->real($this->property($this->property($api, 'scheme'), 'throttle')));
     }
 
     #[Test]
@@ -222,33 +301,22 @@ final class ServicesTest extends TestCase
     }
 
     #[Test]
-    public function theRefreshIntervalOfKeycloakIsAutomaticUnlessTheEnvironmentSaysAnother(): void
+    public function theRefreshIntervalIsAutomaticUnlessTheEnvironmentSaysAnother(): void
     {
-        $container = $this->container('auth-keycloak-services.yaml', true);
-        $container->getDefinition(KeycloakConfiguration::class)->setPublic(true);
-        $container->compile(true);
-        $this->assertNull($container->get(KeycloakConfiguration::class)->getRefreshInterval());
+        foreach (['auth-keycloak-services.yaml', 'auth-database-services.yaml', 'auth-htpasswd-services.yaml'] as $services) {
+            $container = $this->container($services, true);
+            $container->getDefinition(WebConfiguration::class)->setPublic(true);
+            $container->compile(true);
+            // The provider decides (the expiration of a token, or five minutes).
+            $this->assertNull($container->get(WebConfiguration::class)->getRefreshInterval(), $services);
 
-        $this->environment('AUTH_REFRESH_INTERVAL_SECONDS', '90');
-        $container = $this->container('auth-keycloak-services.yaml', true);
-        $container->getDefinition(KeycloakConfiguration::class)->setPublic(true);
-        $container->compile(true);
-        $this->assertSame(90, $container->get(KeycloakConfiguration::class)->getRefreshInterval());
-    }
-
-    #[Test]
-    public function theRefreshIntervalOfTheDatabaseIsTheDefaultUnlessTheEnvironmentSaysAnother(): void
-    {
-        $container = $this->container('auth-database-services.yaml', true);
-        $container->getDefinition(DatabaseConfiguration::class)->setPublic(true);
-        $container->compile(true);
-        $this->assertSame(300, $container->get(DatabaseConfiguration::class)->getRefreshInterval());
-
-        $this->environment('AUTH_REFRESH_INTERVAL_SECONDS', '45');
-        $container = $this->container('auth-database-services.yaml', true);
-        $container->getDefinition(DatabaseConfiguration::class)->setPublic(true);
-        $container->compile(true);
-        $this->assertSame(45, $container->get(DatabaseConfiguration::class)->getRefreshInterval());
+            $this->environment('AUTH_WEB_REFRESH_INTERVAL_SECONDS', '90');
+            $container = $this->container($services, true);
+            $container->getDefinition(WebConfiguration::class)->setPublic(true);
+            $container->compile(true);
+            $this->assertSame(90, $container->get(WebConfiguration::class)->getRefreshInterval(), $services);
+            putenv('AUTH_WEB_REFRESH_INTERVAL_SECONDS');
+        }
     }
 
     #[Test]
@@ -295,11 +363,12 @@ final class ServicesTest extends TestCase
         $database = $this->container('auth-database-services.yaml', true);
         $database->register(UserFactoryInterface::class, CustomUserFactory::class);
         $database->getDefinition(DatabaseUserRepository::class)->setPublic(true);
-        $database->getDefinition(AuthenticationInterface::class)->setPublic(true);
+        $database->getDefinition(DerafuAuthenticationInterface::class)->setPublic(true);
         $database->compile(true);
 
         $this->assertInstanceOf(CustomUserFactory::class, $this->property($database->get(DatabaseUserRepository::class), 'userFactory'));
-        $this->assertInstanceOf(CustomUserFactory::class, $this->property($database->get(AuthenticationInterface::class), 'userFactory'));
+        $web = $this->channels($database)[1];
+        $this->assertInstanceOf(CustomUserFactory::class, $this->property($this->property($web, 'flow'), 'userFactory'));
 
         $keycloak = $this->container('auth-keycloak-services.yaml', true);
         $keycloak->register(UserFactoryInterface::class, CustomUserFactory::class);
@@ -335,37 +404,75 @@ final class ServicesTest extends TestCase
     }
 
     #[Test]
-    public function theVariablesOfTheProvidersHaveTheNameOfTheirProviderAndTheUnitOfTheirNumbers(): void
+    public function theVariablesOfKeycloakHaveTheNameOfTheirProviderTheirChannelAndTheUnitOfTheirNumbers(): void
     {
         $this->environment('AUTH_KEYCLOAK_HTTP_TIMEOUT_SECONDS', '7');
         $this->environment('AUTH_KEYCLOAK_HTTP_CONNECT_TIMEOUT_SECONDS', '3');
-        $this->environment('AUTH_KEYCLOAK_CALLBACK_PATH', '/login/keycloak');
-        $this->environment('AUTH_LOGIN_REDIRECT_PATH', '/dashboard');
+        $this->environment('AUTH_KEYCLOAK_WEB_CALLBACK_PATH', '/login/keycloak');
+        $this->environment('AUTH_KEYCLOAK_WEB_SCOPES', '["openid", "email"]');
+        $this->environment('AUTH_WEB_LOGIN_REDIRECT_PATH', '/dashboard');
         $container = $this->container('auth-keycloak-services.yaml', true);
         $container->getDefinition(KeycloakConfiguration::class)->setPublic(true);
+        $container->getDefinition(WebConfiguration::class)->setPublic(true);
         $container->compile(true);
         $config = $container->get(KeycloakConfiguration::class);
 
         $this->assertSame(7, $config->getHttpClientOptions()['timeout']);
         $this->assertSame(3, $config->getHttpClientOptions()['connect_timeout']);
         $this->assertSame('/login/keycloak', $config->getCallbackPath());
-        $this->assertSame('/dashboard', $config->getLoginRedirectPath());
+        $this->assertSame(['openid', 'email'], $config->getScopes());
+        $this->assertSame('/dashboard', $container->get(WebConfiguration::class)->getLoginRedirectPath());
+    }
+
+    #[Test]
+    public function theVariablesOfTheWebChannelAreTheSameInEveryProviderWithTheDefaultsOfEach(): void
+    {
+        $this->environment('AUTH_WEB_LOGOUT_PATH', '/signout');
+        $this->environment('AUTH_WEB_LOGOUT_REDIRECT_PATH', '/bye');
+        $this->environment('AUTH_WEB_UNAUTHORIZED_REDIRECT_PATH', '/denied');
+
+        foreach (['auth-keycloak-services.yaml', 'auth-database-services.yaml', 'auth-htpasswd-services.yaml'] as $services) {
+            $container = $this->container($services, true);
+            $container->getDefinition(WebConfiguration::class)->setPublic(true);
+            $container->compile(true);
+            $web = $container->get(WebConfiguration::class);
+
+            $this->assertSame('/signout', $web->getLogoutPath(), $services);
+            $this->assertSame('/bye', $web->getLogoutRedirectPath(), $services);
+            $this->assertSame('/denied', $web->getUnauthorizedRedirectPath(), $services);
+        }
+    }
+
+    #[Test]
+    public function theLoginIsAPageOfTheSiteInTheDatabaseAndHtpasswdProvidersAndNotInKeycloak(): void
+    {
+        $expected = [
+            'auth-keycloak-services.yaml' => ['/', '/'],
+            'auth-database-services.yaml' => ['/auth/login', '/auth/login'],
+            'auth-htpasswd-services.yaml' => ['/auth/login', '/auth/login'],
+        ];
+
+        foreach ($expected as $services => [$logoutRedirect, $unauthorizedRedirect]) {
+            $container = $this->container($services, true);
+            $container->getDefinition(WebConfiguration::class)->setPublic(true);
+            $container->compile(true);
+            $web = $container->get(WebConfiguration::class);
+
+            $this->assertSame('/', $web->getLoginRedirectPath(), $services);
+            $this->assertSame($logoutRedirect, $web->getLogoutRedirectPath(), $services);
+            $this->assertSame($unauthorizedRedirect, $web->getUnauthorizedRedirectPath(), $services);
+        }
     }
 
     #[Test]
     public function theVariablesOfTheDatabaseProviderAreTheOnesOfItsFile(): void
     {
         $this->environment('AUTH_DATABASE_USER_TABLE', 'people');
-        $this->environment('AUTH_LOGOUT_REDIRECT_PATH', '/bye');
-        $this->environment('AUTH_UNAUTHORIZED_REDIRECT_PATH', '/denied');
         $container = $this->container('auth-database-services.yaml', true);
         $container->getDefinition(DatabaseConfiguration::class)->setPublic(true);
         $container->compile(true);
-        $config = $container->get(DatabaseConfiguration::class);
 
-        $this->assertSame('people', $config->getUserRepository()['table']);
-        $this->assertSame('/bye', $config->getLogoutRedirectPath());
-        $this->assertSame('/denied', $config->getUnauthorizedRedirectPath());
+        $this->assertSame('people', $container->get(DatabaseConfiguration::class)->getUserRepository()['table']);
     }
 
     #[Test]
@@ -377,20 +484,18 @@ final class ServicesTest extends TestCase
         $container = $this->container('auth-htpasswd-services.yaml', true);
         $container->getDefinition(HtpasswdConfiguration::class)->setPublic(true);
         $container->getDefinition(LoginThrottle::class)->setPublic(true);
-        $container->getDefinition(AuthenticationInterface::class)->setPublic(true);
+        $container->getDefinition(DerafuAuthenticationInterface::class)->setPublic(true);
         $container->compile(true);
 
-        $config = $container->get(HtpasswdConfiguration::class);
-        $this->assertSame(dirname(__DIR__, 2) . '/var/.htpasswd', $config->getHtpasswdPath());
-        $this->assertSame('/auth/login', $config->getUnauthorizedRedirectPath());
+        $this->assertSame(dirname(__DIR__, 2) . '/var/.htpasswd', $container->get(HtpasswdConfiguration::class)->getHtpasswdPath());
 
         $throttle = $container->get(LoginThrottle::class);
         $this->assertSame(3, $this->property($throttle, 'maxAttempts'));
         $this->assertSame(120, $this->property($throttle, 'lockSeconds'));
 
-        $authentication = $container->get(AuthenticationInterface::class);
-        $this->assertInstanceOf(HtpasswdAuthentication::class, $authentication);
-        $this->assertSame($throttle, $this->property($authentication, 'throttle'));
+        [$api, $web] = $this->channels($container);
+        $this->assertSame($throttle, $this->real($this->property($this->property($web, 'flow'), 'throttle')));
+        $this->assertSame($throttle, $this->real($this->property($this->property($api, 'scheme'), 'throttle')));
     }
 
     #[Test]
@@ -399,37 +504,53 @@ final class ServicesTest extends TestCase
         $this->environment('AUTH_API_PATHS', '["/api", "/docs/index.json"]');
         $this->environment('AUTH_API_REALM', 'Billing');
 
-        foreach ([
-            ['auth-keycloak-services.yaml', KeycloakConfiguration::class],
-            ['auth-database-services.yaml', DatabaseConfiguration::class],
-            ['auth-htpasswd-services.yaml', HtpasswdConfiguration::class],
-        ] as [$file, $class]) {
+        foreach (['auth-keycloak-services.yaml', 'auth-database-services.yaml', 'auth-htpasswd-services.yaml'] as $file) {
             $container = $this->container($file, true);
-            $container->getDefinition($class)->setPublic(true);
+            $container->getDefinition(ApiConfiguration::class)->setPublic(true);
             $container->compile(true);
-            $config = $container->get($class);
+            $config = $container->get(ApiConfiguration::class);
 
-            $this->assertSame(['/api', '/docs/index.json'], $config->getApiPaths(), $file);
-            $this->assertSame('Billing', $config->getApiRealm(), $file);
+            $this->assertSame(['/api', '/docs/index.json'], $config->getPaths(), $file);
+            $this->assertSame('Billing', $config->getRealm(), $file);
         }
     }
 
     #[Test]
     public function theApiIsTheOneOfApiWithTheRealmApiWhenTheEnvironmentDoesNotSayOtherwise(): void
     {
-        foreach ([
-            ['auth-keycloak-services.yaml', KeycloakConfiguration::class],
-            ['auth-database-services.yaml', DatabaseConfiguration::class],
-            ['auth-htpasswd-services.yaml', HtpasswdConfiguration::class],
-        ] as [$file, $class]) {
+        foreach (['auth-keycloak-services.yaml', 'auth-database-services.yaml', 'auth-htpasswd-services.yaml'] as $file) {
             $container = $this->container($file, true);
-            $container->getDefinition($class)->setPublic(true);
+            $container->getDefinition(ApiConfiguration::class)->setPublic(true);
             $container->compile(true);
-            $config = $container->get($class);
+            $config = $container->get(ApiConfiguration::class);
 
-            $this->assertSame(['/api'], $config->getApiPaths(), $file);
-            $this->assertSame('API', $config->getApiRealm(), $file);
+            $this->assertSame(['/api'], $config->getPaths(), $file);
+            $this->assertSame('API', $config->getRealm(), $file);
         }
+    }
+
+    #[Test]
+    public function theAccessRulesAreTheOnesOfTheEnvironmentInEveryProvider(): void
+    {
+        $this->environment('AUTH_PROTECTED_PATHS', '{"/dashboard": [], "/admin": ["admin"]}');
+
+        foreach (['auth-keycloak-services.yaml', 'auth-database-services.yaml', 'auth-htpasswd-services.yaml'] as $file) {
+            $container = $this->container($file, true);
+            $container->getDefinition(AccessRulesInterface::class)->setPublic(true);
+            $container->compile(true);
+            $rules = $container->get(AccessRulesInterface::class);
+
+            $this->assertInstanceOf(AccessRules::class, $this->real($rules), $file);
+            $this->assertTrue($rules->isEnabled(), $file);
+            $this->assertSame(['/dashboard' => [], '/admin' => ['admin']], $rules->getProtectedPaths(), $file);
+        }
+
+        // Turned off, for development and for tests.
+        $this->environment('AUTH_ENABLED', 'false');
+        $container = $this->container('auth-database-services.yaml', true);
+        $container->getDefinition(AccessRulesInterface::class)->setPublic(true);
+        $container->compile(true);
+        $this->assertFalse($container->get(AccessRulesInterface::class)->isEnabled());
     }
 
     #[Test]
@@ -469,5 +590,24 @@ final class ServicesTest extends TestCase
         $this->assertSame('billing-api', $config->getApiClientId());
         $this->assertSame('billing-secret', $config->getApiClientSecret());
         $this->assertSame('billing-api', $config->getApiAudience());
+    }
+
+    #[Test]
+    public function anAnonymousUserOfTheApplicationIsTheOneThatEveryPieceUses(): void
+    {
+        foreach (['auth-keycloak-services.yaml', 'auth-database-services.yaml', 'auth-htpasswd-services.yaml'] as $services) {
+            $container = $this->container($services, true);
+            $container->register(UserInterface::class, GuestUser::class);
+            $container->getDefinition(DerafuAuthenticationInterface::class)->setPublic(true);
+            $container->compile(true);
+
+            $manager = $container->get(DerafuAuthenticationInterface::class);
+            [$api, $web] = $this->channels($container);
+
+            $this->assertInstanceOf(GuestUser::class, $this->property($manager, 'anonymousUser'), $services);
+            $this->assertInstanceOf(GuestUser::class, $this->property($api, 'anonymousUser'), $services);
+            $this->assertInstanceOf(GuestUser::class, $this->property($web, 'anonymousUser'), $services);
+            $this->assertInstanceOf(GuestUser::class, $this->property($this->property($web, 'flow'), 'anonymousUser'), $services);
+        }
     }
 }

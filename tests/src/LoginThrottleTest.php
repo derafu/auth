@@ -12,7 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth;
 
-use Derafu\Auth\LoginThrottle;
+use Derafu\Auth\Authentication\LoginThrottle;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
