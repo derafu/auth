@@ -28,8 +28,10 @@ use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 
 /**
- * An unauthenticated request to the API gets a response with a title and a
- * detail, in the language of the translator, and in English without one.
+ * An unauthenticated request to the API gives an `AuthenticationException`, with
+ * a message that is translatable (in English as it is, in the language of a
+ * translator that reads it) and, when the scheme can tell why, a challenge that
+ * says it.
  */
 #[CoversClass(ApiChannel::class)]
 #[UsesClass(ApiConfiguration::class)]
@@ -41,48 +43,42 @@ use PHPUnit\Framework\TestCase;
 final class ApiChannelTest extends TestCase
 {
     /**
-     * @return array<string, mixed>
+     * The exception of a request without credentials: `unauthorizedResponse()`
+     * always throws, so this is what the middleware would let through.
      */
-    private function unauthenticatedResponseOfTheApi(?string $locale): array
+    private function unauthorizedException(): AuthenticationException
     {
-        $channel = new ApiChannel(
-            new ApiConfiguration(),
-            $this->createStub(ApiSchemeInterface::class),
-            translator: $locale === null
-                ? null
-                : TranslatorFactory::create($locale, [], [new AuthTranslationResourceProvider()])
-        );
+        $channel = new ApiChannel(new ApiConfiguration(), $this->createStub(ApiSchemeInterface::class));
 
-        $response = $channel->unauthorizedResponse(
-            (new ServerRequest())->withUri(new Uri('https://example.com/api/items'))
-        );
+        try {
+            $channel->unauthorizedResponse(
+                (new ServerRequest())->withUri(new Uri('https://example.com/api/items'))
+            );
+        } catch (AuthenticationException $e) {
+            return $e;
+        }
 
-        $this->assertSame(401, $response->getStatusCode());
-
-        return json_decode((string) $response->getBody(), true);
+        $this->fail('unauthorizedResponse() did not throw.');
     }
 
-    public function testTheResponseOfTheApiIsInEnglishWithoutATranslator(): void
+    public function testWithoutCredentialsTheExceptionIs401InEnglishByDefault(): void
     {
+        $exception = $this->unauthorizedException();
+
+        $this->assertSame(401, $exception->getCode());
         $this->assertSame(
-            [
-                'status' => 401,
-                'title' => 'Unauthorized',
-                'detail' => 'You need to send valid credentials to access this resource.',
-            ],
-            $this->unauthenticatedResponseOfTheApi(null)
+            'You need to send valid credentials to access this resource.',
+            $exception->getMessage()
         );
     }
 
-    public function testTheResponseOfTheApiIsTranslatedWithATranslator(): void
+    public function testTheExceptionIsTranslatedByWhoeverCatchesIt(): void
     {
+        $translator = TranslatorFactory::create('es', [], [new AuthTranslationResourceProvider()]);
+
         $this->assertSame(
-            [
-                'status' => 401,
-                'title' => 'No autorizado',
-                'detail' => 'Debes enviar credenciales válidas para acceder a este recurso.',
-            ],
-            $this->unauthenticatedResponseOfTheApi('es')
+            'Debes enviar credenciales válidas para acceder a este recurso.',
+            $this->unauthorizedException()->trans($translator)
         );
     }
 
@@ -111,7 +107,8 @@ final class ApiChannelTest extends TestCase
 
     /**
      * What the middleware does: the channel identifies the request, and the same
-     * request is asked for the response 401.
+     * request is asked for the response 401, which is the challenge of the
+     * exception that it throws.
      */
     private function challengeOf(ApiChannel $channel, string $header): string
     {
@@ -121,7 +118,13 @@ final class ApiChannelTest extends TestCase
 
         $channel->identify($request);
 
-        return $channel->unauthorizedResponse($request)->getHeaderLine('WWW-Authenticate');
+        try {
+            $channel->unauthorizedResponse($request);
+        } catch (AuthenticationException $e) {
+            return $e->getHeaders()['WWW-Authenticate'] ?? '';
+        }
+
+        $this->fail('unauthorizedResponse() did not throw.');
     }
 
     public function testTheReasonThatTheSchemeGivesIsInTheChallenge(): void
@@ -183,6 +186,14 @@ final class ApiChannelTest extends TestCase
         $request = (new ServerRequest())->withUri(new Uri('https://example.com/api/items'));
         $channel->identify($request);
 
-        $this->assertSame('Bearer realm="API"', $channel->unauthorizedResponse($request)->getHeaderLine('WWW-Authenticate'));
+        try {
+            $channel->unauthorizedResponse($request);
+        } catch (AuthenticationException $e) {
+            $this->assertSame('Bearer realm="API"', $e->getHeaders()['WWW-Authenticate'] ?? '');
+
+            return;
+        }
+
+        $this->fail('unauthorizedResponse() did not throw.');
     }
 }

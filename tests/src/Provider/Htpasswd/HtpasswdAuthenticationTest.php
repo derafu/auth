@@ -17,6 +17,7 @@ use Derafu\Auth\Authentication\Channel\Web\SessionManager;
 use Derafu\Auth\Authentication\LoginThrottle;
 use Derafu\Auth\Contract\AuthenticationInterface;
 use Derafu\Auth\Contract\UserInterface;
+use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Provider\Htpasswd\HtpasswdUserRepository;
 use Derafu\Auth\Provider\Htpasswd\Web\HtpasswdWebFlow;
 use Derafu\Form\Factory\FormFactory;
@@ -52,6 +53,7 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\Flash::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiConfiguration::class)]
+#[UsesClass(AuthenticationException::class)]
 #[UsesClass(\Derafu\Auth\Authorization\AccessRules::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Api\Scheme\BasicScheme::class)]
 #[UsesClass(\Derafu\Auth\Provider\Htpasswd\Api\HtpasswdBasicScheme::class)]
@@ -329,26 +331,30 @@ final class HtpasswdAuthenticationTest extends TestCase
     }
 
     #[Test]
-    public function onlyThePathsOfTheApiGetAJsonResponseNotARedirect(): void
+    public function onlyThePathsOfTheApiGetAnAuthenticationExceptionNotARedirect(): void
     {
         $authentication = $this->authentication();
-        $answer = function (string $path) use ($authentication): ResponseInterface {
-            $response = null;
+        $answer = function (string $path) use ($authentication): ResponseInterface|AuthenticationException {
+            $result = null;
             $this->app->handle(
                 $this->app->request($path),
-                function (ServerRequestInterface $request) use ($authentication, &$response): void {
-                    $response = $authentication->unauthorizedResponse($request);
+                function (ServerRequestInterface $request) use ($authentication, &$result): void {
+                    try {
+                        $result = $authentication->unauthorizedResponse($request);
+                    } catch (AuthenticationException $e) {
+                        $result = $e;
+                    }
                 }
             );
-            $this->assertInstanceOf(ResponseInterface::class, $response);
 
-            return $response;
+            return $result;
         };
 
-        // /api and what is below it: the response of an API.
+        // /api and what is below it: the exception of an API.
         foreach (['/api', '/api/items', '/api/a/b'] as $path) {
-            $this->assertSame(401, $answer($path)->getStatusCode(), $path);
-            $this->assertSame('application/json', $answer($path)->getHeaderLine('Content-Type'), $path);
+            $result = $answer($path);
+            $this->assertInstanceOf(AuthenticationException::class, $result, $path);
+            $this->assertSame(401, $result->getCode(), $path);
         }
 
         // /apiary is not the API: it is a page, and its user is sent to the login.

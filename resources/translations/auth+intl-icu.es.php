@@ -15,8 +15,6 @@ return [
     'Login' => 'Iniciar sesión',
 
     // Responses to the clients of the API.
-    'Unauthorized' => 'No autorizado',
-    'Too Many Requests' => 'Demasiadas solicitudes',
     'You need to send valid credentials to access this resource.' => 'Debes enviar credenciales válidas para acceder a este recurso.',
 
     // Login form (Provider/Database/Form/LoginForm.php).

@@ -20,10 +20,8 @@ use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\TooManyAttemptsException;
 use Derafu\Translation\TranslatableMessage;
-use Laminas\Diactoros\Response\JsonResponse;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
-use Symfony\Contracts\Translation\TranslatorInterface;
 use WeakMap;
 
 /**
@@ -40,8 +38,10 @@ use WeakMap;
  * can add its own (a `Basic` for the whole site) and that must not break the
  * sessions of the users.
  *
- * What is answered to a client that is not authenticated is a 401 in JSON, never
- * a redirect to a login that it can not use.
+ * What answers a client that is not authenticated is a `AuthenticationException`
+ * (401, or 429 when it is limited), never a redirect to a login that it can not
+ * use: whoever catches it is the one that turns it into a response, in whatever
+ * shape and language its own pipeline gives to every other error.
  */
 final class ApiChannel implements ChannelInterface
 {
@@ -61,15 +61,11 @@ final class ApiChannel implements ChannelInterface
      * @param ApiConfiguration $config The paths and the realm of the API.
      * @param ApiSchemeInterface $scheme The scheme that the provider reads.
      * @param UserInterface $anonymousUser The anonymous user.
-     * @param TranslatorInterface|null $translator Translates the title and the
-     * detail of the response 401, in the language of the translator. Without it
-     * they are in English.
      */
     public function __construct(
         private readonly ApiConfiguration $config,
         private readonly ApiSchemeInterface $scheme,
-        private readonly UserInterface $anonymousUser = new AnonymousUser(),
-        private readonly ?TranslatorInterface $translator = null
+        private readonly UserInterface $anonymousUser = new AnonymousUser()
     ) {
     }
 
@@ -125,29 +121,21 @@ final class ApiChannel implements ChannelInterface
     /**
      * {@inheritDoc}
      *
-     * A JSON response with the status 401, in the language of the translator, and
-     * the header `WWW-Authenticate` that says how to authenticate.
+     * Throws the `AuthenticationException` of the request (401, with the reason
+     * that the scheme gave), or a generic one when there is none (no credentials
+     * at all). A client that is limited is not told that its credentials are
+     * wrong, but when to try again (`TooManyAttemptsException`, 429, RFC 6585):
+     * it already carries its own `Retry-After`, so it is thrown as it is, with no
+     * challenge (RFC 6585 does not ask for one).
+     *
+     * @throws AuthenticationException
      */
     public function unauthorizedResponse(ServerRequestInterface $request): ResponseInterface
     {
         $failure = $this->failures?->offsetExists($request) ? $this->failures[$request] : null;
 
-        // A client that is limited is not told that its credentials are wrong, but
-        // when to try again (RFC 6585).
         if ($failure instanceof TooManyAttemptsException) {
-            return new JsonResponse(
-                [
-                    'status' => 429,
-                    'title' => $this->translate(new TranslatableMessage('Too Many Requests', [], 'auth')),
-                    'detail' => $this->translate(new TranslatableMessage(
-                        'Too many failed login attempts. Try again in {minutes, plural, one {# minute} other {# minutes}}.',
-                        ['minutes' => (int) ceil($failure->getRetryAfter() / 60)],
-                        'auth'
-                    )),
-                ],
-                429,
-                ['Retry-After' => (string) $failure->getRetryAfter()]
-            );
+            throw $failure;
         }
 
         $challenge = $this->scheme->challenge(
@@ -157,15 +145,10 @@ final class ApiChannel implements ChannelInterface
             $failure?->getMessage()
         );
 
-        return new JsonResponse(
-            [
-                'status' => 401,
-                'title' => $this->translate(new TranslatableMessage('Unauthorized', [], 'auth')),
-                'detail' => $this->translate(new TranslatableMessage('You need to send valid credentials to access this resource.', [], 'auth')),
-            ],
-            401,
-            $challenge !== null ? ['WWW-Authenticate' => $challenge] : []
-        );
+        throw ($failure ?? new AuthenticationException(
+            new TranslatableMessage('You need to send valid credentials to access this resource.', [], 'auth'),
+            401
+        ))->setHeaders($challenge !== null ? ['WWW-Authenticate' => $challenge] : []);
     }
 
     /**
@@ -187,15 +170,5 @@ final class ApiChannel implements ChannelInterface
         }
 
         return null;
-    }
-
-    /**
-     * Translates a message with the translator, if there is one.
-     */
-    private function translate(TranslatableMessage $message): string
-    {
-        return $this->translator !== null
-            ? $message->trans($this->translator)
-            : (string) $message;
     }
 }

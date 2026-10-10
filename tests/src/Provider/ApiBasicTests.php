@@ -14,7 +14,9 @@ namespace Derafu\TestsAuth\Provider;
 
 use Derafu\Auth\Authentication\LoginThrottle;
 use Derafu\Auth\Contract\AuthenticationInterface;
+use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\TestsAuth\Fixture\SessionApp;
+use Laminas\Diactoros\Response\JsonResponse;
 use Mezzio\Authentication\UserInterface as MezzioUserInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
@@ -47,8 +49,17 @@ trait ApiBasicTests
     abstract protected function identity(): string;
 
     /**
+     * `unauthorizedResponse()` of the API throws instead of returning (so
+     * whoever catches it formats it like every other error): without a
+     * `derafu/http` pipeline here, this builds the response that it would give
+     * (the status and the headers of the exception, which the package does
+     * guarantee), so the tests that only look at those keep asking for
+     * `$result['response']`. A test that needs the message of the exception
+     * itself (not a shape that is not this package's to give) reads
+     * `$result['exception']`.
+     *
      * @param array<string, string> $headers
-     * @return array{response: ResponseInterface, user: mixed}
+     * @return array{response: ResponseInterface, user: mixed, exception: ?AuthenticationException}
      */
     private function call(
         AuthenticationInterface $authentication,
@@ -64,17 +75,26 @@ trait ApiBasicTests
         }
 
         $user = null;
-        $response = $this->app()->handleAuthenticated(
-            $request,
-            $authentication,
-            function (ServerRequestInterface $request) use (&$user): null {
-                $user = $request->getAttribute(MezzioUserInterface::class);
+        $exception = null;
+        try {
+            $response = $this->app()->handleAuthenticated(
+                $request,
+                $authentication,
+                function (ServerRequestInterface $request) use (&$user): null {
+                    $user = $request->getAttribute(MezzioUserInterface::class);
 
-                return null;
-            }
-        );
+                    return null;
+                }
+            );
+        } catch (AuthenticationException $exception) {
+            $response = new JsonResponse(
+                ['status' => $exception->getCode()],
+                $exception->getCode(),
+                $exception->getHeaders()
+            );
+        }
 
-        return ['response' => $response, 'user' => $user];
+        return ['response' => $response, 'user' => $user, 'exception' => $exception];
     }
 
     /**
@@ -379,10 +399,7 @@ trait ApiBasicTests
         $this->assertGreaterThan(0, (int) $limited['response']->getHeaderLine('Retry-After'));
         $this->assertLessThanOrEqual(600, (int) $limited['response']->getHeaderLine('Retry-After'));
         $this->assertFalse($limited['response']->hasHeader('WWW-Authenticate'));
-        $body = json_decode((string) $limited['response']->getBody(), true);
-        $this->assertSame(429, $body['status']);
-        $this->assertSame('Too Many Requests', $body['title']);
-        $this->assertStringContainsString('10 minutes', $body['detail']);
+        $this->assertStringContainsString('10 minutes', $limited['exception']?->getMessage());
         // Another client is not.
         $other = $this->call($authentication, $this->basicHeader($this->identity(), 'secret'), address: '198.51.100.9');
         $this->assertSame($this->identity(), $other['user']?->getIdentity());

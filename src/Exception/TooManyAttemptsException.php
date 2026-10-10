@@ -22,19 +22,13 @@ class TooManyAttemptsException extends AuthenticationException
     /**
      * @param int $retryAfter The seconds until the client can try again.
      */
-    public function __construct(private readonly int $retryAfter)
+    public function __construct(int $retryAfter)
     {
         parent::__construct(
             ['Too many failed login attempts. Try again in {minutes, plural, one {# minute} other {# minutes}}.', 'minutes' => (int) ceil($retryAfter / 60)],
             429
         );
-    }
 
-    /**
-     * The seconds until the client can try again.
-     */
-    public function getRetryAfter(): int
-    {
-        return $this->retryAfter;
+        $this->setHeaders(['Retry-After' => (string) $retryAfter]);
     }
 }

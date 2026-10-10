@@ -42,7 +42,6 @@ use Derafu\Auth\Provider\Keycloak\Web\KeycloakWebFlow;
 use Derafu\Auth\Web\AuthController;
 use Derafu\Renderer\Factory\RendererFactory;
 use Psr\Cache\CacheItemPoolInterface;
-use Symfony\Contracts\Translation\TranslatorInterface;
 use WeakMap;
 
 /**
@@ -210,12 +209,11 @@ final class Stack
         ApiSchemeInterface $scheme,
         SessionManagerInterface $sessionManager,
         UserInterface $anonymousUser = new AnonymousUser(),
-        ?TranslatorInterface $translator = null,
         array $settings = []
     ): AuthenticationManager {
         return new AuthenticationManager(
             [
-                new ApiChannel(self::api($settings), $scheme, $anonymousUser, $translator),
+                new ApiChannel(self::api($settings), $scheme, $anonymousUser),
                 new WebChannel($flow, self::web($settings), $sessionManager, $anonymousUser),
             ],
             self::access($settings),
@@ -234,7 +232,6 @@ final class Stack
         SessionManagerInterface $sessionManager,
         FormManagerInterface $formManager,
         UserInterface $anonymousUser = new AnonymousUser(),
-        ?TranslatorInterface $translator = null,
         ?LoginThrottle $throttle = null,
         ?UserFactoryInterface $userFactory = null,
         array $settings = []
@@ -255,7 +252,6 @@ final class Stack
             new DatabaseBasicScheme($userRepository, $config, $throttle),
             $sessionManager,
             $anonymousUser,
-            $translator,
             $settings
         );
     }
@@ -271,7 +267,6 @@ final class Stack
         SessionManagerInterface $sessionManager,
         FormManagerInterface $formManager,
         UserInterface $anonymousUser = new AnonymousUser(),
-        ?TranslatorInterface $translator = null,
         ?LoginThrottle $throttle = null,
         ?UserFactoryInterface $userFactory = null,
         array $settings = []
@@ -292,7 +287,6 @@ final class Stack
             new HtpasswdBasicScheme($userRepository, $config, $throttle),
             $sessionManager,
             $anonymousUser,
-            $translator,
             $settings
         );
     }
@@ -327,7 +321,6 @@ final class Stack
         KeycloakConfiguration $config,
         KeycloakSessionManager $sessionManager,
         UserInterface $anonymousUser = new AnonymousUser(),
-        ?TranslatorInterface $translator = null,
         array $settings = [],
         ?CacheItemPoolInterface $cache = null
     ): AuthenticationManager {
@@ -338,7 +331,6 @@ final class Stack
             new KeycloakBearerScheme($userRepository, $config, $cache),
             $sessionManager,
             $anonymousUser,
-            $translator,
             $settings
         );
     }

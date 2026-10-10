@@ -42,6 +42,7 @@ use Derafu\TestsAuth\Fixture\Stack;
 use Derafu\Translation\TranslatorFactory;
 use Derafu\Twig\Extension\TranslationExtension;
 use Laminas\Diactoros\Response\HtmlResponse;
+use Laminas\Diactoros\Response\JsonResponse;
 use Laminas\Diactoros\Response\RedirectResponse;
 use Mezzio\Authentication\UserInterface as MezzioUserInterface;
 use Mezzio\Session\Session;
@@ -271,18 +272,24 @@ final class KeycloakApiTokensTest extends TestCase
 
     /**
      * What a program does with a token: it calls the API, and gives the user.
+     * `unauthorizedResponse()` of the API throws for a token that is not valid:
+     * that is a user it does not have, same as before.
      */
     private function callApi(string $token, ?AuthenticationInterface $authentication = null): ?UserInterface
     {
         $user = null;
-        $this->app->handleAuthenticated(
-            $this->app->request('/api/items', headers: ['Authorization' => 'Bearer ' . $token]),
-            $authentication ?? $this->authentication,
-            function (ServerRequestInterface $request) use (&$user): void {
-                $found = $request->getAttribute(MezzioUserInterface::class);
-                $user = $found instanceof UserInterface && !$found->isAnonymous() ? $found : null;
-            }
-        );
+        try {
+            $this->app->handleAuthenticated(
+                $this->app->request('/api/items', headers: ['Authorization' => 'Bearer ' . $token]),
+                $authentication ?? $this->authentication,
+                function (ServerRequestInterface $request) use (&$user): void {
+                    $found = $request->getAttribute(MezzioUserInterface::class);
+                    $user = $found instanceof UserInterface && !$found->isAnonymous() ? $found : null;
+                }
+            );
+        } catch (AuthenticationException) {
+            $user = null;
+        }
 
         return $user;
     }
@@ -536,11 +543,15 @@ final class KeycloakApiTokensTest extends TestCase
      */
     private function responseOf(string $token, ?AuthenticationInterface $authentication = null): ResponseInterface
     {
-        return $this->app->handleAuthenticated(
-            $this->app->request('/api/items', headers: ['Authorization' => 'Bearer ' . $token]),
-            $authentication ?? $this->authentication,
-            fn (): null => null
-        );
+        try {
+            return $this->app->handleAuthenticated(
+                $this->app->request('/api/items', headers: ['Authorization' => 'Bearer ' . $token]),
+                $authentication ?? $this->authentication,
+                fn (): null => null
+            );
+        } catch (AuthenticationException $e) {
+            return new JsonResponse(['status' => $e->getCode()], $e->getCode(), $e->getHeaders());
+        }
     }
 
     /**

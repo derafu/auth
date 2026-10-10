@@ -16,6 +16,7 @@ use Derafu\Auth\Authentication\Channel\Web\FormManager;
 use Derafu\Auth\Authentication\Channel\Web\SessionManager;
 use Derafu\Auth\Authentication\LoginThrottle;
 use Derafu\Auth\Contract\AuthenticationInterface;
+use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Provider\Database\DatabaseUserRepository;
 use Derafu\Auth\Provider\Database\Web\DatabaseWebFlow;
 use Derafu\Auth\User;
@@ -52,6 +53,7 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\Flash::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiConfiguration::class)]
+#[UsesClass(AuthenticationException::class)]
 #[UsesClass(\Derafu\Auth\Authorization\AccessRules::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Api\Scheme\BasicScheme::class)]
 #[UsesClass(\Derafu\Auth\Provider\Database\Api\DatabaseBasicScheme::class)]
@@ -229,28 +231,24 @@ final class DatabaseAuthenticationTest extends TestCase
     }
 
     #[Test]
-    public function aClientOfTheApiThatIsNotAuthenticatedGetsAJsonResponseNotARedirect(): void
+    public function aClientOfTheApiThatIsNotAuthenticatedGetsAnAuthenticationExceptionNotARedirect(): void
     {
         // The session middleware gives a session to every request: it does not
         // make a login of the client of an API.
-        $response = $this->app->handleAuthenticated(
-            $this->app->request('/api/items'),
-            $this->authenticationWithProtected('/api'),
-            function (): void {
-                $this->fail('The client is not authenticated.');
-            }
-        );
+        try {
+            $this->app->handleAuthenticated(
+                $this->app->request('/api/items'),
+                $this->authenticationWithProtected('/api'),
+                function (): void {
+                    $this->fail('The client is not authenticated.');
+                }
+            );
+            $this->fail('handleAuthenticated() did not throw.');
+        } catch (AuthenticationException $e) {
+            $this->assertSame(401, $e->getCode());
+            $this->assertSame('You need to send valid credentials to access this resource.', $e->getMessage());
+        }
 
-        $this->assertSame(401, $response->getStatusCode());
-        $this->assertSame('application/json', $response->getHeaderLine('Content-Type'));
-        $this->assertSame(
-            [
-                'status' => 401,
-                'title' => 'Unauthorized',
-                'detail' => 'You need to send valid credentials to access this resource.',
-            ],
-            json_decode((string) $response->getBody(), true)
-        );
         // And nothing is remembered for a login: it is not one.
         $this->assertArrayNotHasKey('auth_redirect', $this->app->persistence->store[SessionApp::KNOWN]);
     }

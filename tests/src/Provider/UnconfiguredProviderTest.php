@@ -25,6 +25,7 @@ use Derafu\Auth\Authentication\Channel\Web\WebConfiguration;
 use Derafu\Auth\Authentication\Identification;
 use Derafu\Auth\Authorization\AccessRules;
 use Derafu\Auth\Contract\AuthenticationInterface;
+use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Auth\Provider\Database\Api\DatabaseBasicScheme;
 use Derafu\Auth\Provider\Database\DatabaseConfiguration;
@@ -92,6 +93,7 @@ use PHPUnit\Framework\TestCase;
 #[UsesClass(HtpasswdBasicScheme::class)]
 #[UsesClass(BasicScheme::class)]
 #[UsesClass(BearerScheme::class)]
+#[UsesClass(AuthenticationException::class)]
 #[UsesClass(ConfigurationException::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationMiddleware::class)]
 final class UnconfiguredProviderTest extends TestCase
@@ -240,10 +242,16 @@ final class UnconfiguredProviderTest extends TestCase
     #[DataProvider('provideProviders')]
     public function aRequestToTheApiWithoutCredentialsIsA401NotAnError(callable $authentication, string $login, string $variable, string $credentials, array $session): void
     {
-        $response = $this->app->handleAuthenticated($this->app->request('/api/items'), $authentication(), fn () => null);
+        try {
+            $this->app->handleAuthenticated($this->app->request('/api/items'), $authentication(), fn () => null);
+        } catch (AuthenticationException $e) {
+            $this->assertSame(401, $e->getCode());
+            $this->assertNotSame('', $e->getHeaders()['WWW-Authenticate'] ?? '');
 
-        $this->assertSame(401, $response->getStatusCode());
-        $this->assertNotSame('', $response->getHeaderLine('WWW-Authenticate'));
+            return;
+        }
+
+        $this->fail('handleAuthenticated() did not throw.');
     }
 
     /**

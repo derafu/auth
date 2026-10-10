@@ -14,6 +14,7 @@ namespace Derafu\TestsAuth\Provider\Keycloak;
 
 use Derafu\Auth\Authorization\AuthorizationManager;
 use Derafu\Auth\Contract\AuthenticationInterface;
+use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
 use Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager;
@@ -22,6 +23,7 @@ use Derafu\TestsAuth\Fixture\KeycloakTokens;
 use Derafu\TestsAuth\Fixture\RealKeycloak;
 use Derafu\TestsAuth\Fixture\SessionApp;
 use Derafu\TestsAuth\Fixture\Stack;
+use Laminas\Diactoros\Response\JsonResponse;
 use Mezzio\Authentication\UserInterface as MezzioUserInterface;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -116,20 +118,28 @@ final class KeycloakApiTest extends TestCase
     }
 
     /**
+     * `unauthorizedResponse()` of the API throws instead of returning: the
+     * status and the headers of the exception are what the package guarantees,
+     * so the stand-in response here carries exactly those.
+     *
      * @return array{response: ResponseInterface, user: mixed}
      */
     private function call(AuthenticationInterface $authentication, string $token, string $path = '/api/items'): array
     {
         $user = null;
-        $response = $this->app->handleAuthenticated(
-            $this->app->request($path, headers: ['Authorization' => 'Bearer ' . $token]),
-            $authentication,
-            function (ServerRequestInterface $request) use (&$user): null {
-                $user = $request->getAttribute(MezzioUserInterface::class);
+        try {
+            $response = $this->app->handleAuthenticated(
+                $this->app->request($path, headers: ['Authorization' => 'Bearer ' . $token]),
+                $authentication,
+                function (ServerRequestInterface $request) use (&$user): null {
+                    $user = $request->getAttribute(MezzioUserInterface::class);
 
-                return null;
-            }
-        );
+                    return null;
+                }
+            );
+        } catch (AuthenticationException $e) {
+            $response = new JsonResponse(['status' => $e->getCode()], $e->getCode(), $e->getHeaders());
+        }
 
         return ['response' => $response, 'user' => $user];
     }

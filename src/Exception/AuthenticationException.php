@@ -12,15 +12,25 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Exception;
 
+use Derafu\Translation\Contract\HeadersAwareInterface;
 use Derafu\Translation\Contract\TranslatableInterface;
 use Derafu\Translation\Exception\Core\TranslatableException;
+use Derafu\Translation\Trait\HeadersAwareTrait;
 use Exception;
 
 /**
  * Exception thrown when authentication fails.
+ *
+ * It carries the headers of the response (`WWW-Authenticate`, `Retry-After`),
+ * through `HeadersAwareInterface` of `derafu/translation`: this package does not
+ * depend on one of HTTP, so it can not build the response itself, but whoever
+ * catches the exception and does (`derafu/http`'s `ProblemFactory`, for one) can
+ * read them from it.
  */
-class AuthenticationException extends TranslatableException
+class AuthenticationException extends TranslatableException implements HeadersAwareInterface
 {
+    use HeadersAwareTrait;
+
     /**
      * Creates a new authentication exception.
      *
