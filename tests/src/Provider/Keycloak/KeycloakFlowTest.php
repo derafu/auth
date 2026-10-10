@@ -19,11 +19,11 @@ use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
-use Derafu\Auth\Provider\Keycloak\Web\KeycloakController;
 use Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager;
 use Derafu\Auth\Provider\Keycloak\Web\KeycloakWebFlow;
 use Derafu\Auth\Translation\AuthTranslationResourceProvider;
 use Derafu\Auth\User;
+use Derafu\Auth\Web\AuthController;
 use Derafu\TestsAuth\Fixture\KeycloakBrowser;
 use Derafu\TestsAuth\Fixture\RealKeycloak;
 use Derafu\TestsAuth\Fixture\RecordingHttpClient;
@@ -56,7 +56,7 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
  * of Keycloak.
  */
 #[CoversClass(KeycloakWebFlow::class)]
-#[CoversClass(KeycloakController::class)]
+#[CoversClass(AuthController::class)]
 #[CoversClass(KeycloakTokenVerifier::class)]
 #[CoversClass(KeycloakUserRepository::class)]
 #[CoversClass(KeycloakSessionManager::class)]
@@ -108,7 +108,7 @@ final class KeycloakFlowTest extends TestCase
     /**
      * @param list<string> $protected
      * @param array<string, mixed> $config
-     * @return array{AuthenticationInterface, KeycloakController, KeycloakUserRepository}
+     * @return array{AuthenticationInterface, AuthController, KeycloakUserRepository}
      */
     private function keycloak(array $protected = ['/private'], array $config = []): array
     {
@@ -128,7 +128,7 @@ final class KeycloakFlowTest extends TestCase
 
         return [
             Stack::keycloak($repository, $config, $sessionManager),
-            new KeycloakController(Stack::webOf($config), $sessionManager),
+            Stack::keycloakController($repository, $config, $sessionManager),
             $repository,
         ];
     }
@@ -158,21 +158,21 @@ final class KeycloakFlowTest extends TestCase
      */
     private function handleCallback(
         AuthenticationInterface $authentication,
-        KeycloakController $controller,
+        AuthController $controller,
         array $query,
         ?string $sid = null
     ): ResponseInterface {
         return $this->app->handleAuthenticated(
             $this->app->request('/auth/callback', $query, sid: $sid),
             $authentication,
-            fn (ServerRequestInterface $request) => $controller->handle($request)
+            fn (ServerRequestInterface $request) => $controller->callback($request)
         );
     }
 
     /**
      * The whole login: the page, Keycloak and the callback.
      */
-    private function logIn(AuthenticationInterface $authentication, KeycloakController $controller): ResponseInterface
+    private function logIn(AuthenticationInterface $authentication, AuthController $controller): ResponseInterface
     {
         $query = $this->browser->logIn($this->authorizationUrl($authentication));
 
@@ -511,7 +511,7 @@ final class KeycloakFlowTest extends TestCase
         $this->expectException(AuthenticationException::class);
         $this->expectExceptionMessage('The login was not completed.');
 
-        $controller->handle($this->app->request('/auth/callback'));
+        $controller->callback($this->app->request('/auth/callback'));
     }
 
     #[Test]
@@ -524,7 +524,7 @@ final class KeycloakFlowTest extends TestCase
 
         $this->app->handle(
             $this->app->request('/auth/callback'),
-            fn (ServerRequestInterface $request) => $controller->handle(
+            fn (ServerRequestInterface $request) => $controller->callback(
                 $request->withAttribute(MezzioUserInterface::class, new AnonymousUser())
             )
         );

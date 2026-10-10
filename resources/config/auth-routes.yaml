@@ -1,16 +1,23 @@
+# The routes of the login, the logout and the account, the same for every
+# provider (what changes is what the provider gives, see `auth-services.yaml`).
+#
+# `auth_callback` is the return of a provider that takes the user to its own page
+# (Keycloak): with a provider with a form it answers 404. The routes of the tokens
+# of the API answer 404 with a provider that has none.
+
+auth_login:
+    path: /auth/login
+    methods: [GET, POST]
+    handler: Derafu\Auth\Web\AuthController::login
+
 auth_callback:
     path: /auth/callback
-    handler: Derafu\Auth\Provider\Keycloak\Web\KeycloakController::handle
+    handler: Derafu\Auth\Web\AuthController::callback
 
 auth_logout:
     path: /auth/logout
     methods: [POST]
-    handler: Derafu\Auth\Provider\Keycloak\Web\KeycloakController::logout
-
-auth_login:
-    path: /auth/login
-    methods: [GET]
-    handler: Derafu\Auth\Provider\Keycloak\Web\KeycloakLoginController::login
+    handler: Derafu\Auth\Web\AuthController::logout
 
 auth_profile:
     path: /auth/profile

@@ -13,8 +13,10 @@ declare(strict_types=1);
 namespace Derafu\TestsAuth;
 
 use Derafu\Auth\Authentication\LoginThrottle;
+use Derafu\Auth\Exception\ConfigurationException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 
@@ -23,6 +25,7 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
  * address has a few of them, and an address has more, whatever the identity.
  */
 #[CoversClass(LoginThrottle::class)]
+#[UsesClass(ConfigurationException::class)]
 final class LoginThrottleTest extends TestCase
 {
     private ArrayAdapter $cache;
@@ -175,5 +178,18 @@ final class LoginThrottleTest extends TestCase
         }
 
         return array_filter($items);
+    }
+
+    #[Test]
+    public function aThrottleWithoutAPoolIsAConfigurationErrorWhenItIsUsed(): void
+    {
+        // It can be made without it (an application that has no pool and does not
+        // use the provider), but it can not count.
+        $throttle = new LoginThrottle(maxAttempts: 3);
+
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('PSR-6 cache pool');
+
+        $throttle->isLimited('ana@example.com', '203.0.113.7');
     }
 }

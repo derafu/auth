@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Authentication;
 
+use Derafu\Auth\Exception\ConfigurationException;
 use Psr\Cache\CacheItemPoolInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
@@ -37,12 +38,14 @@ class LoginThrottle
     /**
      * Creates a new login throttle.
      *
-     * @param CacheItemPoolInterface $cache Where the counts are.
+     * @param CacheItemPoolInterface|null $cache Where the counts are. It is
+     * optional so the service can be made in an application that has no pool and
+     * does not use this provider; using it without one is a configuration error.
      * @param int $maxAttempts The failed attempts for an identity and an address.
      * @param int $lockSeconds The seconds of the window, and so of the limit.
      */
     public function __construct(
-        private readonly CacheItemPoolInterface $cache,
+        private readonly ?CacheItemPoolInterface $cache = null,
         private readonly int $maxAttempts = 5,
         private readonly int $lockSeconds = 900
     ) {
@@ -110,10 +113,10 @@ class LoginThrottle
             $window = $this->window($key) ?? ['count' => 0, 'until' => time() + $this->lockSeconds];
             $window['count']++;
 
-            $item = $this->cache->getItem($key);
+            $item = $this->pool()->getItem($key);
             $item->set($window);
             $item->expiresAt(new \DateTimeImmutable('@' . $window['until']));
-            $this->cache->save($item);
+            $this->pool()->save($item);
         }
     }
 
@@ -123,7 +126,19 @@ class LoginThrottle
      */
     public function clear(string $identity, string $address): void
     {
-        $this->cache->deleteItem($this->identityKey($identity, $address));
+        $this->pool()->deleteItem($this->identityKey($identity, $address));
+    }
+
+    /**
+     * The pool where the counts are.
+     *
+     * @throws ConfigurationException If the application has no pool.
+     */
+    private function pool(): CacheItemPoolInterface
+    {
+        return $this->cache ?? throw new ConfigurationException(
+            'The limit of the failed logins needs a PSR-6 cache pool: the application must have a service for Psr\Cache\CacheItemPoolInterface.'
+        );
     }
 
     /**
@@ -133,7 +148,7 @@ class LoginThrottle
      */
     private function window(string $key): ?array
     {
-        $item = $this->cache->getItem($key);
+        $item = $this->pool()->getItem($key);
         if (!$item->isHit()) {
             return null;
         }

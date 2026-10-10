@@ -119,6 +119,17 @@ return [
     'The session can not be renewed in place: use the session of Mezzio\\Session\\SessionMiddleware.' =>
         'La sesión no se puede renovar en el lugar: usa la sesión de Mezzio\\Session\\SessionMiddleware.',
 
+    // The provider of the application (AUTH_PROVIDER).
+    'There are no providers: tag the service of each one with derafu_auth.provider.' =>
+        'No hay proveedores: etiqueta el servicio de cada uno con derafu_auth.provider.',
+    'AUTH_PROVIDER is not set. Choose one of: {providers}.' =>
+        'AUTH_PROVIDER no está definida. Elige una de: {providers}.',
+    'AUTH_PROVIDER "{name}" is not a provider. Choose one of: {providers}.' =>
+        'AUTH_PROVIDER "{name}" no es un proveedor. Elige una de: {providers}.',
+    'This provider has no callback.' => 'Este proveedor no tiene callback.',
+    'The limit of the failed logins needs a PSR-6 cache pool: the application must have a service for Psr\\Cache\\CacheItemPoolInterface.' =>
+        'El límite de los inicios de sesión fallidos necesita un pool de caché PSR-6: la aplicación debe tener un servicio para Psr\\Cache\\CacheItemPoolInterface.',
+
     // The account of the user.
     'You must be logged in to access the requested page {path}' => 'Debes iniciar sesión para acceder a la página solicitada {path}',
     'The request has no session.' => 'La solicitud no tiene sesión.',

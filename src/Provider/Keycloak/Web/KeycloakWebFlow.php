@@ -68,6 +68,14 @@ class KeycloakWebFlow implements WebFlowInterface
     /**
      * {@inheritDoc}
      */
+    public function loginForm(): ?string
+    {
+        return null;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
     public function validate(): void
     {
         $this->config->validateWeb();

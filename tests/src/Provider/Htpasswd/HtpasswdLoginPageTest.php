@@ -10,14 +10,15 @@ declare(strict_types=1);
  * See LICENSE file for more details.
  */
 
-namespace Derafu\TestsAuth\Provider\Database;
+namespace Derafu\TestsAuth\Provider\Htpasswd;
 
 use Derafu\Auth\Authentication\Channel\Web\FormManager;
 use Derafu\Auth\Authentication\Channel\Web\SessionManager;
 use Derafu\Auth\Contract\AuthenticationInterface;
-use Derafu\Auth\Provider\Database\DatabaseUserRepository;
-use Derafu\Auth\Provider\Database\Web\DatabaseController;
+use Derafu\Auth\Provider\Htpasswd\HtpasswdUserRepository;
+use Derafu\Auth\Provider\Htpasswd\Web\HtpasswdWebFlow;
 use Derafu\Auth\Translation\AuthTranslationResourceProvider;
+use Derafu\Auth\Web\AuthController;
 use Derafu\Form\Factory\FormFactory;
 use Derafu\Form\Factory\TranslatingFormFactory;
 use Derafu\Form\Renderer\FormTwigExtension;
@@ -27,9 +28,9 @@ use Derafu\Form\Type\TypeRegistry;
 use Derafu\Form\Type\TypeResolver;
 use Derafu\Renderer\Factory\RendererFactory;
 use Derafu\TestsAuth\Fixture\AppGlobal;
+use Derafu\TestsAuth\Fixture\HtpasswdFile;
 use Derafu\TestsAuth\Fixture\SessionApp;
 use Derafu\TestsAuth\Fixture\Stack;
-use Derafu\TestsAuth\Fixture\UsersDatabase;
 use Derafu\Translation\TranslatorFactory;
 use Derafu\Twig\Extension\TranslationExtension;
 use Laminas\Diactoros\Response\RedirectResponse;
@@ -46,7 +47,7 @@ use Twig\TwigFunction;
  * translations: the form of the login, and the messages that the authentication
  * left for the next request.
  */
-#[CoversClass(DatabaseController::class)]
+#[CoversClass(AuthController::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationManager::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Identification::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
@@ -56,36 +57,37 @@ use Twig\TwigFunction;
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiConfiguration::class)]
 #[UsesClass(\Derafu\Auth\Authorization\AccessRules::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Api\Scheme\BasicScheme::class)]
-#[UsesClass(\Derafu\Auth\Provider\Database\Api\DatabaseBasicScheme::class)]
+#[UsesClass(\Derafu\Auth\Provider\Htpasswd\Api\HtpasswdBasicScheme::class)]
 #[UsesClass(\Derafu\Auth\AnonymousUser::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\FormManager::class)]
-#[UsesClass(\Derafu\Auth\Provider\Database\Web\DatabaseWebFlow::class)]
-#[UsesClass(\Derafu\Auth\Provider\Database\DatabaseConfiguration::class)]
-#[UsesClass(\Derafu\Auth\Provider\Database\DatabaseUserRepository::class)]
-#[UsesClass(\Derafu\Auth\Provider\Database\Web\Form\LoginForm::class)]
+#[UsesClass(\Derafu\Auth\Provider\Htpasswd\Web\HtpasswdWebFlow::class)]
+#[UsesClass(\Derafu\Auth\Provider\Htpasswd\HtpasswdConfiguration::class)]
+#[UsesClass(\Derafu\Auth\Provider\Htpasswd\HtpasswdUserRepository::class)]
+#[UsesClass(\Derafu\Auth\Provider\Htpasswd\Web\Form\LoginForm::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\SessionManager::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
+#[UsesClass(\Derafu\Auth\User::class)]
 #[UsesClass(AuthTranslationResourceProvider::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationMiddleware::class)]
-final class DatabaseControllerTest extends TestCase
+final class HtpasswdLoginPageTest extends TestCase
 {
     private SessionApp $app;
 
     private AppGlobal $appGlobal;
 
-    private UsersDatabase $database;
+    private HtpasswdFile $file;
 
     private AuthenticationInterface $authentication;
 
-    private DatabaseController $controller;
+    private AuthController $controller;
 
     protected function setUp(): void
     {
         $root = dirname(__DIR__, 4);
         $this->app = new SessionApp();
-        $this->database = new UsersDatabase();
+        $this->file = new HtpasswdFile();
 
-        $config = $this->database->config([
+        $config = $this->file->config([
             'enabled' => true,
             'protected_paths' => ['/private'],
             'unauthorized_redirect_path' => '/auth/login',
@@ -105,8 +107,8 @@ final class DatabaseControllerTest extends TestCase
             $config
         );
 
-        $this->authentication = Stack::database(
-            new DatabaseUserRepository($config),
+        $this->authentication = Stack::htpasswd(
+            new HtpasswdUserRepository($config),
             $config,
             new SessionManager(),
             $formManager
@@ -121,7 +123,7 @@ final class DatabaseControllerTest extends TestCase
         };
 
         $this->appGlobal = new AppGlobal();
-        $this->controller = new DatabaseController(
+        $this->controller = new AuthController(
             RendererFactory::create([
                 'engines' => ['twig'],
                 'extra' => false,
@@ -140,13 +142,20 @@ final class DatabaseControllerTest extends TestCase
             ]),
             $formManager,
             Stack::webOf($config),
-            new SessionManager()
+            new SessionManager(),
+            new HtpasswdWebFlow(
+                new HtpasswdUserRepository($config),
+                $config,
+                Stack::webOf($config),
+                new SessionManager(),
+                $formManager
+            )
         );
     }
 
     protected function tearDown(): void
     {
-        $this->database->remove();
+        $this->file->remove();
     }
 
     /**
@@ -170,7 +179,7 @@ final class DatabaseControllerTest extends TestCase
 
         $this->assertStringContainsString('action="/auth/login"', $page);
         $this->assertStringContainsString('method="POST"', $page);
-        $this->assertStringContainsString('name="email"', $page);
+        $this->assertStringContainsString('name="username"', $page);
         $this->assertStringContainsString('name="password"', $page);
         $this->assertStringContainsString('type="password"', $page);
         $this->assertStringContainsString('<button type="submit"', $page);
@@ -208,7 +217,7 @@ final class DatabaseControllerTest extends TestCase
         // The parsed body of the request is null (some PSR-7 implementations).
         $page = $this->page($this->app->request('/auth/login'));
 
-        $this->assertStringContainsString('name="email"', $page);
+        $this->assertStringContainsString('name="username"', $page);
         $this->assertStringContainsString('name="password"', $page);
     }
 
@@ -236,10 +245,10 @@ final class DatabaseControllerTest extends TestCase
     public function theLoginPageFillsTheFormWithTheSubmittedData(): void
     {
         $page = $this->page(
-            $this->app->request('/auth/login')->withParsedBody(['email' => 'ana@example.com'])
+            $this->app->request('/auth/login')->withParsedBody(['username' => 'ana'])
         );
 
-        $this->assertStringContainsString('value="ana&#x40;example.com"', $page);
+        $this->assertStringContainsString('value="ana"', $page);
     }
 
     #[Test]
@@ -296,7 +305,7 @@ final class DatabaseControllerTest extends TestCase
     public function aUserThatLoggedInGoesToThePageThatWasRequested(): void
     {
         $this->app->persistence->store[SessionApp::KNOWN] = [
-            'user' => ['identity' => 'ana@example.com', 'roles' => [], 'details' => []],
+            'user' => ['identity' => 'ana'],
             'auth_checked_at' => time(),
             'auth_redirect' => '/private/page?tab=2',
         ];
@@ -311,7 +320,7 @@ final class DatabaseControllerTest extends TestCase
     public function aUserThatLoggedInGoesToThePageThatFollowsTheLoginWhenNoPageWasRequested(): void
     {
         $this->app->persistence->store[SessionApp::KNOWN] = [
-            'user' => ['identity' => 'ana@example.com', 'roles' => [], 'details' => []],
+            'user' => ['identity' => 'ana'],
             'auth_checked_at' => time(),
         ];
 
@@ -325,7 +334,7 @@ final class DatabaseControllerTest extends TestCase
     public function theRedirectAfterTheLoginHappensOnce(): void
     {
         $this->app->persistence->store[SessionApp::KNOWN] = [
-            'user' => ['identity' => 'ana@example.com', 'roles' => [], 'details' => []],
+            'user' => ['identity' => 'ana'],
             'auth_checked_at' => time(),
             'auth_redirect' => '/private/page',
         ];
@@ -341,7 +350,7 @@ final class DatabaseControllerTest extends TestCase
         $page = $this->loginPageThroughTheAuthentication(SessionApp::KNOWN);
 
         $this->assertIsString($page);
-        $this->assertStringContainsString('name="email"', $page);
+        $this->assertStringContainsString('name="username"', $page);
     }
 
     #[Test]

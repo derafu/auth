@@ -39,6 +39,8 @@ use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
 use Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager;
 use Derafu\Auth\Provider\Keycloak\Web\KeycloakWebFlow;
+use Derafu\Auth\Web\AuthController;
+use Derafu\Renderer\Factory\RendererFactory;
 use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 use WeakMap;
@@ -292,6 +294,26 @@ final class Stack
             $anonymousUser,
             $translator,
             $settings
+        );
+    }
+
+    /**
+     * The routes of the login of the Keycloak provider: the controller with its
+     * flow. Keycloak has no forms, so it has none here.
+     */
+    public static function keycloakController(
+        KeycloakUserRepository $userRepository,
+        KeycloakConfiguration $config,
+        KeycloakSessionManager $sessionManager
+    ): AuthController {
+        $web = self::webOf($config);
+
+        return new AuthController(
+            RendererFactory::create(['engines' => ['twig'], 'extra' => false]),
+            new NoForms(),
+            $web,
+            $sessionManager,
+            new KeycloakWebFlow($userRepository, $config, $web, $sessionManager)
         );
     }
 

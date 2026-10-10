@@ -64,15 +64,18 @@ class WebConfiguration
      * @param array<string, mixed> $config `login_path`, `logout_path`,
      * `login_redirect_path`, `logout_redirect_path`, `unauthorized_redirect_path`
      * and `refresh_interval` (seconds, 0 or not given: the provider decides).
+     * @param array<string, mixed> $defaults What the provider says for the paths
+     * that `$config` does not give (`AuthProviderInterface::webDefaults()`): a
+     * provider with a login page of the site sends the user there.
      * @throws ConfigurationException If the refresh interval is not valid.
      */
-    public function __construct(array $config = [])
+    public function __construct(array $config = [], array $defaults = [])
     {
-        $this->loginPath = $config['login_path'] ?? $this->loginPath;
-        $this->logoutPath = $config['logout_path'] ?? $this->logoutPath;
-        $this->loginRedirectPath = $config['login_redirect_path'] ?? $this->loginRedirectPath;
-        $this->logoutRedirectPath = $config['logout_redirect_path'] ?? $this->logoutRedirectPath;
-        $this->unauthorizedRedirectPath = $config['unauthorized_redirect_path'] ?? $this->unauthorizedRedirectPath;
+        $this->loginPath = $config['login_path'] ?? $defaults['login_path'] ?? $this->loginPath;
+        $this->logoutPath = $config['logout_path'] ?? $defaults['logout_path'] ?? $this->logoutPath;
+        $this->loginRedirectPath = $config['login_redirect_path'] ?? $defaults['login_redirect_path'] ?? $this->loginRedirectPath;
+        $this->logoutRedirectPath = $config['logout_redirect_path'] ?? $defaults['logout_redirect_path'] ?? $this->logoutRedirectPath;
+        $this->unauthorizedRedirectPath = $config['unauthorized_redirect_path'] ?? $defaults['unauthorized_redirect_path'] ?? $this->unauthorizedRedirectPath;
 
         // Every how many seconds the user of a session is asked to the provider
         // again (its roles, that it still exists). 0 or not given: the provider

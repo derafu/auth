@@ -19,11 +19,11 @@ use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
-use Derafu\Auth\Provider\Keycloak\Web\KeycloakController;
 use Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager;
 use Derafu\Auth\Provider\Keycloak\Web\KeycloakWebFlow;
 use Derafu\Auth\Translation\AuthTranslationResourceProvider;
 use Derafu\Auth\User;
+use Derafu\Auth\Web\AuthController;
 use Derafu\TestsAuth\Fixture\KeycloakBrowser;
 use Derafu\TestsAuth\Fixture\RealKeycloak;
 use Derafu\TestsAuth\Fixture\SessionApp;
@@ -63,7 +63,7 @@ use Psr\Http\Message\ServerRequestInterface;
 #[UsesClass(AnonymousUser::class)]
 #[UsesClass(AuthenticationException::class)]
 #[UsesClass(KeycloakConfiguration::class)]
-#[UsesClass(KeycloakController::class)]
+#[UsesClass(AuthController::class)]
 #[UsesClass(KeycloakTokenVerifier::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
 #[UsesClass(SessionManager::class)]
@@ -103,7 +103,7 @@ final class KeycloakRefreshTest extends TestCase
 
     /**
      * @param array<string, mixed> $config
-     * @return array{AuthenticationInterface, KeycloakController}
+     * @return array{AuthenticationInterface, AuthController}
      */
     private function keycloak(array $config = []): array
     {
@@ -117,10 +117,11 @@ final class KeycloakRefreshTest extends TestCase
             'protected_paths' => ['/private'],
         ]);
         $sessionManager = new KeycloakSessionManager();
+        $repository = new KeycloakUserRepository($config);
 
         return [
-            Stack::keycloak(new KeycloakUserRepository($config), $config, $sessionManager),
-            new KeycloakController(Stack::webOf($config), $sessionManager),
+            Stack::keycloak($repository, $config, $sessionManager),
+            Stack::keycloakController($repository, $config, $sessionManager),
         ];
     }
 
@@ -128,7 +129,7 @@ final class KeycloakRefreshTest extends TestCase
      * The whole login of `ana`: the page, Keycloak and the callback. It gives the
      * identifier of the session.
      *
-     * @param array{AuthenticationInterface, KeycloakController} $keycloak
+     * @param array{AuthenticationInterface, AuthController} $keycloak
      */
     private function logIn(array $keycloak): string
     {
@@ -146,7 +147,7 @@ final class KeycloakRefreshTest extends TestCase
         $response = $this->app->handleAuthenticated(
             $this->app->request('/auth/callback', $query),
             $authentication,
-            fn (ServerRequestInterface $request) => $controller->handle($request)
+            fn (ServerRequestInterface $request) => $controller->callback($request)
         );
 
         return $this->app->sessionId($response);
@@ -342,7 +343,7 @@ final class KeycloakRefreshTest extends TestCase
         $response = $this->app->handleAuthenticated(
             $this->app->request('/auth/callback', $query),
             $authentication,
-            fn (ServerRequestInterface $request) => $controller->handle($request)
+            fn (ServerRequestInterface $request) => $controller->callback($request)
         );
         $sid = $this->app->sessionId($response);
 

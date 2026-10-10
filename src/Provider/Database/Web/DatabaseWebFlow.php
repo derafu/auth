@@ -81,6 +81,14 @@ class DatabaseWebFlow implements WebFlowInterface
     /**
      * {@inheritDoc}
      */
+    public function loginForm(): ?string
+    {
+        return LoginForm::class;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
     public function validate(): void
     {
         $this->config->validate();

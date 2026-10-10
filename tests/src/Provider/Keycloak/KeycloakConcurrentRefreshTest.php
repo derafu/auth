@@ -18,11 +18,11 @@ use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
-use Derafu\Auth\Provider\Keycloak\Web\KeycloakController;
 use Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager;
 use Derafu\Auth\Provider\Keycloak\Web\KeycloakWebFlow;
 use Derafu\Auth\Translation\AuthTranslationResourceProvider;
 use Derafu\Auth\User;
+use Derafu\Auth\Web\AuthController;
 use Derafu\TestsAuth\Fixture\KeycloakBrowser;
 use Derafu\TestsAuth\Fixture\RealKeycloak;
 use Derafu\TestsAuth\Fixture\SessionApp;
@@ -65,7 +65,7 @@ use Psr\Http\Message\ServerRequestInterface;
 #[UsesClass(AnonymousUser::class)]
 #[UsesClass(AuthenticationException::class)]
 #[UsesClass(KeycloakConfiguration::class)]
-#[UsesClass(KeycloakController::class)]
+#[UsesClass(AuthController::class)]
 #[UsesClass(KeycloakTokenVerifier::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
 #[UsesClass(SessionManager::class)]
@@ -123,14 +123,14 @@ final class KeycloakConcurrentRefreshTest extends TestCase
         $sessionManager = new KeycloakSessionManager();
         $repository = new KeycloakUserRepository($config);
         $authentication = Stack::keycloak($repository, $config, $sessionManager);
-        $controller = new KeycloakController(Stack::webOf($config), $sessionManager);
+        $controller = Stack::keycloakController($repository, $config, $sessionManager);
 
         $page = $app->handleAuthenticated($app->request('/private/page'), $authentication, fn (): null => null);
         $query = (new KeycloakBrowser())->logIn($page->getHeaderLine('Location'));
         $response = $app->handleAuthenticated(
             $app->request('/auth/callback', $query),
             $authentication,
-            fn (ServerRequestInterface $request) => $controller->handle($request)
+            fn (ServerRequestInterface $request) => $controller->callback($request)
         );
 
         return [$app->persistence->store[$app->sessionId($response)], $repository];

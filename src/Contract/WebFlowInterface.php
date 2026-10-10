@@ -34,6 +34,14 @@ interface WebFlowInterface
     public function loginPath(): string;
 
     /**
+     * The type of the form that the login page shows, or null if the login is not
+     * a form of the site: the provider takes the user to its own page.
+     *
+     * @return class-string|null
+     */
+    public function loginForm(): ?string;
+
+    /**
      * Checks that what the flow needs to work is configured.
      *
      * @throws \Derafu\Auth\Exception\ConfigurationException If something is not.

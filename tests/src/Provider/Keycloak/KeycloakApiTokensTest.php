@@ -25,11 +25,10 @@ use Derafu\Auth\Provider\Keycloak\Account\KeycloakApiTokenManager;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
 use Derafu\Auth\Provider\Keycloak\TokenClaims;
-use Derafu\Auth\Provider\Keycloak\Web\KeycloakController;
-use Derafu\Auth\Provider\Keycloak\Web\KeycloakLoginController;
 use Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager;
 use Derafu\Auth\Translation\AuthTranslationResourceProvider;
 use Derafu\Auth\Twig\AuthExtension;
+use Derafu\Auth\Web\AuthController;
 use Derafu\Form\Factory\FormFactory;
 use Derafu\Form\Renderer\FormTwigExtension;
 use Derafu\Form\Type\TypeProvider;
@@ -67,7 +66,7 @@ use Twig\TwigFunction;
 #[CoversClass(KeycloakAccountClient::class)]
 #[CoversClass(KeycloakApiTokenManager::class)]
 #[CoversClass(KeycloakAccount::class)]
-#[CoversClass(KeycloakLoginController::class)]
+#[CoversClass(AuthController::class)]
 #[CoversClass(TokenClaims::class)]
 #[CoversClass(\Derafu\Auth\Provider\Keycloak\Api\KeycloakBearerScheme::class)]
 #[CoversClass(KeycloakSessionManager::class)]
@@ -96,7 +95,6 @@ use Twig\TwigFunction;
 #[UsesClass(KeycloakUserRepository::class)]
 #[UsesClass(\Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier::class)]
 #[UsesClass(\Derafu\Auth\Provider\Keycloak\Web\KeycloakWebFlow::class)]
-#[UsesClass(KeycloakController::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\SessionManager::class)]
 #[UsesClass(\Derafu\Auth\User::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
@@ -121,11 +119,9 @@ final class KeycloakApiTokensTest extends TestCase
 
     private AccountController $account;
 
-    private KeycloakController $login;
+    private AuthController $login;
 
     private KeycloakApiTokenManager $manager;
-
-    private KeycloakLoginController $loginRoute;
 
     public static function setUpBeforeClass(): void
     {
@@ -163,18 +159,11 @@ final class KeycloakApiTokensTest extends TestCase
             $this->sessions,
             cache: new ArrayAdapter()
         );
-        $this->login = new KeycloakController(Stack::webOf($config), $this->sessions);
+        $this->login = Stack::keycloakController($this->repository, $config, $this->sessions);
 
         $client = new KeycloakAccountClient($config);
         $translator = TranslatorFactory::create('es', ['en'], [new AuthTranslationResourceProvider()]);
         $this->manager = $manager = new KeycloakApiTokenManager($this->repository, $client, $this->sessions, $this->formManager($config), $translator);
-        $flow = new \Derafu\Auth\Provider\Keycloak\Web\KeycloakWebFlow(
-            $this->repository,
-            $config,
-            Stack::webOf($config),
-            $this->sessions
-        );
-        $this->loginRoute = new KeycloakLoginController(Stack::webOf($config), $flow, $this->sessions);
 
         $routing = new class () extends AbstractExtension {
             public function getFunctions(): array
@@ -247,7 +236,7 @@ final class KeycloakApiTokensTest extends TestCase
 
         $response = $this->handle(
             $this->app->request('/auth/callback', $query),
-            fn (ServerRequestInterface $request) => $this->login->handle($request)
+            fn (ServerRequestInterface $request) => $this->login->callback($request)
         );
 
         return $this->app->sessionId($response);
@@ -312,7 +301,7 @@ final class KeycloakApiTokensTest extends TestCase
         $response = $this->app->handleAuthenticated(
             $this->app->request('/auth/login', ['next' => '/private/page?tab=2']),
             $this->authentication,
-            fn (ServerRequestInterface $request) => $this->loginRoute->login($request)
+            fn (ServerRequestInterface $request) => $this->login->login($request)
         );
 
         $this->assertInstanceOf(RedirectResponse::class, $response);
@@ -329,7 +318,7 @@ final class KeycloakApiTokensTest extends TestCase
             $this->app->handleAuthenticated(
                 $this->app->request('/auth/login', ['next' => $next]),
                 $this->authentication,
-                fn (ServerRequestInterface $request) => $this->loginRoute->login($request)
+                fn (ServerRequestInterface $request) => $this->login->login($request)
             );
 
             $this->assertArrayNotHasKey('auth_redirect', $this->app->persistence->store[SessionApp::KNOWN], $next);
@@ -343,7 +332,7 @@ final class KeycloakApiTokensTest extends TestCase
 
         $response = $this->handle(
             $this->app->request('/auth/login', ['next' => '/private/x'], sid: $sid),
-            fn (ServerRequestInterface $request) => $this->loginRoute->login($request)
+            fn (ServerRequestInterface $request) => $this->login->login($request)
         );
 
         $this->assertSame('/private/x', $response->getHeaderLine('Location'));
