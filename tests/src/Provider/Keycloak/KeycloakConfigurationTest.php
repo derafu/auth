@@ -114,6 +114,30 @@ final class KeycloakConfigurationTest extends TestCase
     }
 
     #[Test]
+    public function theRequestsToKeycloakSayWhoMakesThem(): void
+    {
+        $this->assertSame('Derafu Auth (app)', $this->config()->getHttpClientOptions()['headers']['User-Agent']);
+        $this->assertSame('Derafu Auth (app)', $this->config()->getUserAgent());
+    }
+
+    #[Test]
+    public function theUserAgentOfTheApplicationIsKept(): void
+    {
+        $options = $this->config(['http_client_options' => ['headers' => ['user-agent' => 'My site', 'X-Other' => '1']]])
+            ->getHttpClientOptions();
+
+        $this->assertSame(['user-agent' => 'My site', 'X-Other' => '1'], $options['headers']);
+    }
+
+    #[Test]
+    public function theUserAgentHasNothingThatAHeaderCanNotHave(): void
+    {
+        $config = $this->config(['client_id' => "my site\r\nX-Evil: 1\u{00f1}"]);
+
+        $this->assertSame('Derafu Auth (mysiteX-Evil:1)', $config->getUserAgent());
+    }
+
+    #[Test]
     public function theClientOfTheApiIsTheClientOfTheApplicationUnlessItHasItsOwn(): void
     {
         $config = $this->config();

@@ -366,11 +366,35 @@ class KeycloakConfiguration
     /**
      * Gets the Keycloak HTTP client options.
      *
+     * The requests have a `User-Agent` that says who makes them (see
+     * `getUserAgent()`), unless the application gives its own in
+     * `http_client_options.headers`: Keycloak and the servers in front of it have it
+     * in their logs.
+     *
      * @return array The Keycloak HTTP client options.
      */
     public function getHttpClientOptions(): array
     {
-        return $this->httpClientOptions;
+        $options = $this->httpClientOptions;
+        $options['headers'] = (array) ($options['headers'] ?? []);
+        if (!isset(array_change_key_case($options['headers'], CASE_LOWER)['user-agent'])) {
+            $options['headers']['User-Agent'] = $this->getUserAgent();
+        }
+
+        return $options;
+    }
+
+    /**
+     * The `User-Agent` of the requests of the package: `Derafu Auth (<client>)`.
+     * Keycloak does not show it in the list of the sessions (it only shows the
+     * browsers that it knows), but it is in the logs of the servers.
+     */
+    public function getUserAgent(): string
+    {
+        // A header has only printable ASCII: nothing of the configuration can break it.
+        $client = preg_replace('/[^\x21-\x7E]/', '', $this->clientId);
+
+        return $client !== null && $client !== '' ? sprintf('Derafu Auth (%s)', $client) : 'Derafu Auth';
     }
 
     /**

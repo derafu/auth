@@ -1,13 +1,24 @@
 {% trans_default_domain 'auth+intl-icu' %}
 
 {#
-    How to use the API: what the provider says (`Basic` or `Bearer`), its tokens if
-    it has them and where its documentation is. Each part is a partial, so a site
-    that has another path or another documentation overrides only that one.
+    The tab of the API. If the provider has tokens, their list is first, in a card of
+    all the width, and below it the form that makes one and how to use the API, side
+    by side. Each part is a partial (`_tokens`, `_token-form`, `_api-<scheme>`,
+    `_api-docs`), so a site that has another path or another documentation overrides
+    only that one.
 #}
+{% if tokensSupported %}
+    {% include 'auth/profile/_tokens.html.twig' %}
+{% endif %}
+
 <div class="row g-3">
+    {% if tokensSupported %}
+        <div class="col-lg-6">
+            {% include 'auth/profile/_token-form.html.twig' %}
+        </div>
+    {% endif %}
     <div class="col-lg-6">
-        <div class="card h-100">
+        <div class="card h-100" id="api_usage-card">
             <div class="card-header">{{ 'How to use the API'|trans }}</div>
             <div class="card-body">
                 {% include 'auth/profile/_api-' ~ (apiScheme|lower) ~ '.html.twig' %}
@@ -15,9 +26,4 @@
             </div>
         </div>
     </div>
-    {% if tokensSupported %}
-        <div class="col-lg-6">
-            {% include 'auth/profile/_tokens.html.twig' %}
-        </div>
-    {% endif %}
 </div>

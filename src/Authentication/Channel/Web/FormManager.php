@@ -52,10 +52,12 @@ class FormManager implements FormManagerInterface
      * {@inheritDoc}
      */
     public function createForm(
-        string $formType,
+        string|AuthFormInterface $form,
         array $data = []
     ): FormInterface {
-        $formDefinition = $this->getFormDefinition($formType);
+        $formDefinition = $form instanceof AuthFormInterface
+            ? $form->getDefinition()
+            : $this->getFormDefinition($form);
 
         if (!empty($data)) {
             $formDefinition['data'] = $data;

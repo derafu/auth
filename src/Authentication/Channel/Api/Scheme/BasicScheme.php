@@ -16,6 +16,7 @@ use Derafu\Auth\Authentication\LoginThrottle;
 use Derafu\Auth\Contract\ApiSchemeInterface;
 use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Contract\UserRepositoryInterface;
+use Derafu\Auth\Exception\TooManyAttemptsException;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
@@ -63,7 +64,9 @@ abstract class BasicScheme implements ApiSchemeInterface
      * {@inheritDoc}
      *
      * @return UserInterface|null The user, or null if the credentials are not
-     * valid or the client is limited.
+     * valid.
+     * @throws TooManyAttemptsException If the client is limited: it is told when it
+     * can try again, and its credentials are not checked.
      */
     public function authenticate(ServerRequestInterface $request, string $credentials): ?UserInterface
     {
@@ -75,8 +78,9 @@ abstract class BasicScheme implements ApiSchemeInterface
         [$identity, $password] = $basic;
         $address = LoginThrottle::clientOf($request);
 
-        if (($this->throttle?->retryAfter($identity, $address) ?? 0) > 0) {
-            return null;
+        $retryAfter = $this->throttle?->retryAfter($identity, $address) ?? 0;
+        if ($retryAfter > 0) {
+            throw new TooManyAttemptsException($retryAfter);
         }
 
         $user = $this->repository->authenticate($identity, $password);
@@ -100,7 +104,7 @@ abstract class BasicScheme implements ApiSchemeInterface
      * that calls the API with its session wants the 401, not that window (Rails
      * and Spring do the same).
      */
-    public function challenge(ServerRequestInterface $request, string $realm, bool $credentialsSent): ?string
+    public function challenge(ServerRequestInterface $request, string $realm, bool $credentialsSent, ?string $reason = null): ?string
     {
         if (strcasecmp($request->getHeaderLine('X-Requested-With'), 'XMLHttpRequest') === 0) {
             return null;

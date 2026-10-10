@@ -17,11 +17,14 @@ use Derafu\Auth\Authentication\Identification;
 use Derafu\Auth\Contract\ApiSchemeInterface;
 use Derafu\Auth\Contract\ChannelInterface;
 use Derafu\Auth\Contract\UserInterface;
+use Derafu\Auth\Exception\AuthenticationException;
+use Derafu\Auth\Exception\TooManyAttemptsException;
 use Derafu\Translation\TranslatableMessage;
 use Laminas\Diactoros\Response\JsonResponse;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
+use WeakMap;
 
 /**
  * The API channel: a client sends its credentials in every request, in the
@@ -42,6 +45,16 @@ use Symfony\Contracts\Translation\TranslatorInterface;
  */
 final class ApiChannel implements ChannelInterface
 {
+    /**
+     * Why the credentials of a request were not valid, when the scheme said it. It
+     * is kept by the request (that is what the middleware gives again to ask for the
+     * response 401) and it goes away with it: the channel does not keep a state
+     * between requests.
+     *
+     * @var WeakMap<ServerRequestInterface, AuthenticationException>|null
+     */
+    private ?WeakMap $failures = null;
+
     /**
      * Creates the API channel.
      *
@@ -88,9 +101,15 @@ final class ApiChannel implements ChannelInterface
 
         $this->scheme->validate();
 
-        return Identification::of(
-            $this->scheme->authenticate($request, $credentials) ?? $this->anonymousUser
-        );
+        try {
+            $user = $this->scheme->authenticate($request, $credentials);
+        } catch (AuthenticationException $e) {
+            $this->failures ??= new WeakMap();
+            $this->failures[$request] = $e;
+            $user = null;
+        }
+
+        return Identification::of($user ?? $this->anonymousUser);
     }
 
     /**
@@ -111,10 +130,31 @@ final class ApiChannel implements ChannelInterface
      */
     public function unauthorizedResponse(ServerRequestInterface $request): ResponseInterface
     {
+        $failure = $this->failures?->offsetExists($request) ? $this->failures[$request] : null;
+
+        // A client that is limited is not told that its credentials are wrong, but
+        // when to try again (RFC 6585).
+        if ($failure instanceof TooManyAttemptsException) {
+            return new JsonResponse(
+                [
+                    'status' => 429,
+                    'title' => $this->translate(new TranslatableMessage('Too Many Requests', [], 'auth')),
+                    'detail' => $this->translate(new TranslatableMessage(
+                        'Too many failed login attempts. Try again in {minutes, plural, one {# minute} other {# minutes}}.',
+                        ['minutes' => (int) ceil($failure->getRetryAfter() / 60)],
+                        'auth'
+                    )),
+                ],
+                429,
+                ['Retry-After' => (string) $failure->getRetryAfter()]
+            );
+        }
+
         $challenge = $this->scheme->challenge(
             $request,
             $this->config->getRealm(),
-            $this->credentialsOf($request) !== null
+            $this->credentialsOf($request) !== null,
+            $failure?->getMessage()
         );
 
         return new JsonResponse(

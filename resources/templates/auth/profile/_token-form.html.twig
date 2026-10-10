@@ -1,0 +1,14 @@
+{% trans_default_domain 'auth+intl-icu' %}
+
+{# The form that makes a token of the API. #}
+<div class="card h-100" id="api_new-card">
+    <div class="card-header">{{ 'New token'|trans }}</div>
+    <div class="card-body">
+        {{ form_start(tokenForm, {'attr': {'action': path('auth_token_create')}}) }}
+            {{ form_element(tokenForm.uiSchema, tokenForm) }}
+            {{ form_csrf(tokenForm) }}
+            <button type="submit" class="btn btn-primary btn-sm">{{ 'Generate a token'|trans }}</button>
+        {{ form_end(tokenForm) }}
+        <p class="form-text mt-2 mb-0">{{ 'Treat the token as a password: whoever has it acts as you. You can have as many as you need and revoke each one by itself.'|trans }}</p>
+    </div>
+</div>

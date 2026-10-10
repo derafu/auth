@@ -12,13 +12,16 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Account;
 
+use Derafu\Auth\Account\Form\ApiTokenValueForm;
 use Derafu\Auth\Authentication\Channel\Web\Flash;
 use Derafu\Auth\Authentication\SameOrigin;
 use Derafu\Auth\Contract\AccountInterface;
 use Derafu\Auth\Contract\ApiTokenManagerInterface;
+use Derafu\Auth\Contract\FormManagerInterface;
 use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\AuthorizationException;
+use Derafu\Auth\Exception\FormException;
 use Derafu\Auth\Exception\ProviderUnavailableException;
 use Derafu\Renderer\Contract\RendererInterface;
 use Derafu\Translation\TranslatableMessage;
@@ -44,12 +47,16 @@ final class AccountController
     /**
      * The profile, where the tokens are shown and managed (its tab of the API).
      */
+    /** What the example says when the request does not say where the site is. */
+    private const PLACEHOLDER_HOST = 'YOUR-SITE';
+
     public const PROFILE_PATH = '/auth/profile';
 
     /**
-     * The tabs of the profile that a request can open (`?tab=api`).
+     * The card of the tokens, in the tab of the API: the page opens there when what
+     * the user did with a token is answered (`derafu-js` reads it from the URL).
      */
-    private const TABS = ['data', 'api', 'session'];
+    private const TOKENS_ANCHOR = '#api:tokens';
 
     /**
      * What every user has, in the order that the profile shows it.
@@ -58,7 +65,8 @@ final class AccountController
 
     public function __construct(
         private readonly RendererInterface $renderer,
-        private readonly AccountInterface $account
+        private readonly AccountInterface $account,
+        private readonly FormManagerInterface $forms
     ) {
     }
 
@@ -84,21 +92,17 @@ final class AccountController
             }
         }
 
-        $uri = $request->getUri();
-        $tab = $request->getQueryParams()['tab'] ?? 'data';
-
         return $this->renderer->render('auth/profile', [
-            'activeTab' => is_string($tab) && in_array($tab, self::TABS, true) ? $tab : 'data',
             'user' => $user,
             'fields' => $this->fields($user),
             'providerFields' => $this->account->profile($user, $session),
             'otherDetails' => $this->otherDetails($user),
             'accountUrl' => $this->account->accountUrl(),
             'apiScheme' => $this->account->apiScheme(),
-            'baseUrl' => $uri->getScheme() . '://' . $uri->getAuthority(),
+            'baseUrl' => $this->baseUrl($request),
             'tokens' => $tokens,
             'tokensSupported' => $manager !== null,
-            'tokenFields' => $manager?->fields() ?? [],
+            'tokenForm' => $manager?->form($user),
             'tokensError' => $tokensError,
             'phpSession' => PhpSessionDetails::of($session),
             'providerSession' => $this->account->sessionDetails($session),
@@ -120,17 +124,20 @@ final class AccountController
 
         try {
             $token = $manager->create($request, $session);
-        } catch (AuthenticationException $e) {
+        } catch (AuthenticationException|FormException $e) {
             Flash::error($request, $e->getTranslatableMessage());
 
-            return new RedirectResponse(self::PROFILE_PATH . '?tab=api');
+            return new RedirectResponse(self::PROFILE_PATH . self::TOKENS_ANCHOR);
         }
 
         return new HtmlResponse(
             $this->renderer->render('auth/token-created', [
-                'token' => $token,
+                'tokenForm' => $this->forms->createForm(new ApiTokenValueForm(), [ApiTokenValueForm::TOKEN => $token->value]),
+                'token' => $token->value,
+                'createdAt' => $token->createdAt,
+                'expiresAt' => $token->expiresAt,
                 'apiScheme' => $this->account->apiScheme(),
-                'baseUrl' => $request->getUri()->getScheme() . '://' . $request->getUri()->getAuthority(),
+                'baseUrl' => $this->baseUrl($request),
             ]),
             200,
             ['Cache-Control' => 'no-store']
@@ -151,7 +158,7 @@ final class AccountController
             Flash::error($request, $e->getTranslatableMessage());
         }
 
-        return new RedirectResponse(self::PROFILE_PATH . '?tab=api');
+        return new RedirectResponse(self::PROFILE_PATH . self::TOKENS_ANCHOR);
     }
 
     /**
@@ -242,5 +249,30 @@ final class AccountController
     private function otherDetails(UserInterface $user): array
     {
         return array_diff_key($user->getDetails(), array_flip(self::SHOWN));
+    }
+
+    /**
+     * The address of the site, for the example of the call to the API: the one that
+     * the provider knows, or else the one of the request. The URI of a request is
+     * only its path in the runtime of the HTTP package, so the host is the header
+     * `Host` and the scheme is the one of the connection.
+     */
+    private function baseUrl(ServerRequestInterface $request): string
+    {
+        $known = $this->account->publicUrl();
+        if ($known !== null) {
+            return $known;
+        }
+
+        $uri = $request->getUri();
+        $host = $uri->getHost() !== '' ? $uri->getAuthority() : $request->getHeaderLine('Host');
+        if ($host === '') {
+            return 'https://' . self::PLACEHOLDER_HOST;
+        }
+
+        $https = ($request->getServerParams()['HTTPS'] ?? 'off') !== 'off' && ($request->getServerParams()['HTTPS'] ?? '') !== '';
+        $scheme = $uri->getScheme() !== '' ? $uri->getScheme() : ($https ? 'https' : 'http');
+
+        return $scheme . '://' . $host;
     }
 }

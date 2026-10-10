@@ -231,7 +231,10 @@ final class KeycloakApiTest extends TestCase
 
         $this->assertNull($result['user']);
         $this->assertSame(401, $result['response']->getStatusCode());
-        $this->assertSame('Bearer realm="API", error="invalid_token"', $result['response']->getHeaderLine('WWW-Authenticate'));
+        $this->assertSame(
+            'Bearer realm="API", error="invalid_token", error_description="The audience of the token is not this API."',
+            $result['response']->getHeaderLine('WWW-Authenticate')
+        );
     }
 
     #[Test]

@@ -60,6 +60,8 @@ use PHPUnit\Framework\TestCase;
 #[UsesClass(\Derafu\Auth\User::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationMiddleware::class)]
+#[UsesClass(\Derafu\Auth\Exception\AuthenticationException::class)]
+#[UsesClass(\Derafu\Auth\Exception\TooManyAttemptsException::class)]
 final class DatabaseApiBasicTest extends TestCase
 {
     use ApiBasicTests;

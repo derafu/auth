@@ -53,6 +53,13 @@ interface AccountInterface
     public function sessionDetails(SessionInterface $session): array;
 
     /**
+     * The address of the site as a client of the API reaches it (`https://app.example.com`,
+     * with no path), if the provider knows it from its configuration, or null: then
+     * it is taken from the request.
+     */
+    public function publicUrl(): ?string;
+
+    /**
      * The scheme of the header `Authorization` that a client of the API uses with
      * this provider: `Basic` or `Bearer`.
      */

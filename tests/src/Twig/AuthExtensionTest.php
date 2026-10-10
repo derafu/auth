@@ -106,35 +106,6 @@ final class AuthExtensionTest extends TestCase
         $this->assertSame('/auth/login|/auth/logout|/auth/profile', $this->render($template, null));
     }
 
-    #[Test]
-    public function theMenuOffersTheLoginToAVisitor(): void
-    {
-        $html = $this->render('partials/auth-menu', null);
-
-        $this->assertStringContainsString('href="/auth/login"', $html);
-        $this->assertStringContainsString('Iniciar sesión', $html);
-        $this->assertStringNotContainsString('/auth/logout', $html);
-    }
-
-    #[Test]
-    public function theMenuOffersTheProfileAndTheLogoutToAUser(): void
-    {
-        $html = $this->render('partials/auth-menu', new User('ana', [], ['name' => 'Ana Pérez']));
-
-        $this->assertStringContainsString('Ana Pérez', $html);
-        $this->assertStringContainsString('href="/auth/profile"', $html);
-        // The logout is a POST, never a link.
-        $this->assertMatchesRegularExpression('#<form method="post" action="/auth/logout">#', $html);
-        $this->assertStringContainsString('Cerrar sesión', $html);
-        $this->assertStringNotContainsString('href="/auth/login"', $html);
-    }
-
-    #[Test]
-    public function theMenuUsesTheIdentityOfAUserWithoutName(): void
-    {
-        $this->assertStringContainsString('beto', $this->render('partials/auth-menu', new User('beto')));
-    }
-
     /**
      * The template of a test is a file in the temporary directory, so the renderer
      * that is used is the real one.

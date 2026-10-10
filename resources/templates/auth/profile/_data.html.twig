@@ -1,7 +1,7 @@
 {% import 'auth/profile/_macros.html.twig' as macros %}
 {% trans_default_domain 'auth+intl-icu' %}
 
-<div class="card mb-3">
+<div class="card mb-3" id="data_user-card">
     <div class="card-header">{{ 'Your data'|trans }}</div>
     <div class="card-body">
         {{ macros.fields(fields|merge(providerFields)) }}

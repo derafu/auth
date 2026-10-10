@@ -16,11 +16,13 @@ return [
 
     // Responses to the clients of the API.
     'Unauthorized' => 'No autorizado',
+    'Too Many Requests' => 'Demasiadas solicitudes',
     'You need to send valid credentials to access this resource.' => 'Debes enviar credenciales válidas para acceder a este recurso.',
 
     // Login form (Provider/Database/Form/LoginForm.php).
     'Username' => 'Usuario',
     'Password' => 'Contraseña',
+    'It is the password of the user <code>{username}</code> in the realm <code>{realm}</code>. If you log in through another provider (identity brokering), you must first create a password for that user in the realm <code>{realm}</code>.' => 'Es la contraseña del usuario <code>{username}</code> en el realm <code>{realm}</code>. Si ingresas mediante otro proveedor de identidad (federación de identidades), primero debes crear una contraseña para ese usuario en el realm <code>{realm}</code>.',
 
     // Flash messages.
     'Successfully logged in.' => 'Sesión iniciada correctamente.',
@@ -50,7 +52,12 @@ return [
     'Created' => 'Creado',
     'Last used' => 'Último uso',
     'Expires' => 'Vence',
-    'Address' => 'Dirección',
+    'Duration' => 'Duración',
+    'Remaining' => 'Restante',
+    'Expired' => 'Vencido',
+    '{days, plural, one {# day} other {# days}}' => '{days, plural, one {# día} other {# días}}',
+    'New token' => 'Nuevo token',
+    'IP address' => 'Dirección IP',
     'Browser' => 'Navegador',
     'Revoke' => 'Revocar',
     'The token will stop working at once. Revoke it?' => 'El token dejará de funcionar de inmediato. ¿Revocarlo?',

@@ -20,8 +20,6 @@ use Derafu\Auth\Provider\Database\Web\Form\LoginForm;
 use Derafu\Renderer\Contract\RendererInterface;
 use Laminas\Diactoros\Response\RedirectResponse;
 use Mezzio\Authentication\UserInterface as MezzioUserInterface;
-use Mezzio\Flash\FlashMessageMiddleware;
-use Mezzio\Flash\FlashMessagesInterface;
 use Mezzio\Session\SessionInterface;
 use Mezzio\Session\SessionMiddleware;
 use Psr\Http\Message\ResponseInterface;
@@ -80,20 +78,9 @@ class DatabaseController
         $body = $request->getParsedBody();
         $form = $this->formManager->createForm(LoginForm::class, is_array($body) ? $body : []);
 
-        return $this->renderer->render('auth/login', [
-            'form' => $form,
-            'app' => [
-                'flashes' => $this->getFlashMessages($request)->getFlashes(),
-            ],
-        ]);
+        return $this->renderer->render('auth/login', ['form' => $form]);
     }
 
-    /**
-     * Gets the flash messages from the request.
-     *
-     * @param ServerRequestInterface $request The request.
-     * @return FlashMessagesInterface The flash messages.
-     */
     /**
      * Handles the logout request that the authentication did not handle (it does
      * it before this, when it is on the pipeline): the user goes to the page
@@ -105,11 +92,5 @@ class DatabaseController
     public function logout(ServerRequestInterface $request): ResponseInterface
     {
         return new RedirectResponse($this->config->getLogoutRedirectPath());
-    }
-
-    protected function getFlashMessages(
-        ServerRequestInterface $request
-    ): FlashMessagesInterface {
-        return $request->getAttribute(FlashMessageMiddleware::FLASH_ATTRIBUTE);
     }
 }

@@ -20,8 +20,6 @@ use Derafu\Auth\Provider\Htpasswd\Web\Form\LoginForm;
 use Derafu\Renderer\Contract\RendererInterface;
 use Laminas\Diactoros\Response\RedirectResponse;
 use Mezzio\Authentication\UserInterface as MezzioUserInterface;
-use Mezzio\Flash\FlashMessageMiddleware;
-use Mezzio\Flash\FlashMessagesInterface;
 use Mezzio\Session\SessionInterface;
 use Mezzio\Session\SessionMiddleware;
 use Psr\Http\Message\ResponseInterface;
@@ -80,12 +78,7 @@ class HtpasswdController
         $body = $request->getParsedBody();
         $form = $this->formManager->createForm(LoginForm::class, is_array($body) ? $body : []);
 
-        return $this->renderer->render('auth/login', [
-            'form' => $form,
-            'app' => [
-                'flashes' => $this->getFlashMessages($request)->getFlashes(),
-            ],
-        ]);
+        return $this->renderer->render('auth/login', ['form' => $form]);
     }
 
     /**
@@ -99,17 +92,5 @@ class HtpasswdController
     public function logout(ServerRequestInterface $request): ResponseInterface
     {
         return new RedirectResponse($this->config->getLogoutRedirectPath());
-    }
-
-    /**
-     * Gets the flash messages from the request.
-     *
-     * @param ServerRequestInterface $request The request.
-     * @return FlashMessagesInterface The flash messages.
-     */
-    protected function getFlashMessages(
-        ServerRequestInterface $request
-    ): FlashMessagesInterface {
-        return $request->getAttribute(FlashMessageMiddleware::FLASH_ATTRIBUTE);
     }
 }

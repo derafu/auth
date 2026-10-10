@@ -284,28 +284,34 @@ final class KeycloakBearerTest extends TestCase
     // -------------------------------------------------------------------------
 
     /**
-     * @return array<string, array{array<string, mixed>}>
+     * The token that is not valid, and the reason that the client is told.
+     *
+     * @return array<string, array{array<string, mixed>, string}>
      */
     public static function provideClaimsThatAreNotValid(): array
     {
+        $issuer = 'The issuer of the token is not the realm.';
+        $type = 'The token is not an access token.';
+        $audience = 'The audience of the token is not this API.';
+
         return [
-            'expired, past the margin of the clocks' => [['exp' => time() - 300]],
-            'not valid yet' => [['nbf' => time() + 300]],
-            'from another realm' => [['iss' => 'https://keycloak.test/realms/other']],
-            'from another server' => [['iss' => 'https://evil.test/realms/test']],
-            'without an issuer' => [['iss' => null]],
-            'an ID token' => [['typ' => 'ID']],
-            'a refresh token' => [['typ' => 'Refresh']],
-            'an offline token' => [['typ' => 'Offline']],
-            'a token without type' => [['typ' => null]],
-            'a type that is not the one of Keycloak' => [['typ' => 'bearer']],
-            'without an audience' => [['aud' => null]],
-            'with the audience of another API' => [['aud' => ['another-api']]],
-            'with the audience of another API, as text' => [['aud' => 'another-api']],
-            'with only the default audience of Keycloak' => [['aud' => ['account']]],
-            'with an empty audience' => [['aud' => []]],
-            'with an audience that only looks alike' => [['aud' => ['derafu-api-extra', 'derafu']]],
-            'without a user' => [['sub' => null]],
+            'expired, past the margin of the clocks' => [['exp' => time() - 300], 'The token has expired.'],
+            'not valid yet' => [['nbf' => time() + 300], 'The token is not valid yet.'],
+            'from another realm' => [['iss' => 'https://keycloak.test/realms/other'], $issuer],
+            'from another server' => [['iss' => 'https://evil.test/realms/test'], $issuer],
+            'without an issuer' => [['iss' => null], $issuer],
+            'an ID token' => [['typ' => 'ID'], $type],
+            'a refresh token' => [['typ' => 'Refresh'], $type],
+            'an offline token' => [['typ' => 'Offline'], 'Keycloak did not accept the offline token.'],
+            'a token without type' => [['typ' => null], $type],
+            'a type that is not the one of Keycloak' => [['typ' => 'bearer'], $type],
+            'without an audience' => [['aud' => null], $audience],
+            'with the audience of another API' => [['aud' => ['another-api']], $audience],
+            'with the audience of another API, as text' => [['aud' => 'another-api'], $audience],
+            'with only the default audience of Keycloak' => [['aud' => ['account']], $audience],
+            'with an empty audience' => [['aud' => []], $audience],
+            'with an audience that only looks alike' => [['aud' => ['derafu-api-extra', 'derafu']], $audience],
+            'without a user' => [['sub' => null], 'The token is not valid.'],
         ];
     }
 
@@ -314,13 +320,16 @@ final class KeycloakBearerTest extends TestCase
      */
     #[Test]
     #[DataProvider('provideClaimsThatAreNotValid')]
-    public function aTokenThatIsNotValidIsNotAuthenticated(array $claims): void
+    public function aTokenThatIsNotValidIsNotAuthenticatedAndTheClientIsToldWhy(array $claims, string $reason): void
     {
         $result = $this->call($this->authentication(), $this->bearer($this->token($claims)));
 
         $this->assertNull($result['user']);
         $this->assertSame(401, $result['response']->getStatusCode());
-        $this->assertSame('Bearer realm="API", error="invalid_token"', $result['response']->getHeaderLine('WWW-Authenticate'));
+        $this->assertSame(
+            sprintf('Bearer realm="API", error="invalid_token", error_description="%s"', $reason),
+            $result['response']->getHeaderLine('WWW-Authenticate')
+        );
     }
 
     #[Test]
@@ -643,7 +652,10 @@ final class KeycloakBearerTest extends TestCase
 
         $this->assertNull($result['user']);
         $this->assertSame(401, $result['response']->getStatusCode());
-        $this->assertSame('Bearer realm="API", error="invalid_token"', $result['response']->getHeaderLine('WWW-Authenticate'));
+        $this->assertSame(
+            'Bearer realm="API", error="invalid_token", error_description="The token is not active."',
+            $result['response']->getHeaderLine('WWW-Authenticate')
+        );
     }
 
     #[Test]

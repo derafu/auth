@@ -325,6 +325,20 @@ class KeycloakUserRepository implements UserRepositoryInterface
                 );
             }
 
+            // What is wrong with the user, when Keycloak says it. For a password that is
+            // not valid, a code of the second factor that is not valid and one that is
+            // missing it says the same, so the caller works out which is more likely.
+            $description = (string) ($answer['error_description'] ?? '');
+            if ($description === 'Account disabled') {
+                throw new AuthenticationException('Your user is disabled.', 403);
+            }
+            if ($description === 'Account is not fully set up') {
+                throw new AuthenticationException(
+                    'Your user has actions pending in Keycloak (a password to change, an email to verify...): complete them and try again.',
+                    403
+                );
+            }
+
             throw new AuthenticationException('The password is not valid.', 401);
         }
 
@@ -510,6 +524,14 @@ class KeycloakUserRepository implements UserRepositoryInterface
         $error = is_array($body) ? ($body['error'] ?? null) : null;
 
         return in_array($error, ['invalid_grant', 'invalid_token'], true);
+    }
+
+    /**
+     * The realm of Keycloak where the users of the application have their account.
+     */
+    public function getRealm(): string
+    {
+        return $this->config->getRealm();
     }
 
     /**

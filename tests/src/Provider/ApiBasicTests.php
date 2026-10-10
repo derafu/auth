@@ -371,8 +371,18 @@ trait ApiBasicTests
         $this->call($authentication, $wrong);
         $this->call($authentication, $wrong);
 
-        // Limited: not even the right password is checked.
-        $this->assertNull($this->call($authentication, $this->basicHeader($this->identity(), 'secret'))['user']);
+        // Limited: not even the right password is checked, and the client is told
+        // when to try again (RFC 6585), not that its password is wrong.
+        $limited = $this->call($authentication, $this->basicHeader($this->identity(), 'secret'));
+        $this->assertNull($limited['user']);
+        $this->assertSame(429, $limited['response']->getStatusCode());
+        $this->assertGreaterThan(0, (int) $limited['response']->getHeaderLine('Retry-After'));
+        $this->assertLessThanOrEqual(600, (int) $limited['response']->getHeaderLine('Retry-After'));
+        $this->assertFalse($limited['response']->hasHeader('WWW-Authenticate'));
+        $body = json_decode((string) $limited['response']->getBody(), true);
+        $this->assertSame(429, $body['status']);
+        $this->assertSame('Too Many Requests', $body['title']);
+        $this->assertStringContainsString('10 minutes', $body['detail']);
         // Another client is not.
         $other = $this->call($authentication, $this->basicHeader($this->identity(), 'secret'), address: '198.51.100.9');
         $this->assertSame($this->identity(), $other['user']?->getIdentity());

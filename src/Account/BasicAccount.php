@@ -52,6 +52,14 @@ class BasicAccount implements AccountInterface
     /**
      * {@inheritDoc}
      */
+    public function publicUrl(): ?string
+    {
+        return null;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
     public function apiScheme(): string
     {
         return 'Basic';

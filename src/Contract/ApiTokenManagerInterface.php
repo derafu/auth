@@ -13,7 +13,8 @@ declare(strict_types=1);
 namespace Derafu\Auth\Contract;
 
 use Derafu\Auth\Account\ApiToken;
-use Derafu\Translation\Contract\TranslatableMessageInterface;
+use Derafu\Auth\Account\NewApiToken;
+use Derafu\Form\Contract\FormInterface;
 use Mezzio\Session\SessionInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
@@ -36,22 +37,26 @@ interface ApiTokenManagerInterface
     public function list(SessionInterface $session): array;
 
     /**
-     * What the user gives to make a token, besides being logged in: the fields of the
-     * form (its password, for example).
+     * The form that makes a token: what the user gives, besides being logged in (its
+     * password, for example), with the help that says what to give.
      *
-     * @return list<array{name: string, label: TranslatableMessageInterface|string, type: string, required: bool}>
+     * @param array<string, mixed> $data What the form has already (the body of a
+     * request that is not valid).
      */
-    public function fields(): array;
+    public function form(UserInterface $user, array $data = []): FormInterface;
 
     /**
      * Makes a token for the user, with what it gave in the form (the body of the
      * request).
      *
-     * @return string The token. It is shown once: nothing keeps it.
+     * @return NewApiToken The token, that is shown once (nothing keeps it), and what
+     * the provider knows of it.
      * @throws \Derafu\Auth\Exception\AuthenticationException If the token can not be
      * made: what the user gave is not valid.
+     * @throws \Derafu\Auth\Exception\FormException If the form is not valid (its
+     * CSRF token, a password that is missing).
      */
-    public function create(ServerRequestInterface $request, SessionInterface $session): string;
+    public function create(ServerRequestInterface $request, SessionInterface $session): NewApiToken;
 
     /**
      * Revokes a token of the user, and only that one.

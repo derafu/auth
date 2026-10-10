@@ -15,9 +15,11 @@ namespace Derafu\TestsAuth\Account;
 use Derafu\Auth\Account\AccountController;
 use Derafu\Auth\Account\ApiToken;
 use Derafu\Auth\Account\BasicAccount;
+use Derafu\Auth\Account\NewApiToken;
 use Derafu\Auth\Account\PhpSessionDetails;
 use Derafu\Auth\AnonymousUser;
 use Derafu\Auth\Authentication\Channel\Web\Flash;
+use Derafu\Auth\Authentication\Channel\Web\FormManager;
 use Derafu\Auth\Authentication\Channel\Web\WebConfiguration;
 use Derafu\Auth\Authentication\SameOrigin;
 use Derafu\Auth\Contract\AccountInterface;
@@ -25,9 +27,19 @@ use Derafu\Auth\Contract\ApiTokenManagerInterface;
 use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\AuthorizationException;
+use Derafu\Auth\Provider\Keycloak\Account\Form\ApiTokenForm;
 use Derafu\Auth\Translation\AuthTranslationResourceProvider;
 use Derafu\Auth\Twig\AuthExtension;
 use Derafu\Auth\User;
+use Derafu\Form\Contract\Csrf\CsrfTokenManagerInterface;
+use Derafu\Form\Contract\FormInterface;
+use Derafu\Form\Contract\Processor\FormDataProcessorInterface;
+use Derafu\Form\Factory\FormFactory;
+use Derafu\Form\Factory\FormRendererFactory;
+use Derafu\Form\Renderer\FormTwigExtension;
+use Derafu\Form\Type\TypeProvider;
+use Derafu\Form\Type\TypeRegistry;
+use Derafu\Form\Type\TypeResolver;
 use Derafu\Renderer\Factory\RendererFactory;
 use Derafu\Translation\TranslatableMessage;
 use Derafu\Translation\TranslatorFactory;
@@ -68,6 +80,10 @@ use Twig\TwigFunction;
 #[UsesClass(AuthTranslationResourceProvider::class)]
 #[UsesClass(AuthenticationException::class)]
 #[UsesClass(AuthorizationException::class)]
+#[UsesClass(ApiTokenForm::class)]
+#[UsesClass(FormManager::class)]
+#[UsesClass(NewApiToken::class)]
+#[UsesClass(\Derafu\Auth\Account\Form\ApiTokenValueForm::class)]
 final class AccountControllerTest extends TestCase
 {
     private const ROOT = __DIR__ . '/../../..';
@@ -95,14 +111,31 @@ final class AccountControllerTest extends TestCase
                     self::ROOT . '/resources/templates',
                     self::ROOT . '/tests/fixtures/templates',
                     self::ROOT . '/vendor/derafu/twig/resources/templates',
+                    self::ROOT . '/vendor/derafu/form/resources/templates',
                 ],
                 'extensions' => [
                     $routing,
                     new TranslationExtension($translator, null, 'es'),
                     new AuthExtension(new WebConfiguration()),
+                    new FormTwigExtension(FormRendererFactory::create(['csrf_token_manager' => new class () implements CsrfTokenManagerInterface {
+                        public function getToken(string $id): string
+                        {
+                            return 'token-of-' . $id;
+                        }
+
+                        public function isValid(string $id, string $token): bool
+                        {
+                            return true;
+                        }
+                    }])),
                 ],
             ]),
-            $account ?? new BasicAccount()
+            $account ?? new BasicAccount(),
+            new FormManager(
+                new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
+                $this->createStub(FormDataProcessorInterface::class),
+                new \stdClass()
+            )
         );
     }
 
@@ -131,6 +164,8 @@ final class AccountControllerTest extends TestCase
         $html = $this->controller()->profile($this->request());
 
         $this->assertStringContainsString('Perfil', $html);
+        // The logout is a POST, from the profile.
+        $this->assertMatchesRegularExpression('#<form method="post" action="/auth/logout"[^>]*>\s*<button[^>]*>Cerrar sesión</button>#', $html);
         $this->assertStringContainsString('ana', $html);
         $this->assertStringContainsString('Ana Pérez', $html);
         $this->assertStringContainsString('ana@example.com', $html);
@@ -140,6 +175,49 @@ final class AccountControllerTest extends TestCase
         // What the profile does not show of the details goes in the list of all of them.
         $this->assertStringContainsString('department', $html);
         $this->assertStringContainsString('Sales', $html);
+    }
+
+    #[Test]
+    public function theExampleOfTheApiHasTheAddressOfTheSiteWhenTheRequestIsOnlyAPath(): void
+    {
+        // What the runtime of derafu/http gives: the URI is the REQUEST_URI, with no host.
+        $request = (new ServerRequest(['HTTPS' => 'on'], [], '/auth/profile', 'GET', 'php://input', ['Host' => 'pro.test']))
+            ->withAttribute(MezzioUserInterface::class, new User('ana', ['admin']))
+            ->withAttribute(SessionMiddleware::SESSION_ATTRIBUTE, new Session([]));
+
+        $this->assertStringContainsString('https://pro.test/api/...', $this->controller()->profile($request));
+
+        $plain = new ServerRequest([], [], '/auth/profile', 'GET', 'php://input', ['Host' => 'pro.test:9000']);
+        $plain = $plain
+            ->withAttribute(MezzioUserInterface::class, new User('ana', ['admin']))
+            ->withAttribute(SessionMiddleware::SESSION_ATTRIBUTE, new Session([]));
+        $this->assertStringContainsString('http://pro.test:9000/api/...', $this->controller()->profile($plain));
+    }
+
+    #[Test]
+    public function theExampleOfTheApiSaysWhereTheSiteIsWhenNothingDoes(): void
+    {
+        $request = (new ServerRequest([], [], '/auth/profile', 'GET'))
+            ->withAttribute(MezzioUserInterface::class, new User('ana', ['admin']))
+            ->withAttribute(SessionMiddleware::SESSION_ATTRIBUTE, new Session([]));
+
+        $this->assertStringContainsString('https://YOUR-SITE/api/...', $this->controller()->profile($request));
+    }
+
+    #[Test]
+    public function theExampleOfTheApiUsesTheAddressThatTheProviderKnows(): void
+    {
+        $account = new class () extends BasicAccount {
+            public function publicUrl(): string
+            {
+                return 'https://configured.test';
+            }
+        };
+
+        $this->assertStringContainsString(
+            'https://configured.test/api/...',
+            $this->controller($account)->profile($this->request())
+        );
     }
 
     #[Test]
@@ -160,21 +238,6 @@ final class AccountControllerTest extends TestCase
         $this->assertStringContainsString('Sesión de PHP', $html);
         $this->assertStringContainsString('Nombre de la sesión', $html);
         $this->assertStringContainsString('Cookie solo HTTP', $html);
-    }
-
-    #[Test]
-    public function aTabCanBeOpenedByTheRequestAndAnUnknownOneIsTheFirst(): void
-    {
-        $controller = $this->controller();
-
-        $this->assertMatchesRegularExpression(
-            '/id="api-tab"[^>]*aria-selected="true"/',
-            $controller->profile($this->request(query: ['tab' => 'api']))
-        );
-        $this->assertMatchesRegularExpression(
-            '/id="data-tab"[^>]*aria-selected="true"/',
-            $controller->profile($this->request(query: ['tab' => 'nonsense']))
-        );
     }
 
     #[Test]
@@ -214,7 +277,10 @@ final class AccountControllerTest extends TestCase
         ]))->profile($this->request());
 
         $this->assertStringContainsString('Generar un token', $html);
-        $this->assertStringContainsString('203.0.113.9', $html);
+        // The help of a field is under it.
+        $this->assertStringContainsString('Help of ana', $html);
+        // The address is not listed: Keycloak records the one of the server that asked for the token.
+        $this->assertStringNotContainsString('203.0.113.9', $html);
         $this->assertStringContainsString('Firefox', $html);
         // Each token is revoked by itself, one by one.
         $this->assertStringContainsString('action="/auth/token/revoke/t1"', $html);
@@ -241,6 +307,16 @@ final class AccountControllerTest extends TestCase
 
         $this->assertInstanceOf(HtmlResponse::class, $shown);
         $this->assertStringContainsString('the.offline.token', (string) $shown->getBody());
+        $body = (string) $shown->getBody();
+        // It is hidden, like a password, with the buttons to show it and to copy it.
+        $this->assertMatchesRegularExpression('/<input[^>]*type="password"[^>]*value="the\.offline\.token"[^>]*readonly|<input[^>]*readonly[^>]*type="password"/', $body);
+        $this->assertStringContainsString('FormFields.showPassword(this)', $body);
+        $this->assertStringContainsString('UI.copy(', $body);
+        // Without JavaScript it is still there to copy.
+        $this->assertMatchesRegularExpression('#<noscript>\s*<textarea[^>]*>the\.offline\.token</textarea>#', $body);
+        // What it is: when it was made, when it ends and how long it lasts.
+        $this->assertStringContainsString('Creado', $body);
+        $this->assertStringContainsString('3.650 días', $body);
         $this->assertSame('no-store', $shown->getHeaderLine('Cache-Control'));
     }
 
@@ -268,7 +344,7 @@ final class AccountControllerTest extends TestCase
         );
 
         $this->assertInstanceOf(RedirectResponse::class, $response);
-        $this->assertSame('/auth/profile?tab=api', $response->getHeaderLine('Location'));
+        $this->assertSame('/auth/profile#api:tokens', $response->getHeaderLine('Location'));
     }
 
     #[Test]
@@ -287,7 +363,7 @@ final class AccountControllerTest extends TestCase
         );
 
         $this->assertSame(['t1'], $revoked);
-        $this->assertSame('/auth/profile?tab=api', $response->getHeaderLine('Location'));
+        $this->assertSame('/auth/profile#api:tokens', $response->getHeaderLine('Location'));
     }
 
     #[Test]
@@ -305,7 +381,7 @@ final class AccountControllerTest extends TestCase
             'x'
         );
 
-        $this->assertSame('/auth/profile?tab=api', $response->getHeaderLine('Location'));
+        $this->assertSame('/auth/profile#api:tokens', $response->getHeaderLine('Location'));
     }
 
     /**
@@ -345,18 +421,19 @@ final class AccountControllerTest extends TestCase
                 return $this->tokens;
             }
 
-            public function fields(): array
+            public function form(UserInterface $user, array $data = []): FormInterface
             {
-                return [['name' => 'password', 'label' => 'Password', 'type' => 'password', 'required' => true]];
+                return (new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))))
+                    ->create((new ApiTokenForm())->withHelp('Help of ' . $user->getIdentity())->getDefinition() + ['data' => $data]);
             }
 
-            public function create(ServerRequestInterface $request, SessionInterface $session): string
+            public function create(ServerRequestInterface $request, SessionInterface $session): NewApiToken
             {
                 if ($this->failure !== null && $this->failOn === 'create') {
                     throw $this->failure;
                 }
 
-                return $this->created ?? 'token';
+                return new NewApiToken($this->created ?? 'token', 1_700_000_000, 1_700_000_000 + 3650 * 86400);
             }
 
             public function revoke(SessionInterface $session, string $id): void

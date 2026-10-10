@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Derafu\TestsAuth\Provider\Keycloak;
 
 use Derafu\Auth\Account\AccountController;
+use Derafu\Auth\Authentication\Channel\Web\FormManager;
 use Derafu\Auth\Authentication\Channel\Web\WebConfiguration;
 use Derafu\Auth\Contract\AuthenticationInterface;
 use Derafu\Auth\Contract\UserInterface;
@@ -21,6 +22,7 @@ use Derafu\Auth\Exception\AuthorizationException;
 use Derafu\Auth\Provider\Keycloak\Account\KeycloakAccount;
 use Derafu\Auth\Provider\Keycloak\Account\KeycloakAccountClient;
 use Derafu\Auth\Provider\Keycloak\Account\KeycloakApiTokenManager;
+use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
 use Derafu\Auth\Provider\Keycloak\TokenClaims;
 use Derafu\Auth\Provider\Keycloak\Web\KeycloakController;
@@ -28,6 +30,11 @@ use Derafu\Auth\Provider\Keycloak\Web\KeycloakLoginController;
 use Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager;
 use Derafu\Auth\Translation\AuthTranslationResourceProvider;
 use Derafu\Auth\Twig\AuthExtension;
+use Derafu\Form\Factory\FormFactory;
+use Derafu\Form\Renderer\FormTwigExtension;
+use Derafu\Form\Type\TypeProvider;
+use Derafu\Form\Type\TypeRegistry;
+use Derafu\Form\Type\TypeResolver;
 use Derafu\Renderer\Factory\RendererFactory;
 use Derafu\TestsAuth\Fixture\KeycloakBrowser;
 use Derafu\TestsAuth\Fixture\RealKeycloak;
@@ -78,6 +85,11 @@ use Twig\TwigFunction;
 #[UsesClass(\Derafu\Auth\Account\ApiToken::class)]
 #[UsesClass(\Derafu\Auth\Account\PhpSessionDetails::class)]
 #[UsesClass(\Derafu\Auth\Authentication\SameOrigin::class)]
+#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\FormManager::class)]
+#[UsesClass(\Derafu\Auth\Exception\FormException::class)]
+#[UsesClass(\Derafu\Auth\Provider\Keycloak\Account\Form\ApiTokenForm::class)]
+#[UsesClass(\Derafu\Auth\Account\Form\ApiTokenValueForm::class)]
+#[UsesClass(\Derafu\Auth\Account\NewApiToken::class)]
 #[UsesClass(AuthenticationException::class)]
 #[UsesClass(AuthorizationException::class)]
 #[UsesClass(\Derafu\Auth\Provider\Keycloak\KeycloakConfiguration::class)]
@@ -154,7 +166,8 @@ final class KeycloakApiTokensTest extends TestCase
         $this->login = new KeycloakController(Stack::webOf($config), $this->sessions);
 
         $client = new KeycloakAccountClient($config);
-        $this->manager = $manager = new KeycloakApiTokenManager($this->repository, $client, $this->sessions);
+        $translator = TranslatorFactory::create('es', ['en'], [new AuthTranslationResourceProvider()]);
+        $this->manager = $manager = new KeycloakApiTokenManager($this->repository, $client, $this->sessions, $this->formManager($config), $translator);
         $flow = new \Derafu\Auth\Provider\Keycloak\Web\KeycloakWebFlow(
             $this->repository,
             $config,
@@ -163,7 +176,6 @@ final class KeycloakApiTokensTest extends TestCase
         );
         $this->loginRoute = new KeycloakLoginController(Stack::webOf($config), $flow, $this->sessions);
 
-        $translator = TranslatorFactory::create('es', ['en'], [new AuthTranslationResourceProvider()]);
         $routing = new class () extends AbstractExtension {
             public function getFunctions(): array
             {
@@ -181,14 +193,17 @@ final class KeycloakApiTokensTest extends TestCase
                     self::ROOT . '/resources/templates',
                     self::ROOT . '/tests/fixtures/templates',
                     self::ROOT . '/vendor/derafu/twig/resources/templates',
+                    self::ROOT . '/vendor/derafu/form/resources/templates',
                 ],
                 'extensions' => [
                     $routing,
                     new TranslationExtension($translator, null, 'es'),
                     new AuthExtension(Stack::webOf($config)),
+                    new FormTwigExtension($this->app->renderer()),
                 ],
             ]),
-            new KeycloakAccount($config, $this->sessions, $client, $manager)
+            new KeycloakAccount($config, $this->sessions, $client, $manager),
+            $this->formManager($config)
         );
     }
 
@@ -201,6 +216,15 @@ final class KeycloakApiTokensTest extends TestCase
      * Runs a request through the middlewares and the authentication, and gives the
      * action what the application would: the request of the user.
      */
+    private function formManager(KeycloakConfiguration $config): FormManager
+    {
+        return new FormManager(
+            new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
+            $this->app->processor(),
+            $config
+        );
+    }
+
     private function handle(ServerRequestInterface $request, \Closure $action): ResponseInterface
     {
         return $this->app->handleAuthenticated($request, $this->authentication, $action);
@@ -238,7 +262,7 @@ final class KeycloakApiTokensTest extends TestCase
     private function askForToken(string $sid, array $body, array $headers = ['Sec-Fetch-Site' => 'same-origin']): ResponseInterface
     {
         return $this->handle(
-            $this->app->request('/auth/profile/tokens', body: $body, sid: $sid, headers: $headers),
+            $this->app->request('/auth/profile/tokens', body: $body, sid: $sid, headers: $headers, captcha: false, form: 'api_token'),
             fn (ServerRequestInterface $request) => $this->account->tokenCreate($request)
         );
     }
@@ -351,7 +375,7 @@ final class KeycloakApiTokensTest extends TestCase
             $response = $this->askForToken($sid, $body);
 
             $this->assertInstanceOf(RedirectResponse::class, $response);
-            $this->assertSame('/auth/profile?tab=api', $response->getHeaderLine('Location'));
+            $this->assertSame('/auth/profile#api:tokens', $response->getHeaderLine('Location'));
         }
         $this->assertSame(0, self::$keycloak->admin()->offlineSessions('otto', 'derafu-auth'));
     }
@@ -370,15 +394,16 @@ final class KeycloakApiTokensTest extends TestCase
         $manager = new KeycloakApiTokenManager(
             new KeycloakUserRepository($config),
             new KeycloakAccountClient($config),
-            $this->sessions
+            $this->sessions,
+            $this->formManager($config)
         );
-        $request = $this->app->request('/auth/profile/tokens', body: ['password' => 'secret'])
+        $request = $this->app->request('/auth/profile/tokens', body: ['password' => 'secret'], captcha: false, form: 'api_token')
             ->withAttribute(MezzioUserInterface::class, new \Derafu\Auth\User('7d5e590b', [], ['preferred_username' => 'otto']));
 
         $this->expectException(AuthenticationException::class);
         $this->expectExceptionMessage('direct access grants');
 
-        $manager->create($request, new Session([]));
+        $this->app->handle($request, fn (ServerRequestInterface $request) => $manager->create($request, new Session([])));
     }
 
     #[Test]
@@ -411,6 +436,8 @@ final class KeycloakApiTokensTest extends TestCase
             $this->assertGreaterThan(time(), $token->expiresAt);
             $this->assertLessThanOrEqual(time(), $token->createdAt);
             $this->assertNotNull($token->ip);
+            // What the package makes is a program: Keycloak knows no browser for it.
+            $this->assertNull($token->browser);
         }
         // The session of the login is not one of them.
         $this->assertNotContains(TokenClaims::of($this->sessions->getAccessToken(new Session($this->app->persistence->store[$sid])) ?? '')['sid'], array_map(fn ($t) => $t->id, $tokens));
@@ -432,7 +459,7 @@ final class KeycloakApiTokensTest extends TestCase
             fn (ServerRequestInterface $request) => $this->account->tokenRevoke($request, $id)
         );
 
-        $this->assertSame('/auth/profile?tab=api', $response->getHeaderLine('Location'));
+        $this->assertSame('/auth/profile#api:tokens', $response->getHeaderLine('Location'));
         // At once: Keycloak says that its access token is not active either.
         $this->assertNull($this->callApi($first));
         $this->assertNotNull($this->callApi($second));
@@ -456,7 +483,7 @@ final class KeycloakApiTokensTest extends TestCase
                 $this->app->request('/auth/profile/tokens/x/revoke', body: [], sid: $sid, headers: ['Sec-Fetch-Site' => 'same-origin']),
                 fn (ServerRequestInterface $request) => $this->account->tokenRevoke($request, $id)
             );
-            $this->assertSame('/auth/profile?tab=api', $response->getHeaderLine('Location'));
+            $this->assertSame('/auth/profile#api:tokens', $response->getHeaderLine('Location'));
         }
 
         // The login session was not revoked: the user is still logged in.
@@ -488,9 +515,13 @@ final class KeycloakApiTokensTest extends TestCase
         )->getBody();
 
         $this->assertStringContainsString('otto@example.com', $html);
+        // The example of the call to the API has the site of the redirect URI, not a host of the request.
+        $this->assertStringContainsString('curl -H "Authorization: Bearer TOKEN" https://app.test/api/...', $html);
         $this->assertStringContainsString(self::$keycloak->url() . '/realms/test/account', $html);
         $this->assertStringContainsString('curl -H "Authorization: Bearer TOKEN" https://app.test/api/...', $html);
         $this->assertStringContainsString('Generar un token', $html);
+        // The password is the one of the user in the realm of the site, and it says so.
+        $this->assertStringContainsString('Es la contraseña del usuario <code>otto</code> en el realm <code>test</code>.', $html);
         $this->assertStringContainsString('Token de Keycloak', $html);
         $this->assertStringContainsString('Sesión en Keycloak', $html);
         $this->assertMatchesRegularExpression('#action="/auth/token/revoke/[^"]+"#', $html);
@@ -512,10 +543,22 @@ final class KeycloakApiTokensTest extends TestCase
     }
 
     /**
+     * The response that the API gives to a request with a token.
+     */
+    private function responseOf(string $token, ?AuthenticationInterface $authentication = null): ResponseInterface
+    {
+        return $this->app->handleAuthenticated(
+            $this->app->request('/api/items', headers: ['Authorization' => 'Bearer ' . $token]),
+            $authentication ?? $this->authentication,
+            fn (): null => null
+        );
+    }
+
+    /**
      * The authentication of an application that has no cache pool: the offline token
      * is exchanged in each request.
      */
-    private function withoutCache(): AuthenticationInterface
+    private function withoutCache(string $audience = 'derafu-api', bool $introspection = true): AuthenticationInterface
     {
         $config = Stack::keycloakConfiguration([
             'keycloak_url' => self::$keycloak->url(),
@@ -523,13 +566,52 @@ final class KeycloakApiTokensTest extends TestCase
             'client_id' => 'derafu-auth',
             'client_secret' => 'test-secret',
             'redirect_uri' => 'https://app.test/auth/callback',
-            'api_audience' => 'derafu-api',
+            'api_audience' => $audience,
             'api_client_id' => 'derafu-api',
             'api_client_secret' => 'api-secret',
+            'api_introspection' => $introspection,
             'enabled' => true,
+            'protected_paths' => ['/api'],
         ]);
 
         return Stack::keycloak(new KeycloakUserRepository($config), $config, $this->sessions);
+    }
+
+    #[Test]
+    public function anOfflineTokenWhoseAccessTokenIsNotForThisApiIsRefusedAndTheClientIsToldWhy(): void
+    {
+        // What the realm gives when the token is exchanged has the audience of
+        // `derafu-api`. An API that is another one (a client that is not in the
+        // audience, as an application that has not set up the mapper of the
+        // audience) must not take it, and the 401 says why.
+        $token = $this->makeToken($this->logIn());
+
+        $response = $this->responseOf($token, $this->withoutCache('derafu-noaudience', introspection: false));
+
+        $this->assertSame(401, $response->getStatusCode());
+        $this->assertSame(
+            'Bearer realm="API", error="invalid_token", error_description="The audience of the token is not this API."',
+            $response->getHeaderLine('WWW-Authenticate')
+        );
+        // The same token, for the API that it was made for, is accepted.
+        $this->assertNotNull($this->callApi($token, $this->withoutCache()));
+    }
+
+    #[Test]
+    public function aRevokedOfflineTokenSaysThatKeycloakDidNotAcceptIt(): void
+    {
+        $sid = $this->logIn();
+        $token = $this->makeToken($sid);
+        $id = TokenClaims::of($token)['sid'];
+        $this->handle(
+            $this->app->request('/auth/profile/tokens/' . $id . '/revoke', body: [], sid: $sid, headers: ['Sec-Fetch-Site' => 'same-origin']),
+            fn (ServerRequestInterface $request) => $this->account->tokenRevoke($request, $id)
+        );
+
+        $this->assertSame(
+            'Bearer realm="API", error="invalid_token", error_description="Keycloak did not accept the offline token."',
+            $this->responseOf($token, $this->withoutCache())->getHeaderLine('WWW-Authenticate')
+        );
     }
 
     #[Test]

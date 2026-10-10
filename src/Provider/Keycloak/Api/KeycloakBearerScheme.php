@@ -19,6 +19,9 @@ use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
 use Derafu\Auth\Provider\Keycloak\TokenClaims;
+use Firebase\JWT\BeforeValidException;
+use Firebase\JWT\ExpiredException;
+use Firebase\JWT\SignatureInvalidException;
 use Psr\Cache\CacheItemPoolInterface;
 
 /**
@@ -59,6 +62,18 @@ class KeycloakBearerScheme extends BearerScheme
     private const MARGIN = 30;
 
     /**
+     * The reasons that a client is told as they are: they say what is wrong with
+     * its token and nothing of what Keycloak answered.
+     */
+    private const REASONS = [
+        'The token is not an access token.',
+        'The audience of the token is not this API.',
+        'The issuer of the token is not the realm.',
+        'The token is not active.',
+        'Keycloak did not accept the offline token.',
+    ];
+
+    /**
      * @param CacheItemPoolInterface|null $cache Where the access tokens that were
      * exchanged for an offline token are kept until they expire.
      */
@@ -87,9 +102,25 @@ class KeycloakBearerScheme extends BearerScheme
                 ? $this->authenticateOfflineToken($token)
                 : $this->userOfAccessToken($token)
             ;
-        } catch (AuthenticationException) {
-            return null;
+        } catch (AuthenticationException $e) {
+            // The client is told why, with one of a few texts: what the exception
+            // says can have what Keycloak answered, and that is not for the client.
+            throw new AuthenticationException(self::reasonOf($e), 401, $e);
         }
+    }
+
+    /**
+     * The reason that the client is given for a token that is not valid.
+     */
+    private static function reasonOf(AuthenticationException $e): string
+    {
+        return match (true) {
+            $e->getPrevious() instanceof ExpiredException => 'The token has expired.',
+            $e->getPrevious() instanceof SignatureInvalidException => 'The signature of the token is not valid.',
+            $e->getPrevious() instanceof BeforeValidException => 'The token is not valid yet.',
+            in_array($e->getMessage(), self::REASONS, true) => $e->getMessage(),
+            default => 'The token is not valid.',
+        };
     }
 
     /**
@@ -130,7 +161,11 @@ class KeycloakBearerScheme extends BearerScheme
             }
         }
 
-        $tokens = $this->userRepository->refreshToken($offlineToken);
+        try {
+            $tokens = $this->userRepository->refreshToken($offlineToken);
+        } catch (AuthenticationException $e) {
+            throw new AuthenticationException('Keycloak did not accept the offline token.', 401, $e);
+        }
         $user = $this->userOfAccessToken($tokens['access_token']);
 
         if ($this->cache !== null && isset($tokens['expires'])) {

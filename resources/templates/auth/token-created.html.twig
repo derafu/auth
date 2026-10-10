@@ -11,16 +11,40 @@
         {{ 'Copy it now: it is shown only once. Treat it as a password, whoever has it acts as you.'|trans }}
     </div>
 
+    {% if createdAt or expiresAt %}
+        <div class="card mb-4">
+            <div class="card-body">
+                <dl class="row mb-0">
+                    {% if createdAt %}
+                        <dt class="col-sm-3">{{ 'Created'|trans }}</dt>
+                        <dd class="col-sm-9">{{ createdAt|date('Y-m-d H:i') }}</dd>
+                    {% endif %}
+                    {% if expiresAt %}
+                        <dt class="col-sm-3">{{ 'Expires'|trans }}</dt>
+                        <dd class="col-sm-9">{{ expiresAt|date('Y-m-d H:i') }}</dd>
+                    {% endif %}
+                    {% if createdAt and expiresAt %}
+                        <dt class="col-sm-3">{{ 'Duration'|trans }}</dt>
+                        <dd class="col-sm-9">{{ '{days, plural, one {# day} other {# days}}'|trans({'days': ((expiresAt - createdAt) / 86400)|round}) }}</dd>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+    {% endif %}
+
     <div class="mb-4">
-        <label for="token" class="form-label">{{ 'Token'|trans }}</label>
-        <textarea id="token" class="form-control font-monospace" rows="6" readonly onclick="this.select()">{{ token }}</textarea>
+        {{ form_element(tokenForm.uiSchema, tokenForm) }}
+        {# Without JavaScript the buttons do nothing and a password field can not be copied. #}
+        <noscript>
+            <textarea class="form-control font-monospace mt-2" rows="6" readonly>{{ token }}</textarea>
+        </noscript>
     </div>
 
     <p>{{ 'Send it in the header of each request:'|trans }}</p>
     <pre class="border rounded p-2 small overflow-auto"><code>curl -H "Authorization: {{ apiScheme }} TOKEN" {{ baseUrl }}/api/...</code></pre>
 
     <p class="mt-4">
-        <a href="{{ profile_path() }}?tab=api" class="btn btn-primary">{{ 'Back to the profile'|trans }}</a>
+        <a href="{{ profile_path() }}#api:tokens" class="btn btn-primary">{{ 'Back to the profile'|trans }}</a>
     </p>
 </div>
 {% endblock %}

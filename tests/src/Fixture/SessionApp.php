@@ -89,6 +89,7 @@ final class SessionApp
      * token of the session (when the client has one).
      * @param bool $captcha Whether the body of a form that is sent carries what
      * the visitor solved of the captcha.
+     * @param string $form The id of the form that is sent (its schema name).
      */
     public function request(
         string $path,
@@ -98,7 +99,8 @@ final class SessionApp
         array $headers = [],
         string $address = '203.0.113.7',
         bool $csrf = true,
-        bool $captcha = true
+        bool $captcha = true,
+        string $form = 'login'
     ): ServerRequestInterface {
         $request = (new ServerRequest(['REMOTE_ADDR' => $address]))
             ->withUri(new Uri('https://app.test' . $path . ($query === [] ? '' : '?' . http_build_query($query))))
@@ -111,7 +113,7 @@ final class SessionApp
         }
 
         if ($body !== null && $csrf && isset($this->persistence->store[$sid ?? self::KNOWN])) {
-            $body += [FormInterface::CSRF_FIELD => $this->token($sid)];
+            $body += [FormInterface::CSRF_FIELD => $this->token($sid, $form)];
         }
 
         if ($body !== null && $captcha) {

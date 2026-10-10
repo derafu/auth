@@ -78,6 +78,11 @@ services:
     # starts the login.
     Derafu\Auth\Provider\Keycloak\Account\KeycloakAccountClient: ~
     Derafu\Auth\Provider\Keycloak\Account\KeycloakApiTokenManager: ~
+    Derafu\Auth\Contract\FormManagerInterface:
+        class: Derafu\Auth\Authentication\Channel\Web\FormManager
+        lazy: true
+        arguments:
+            $configuration: '@Derafu\Auth\Provider\Keycloak\KeycloakConfiguration'
     Derafu\Auth\Contract\AccountInterface:
         class: Derafu\Auth\Provider\Keycloak\Account\KeycloakAccount
         lazy: true

@@ -95,13 +95,29 @@ class KeycloakAccount implements AccountInterface
                     ['label' => new TranslatableMessage('Started', [], 'auth'), 'value' => $this->time($known['started'] ?? null)],
                     ['label' => new TranslatableMessage('Last access', [], 'auth'), 'value' => $this->time($known['lastAccess'] ?? null)],
                     ['label' => new TranslatableMessage('Expires', [], 'auth'), 'value' => $this->time($known['expires'] ?? null)],
-                    ['label' => new TranslatableMessage('Address', [], 'auth'), 'value' => $known['ipAddress'] ?? null],
+                    ['label' => new TranslatableMessage('IP address', [], 'auth'), 'value' => $known['ipAddress'] ?? null],
                     ['label' => new TranslatableMessage('Browser', [], 'auth'), 'value' => $known['browser'] ?? null],
                 ], fn (array $field) => $field['value'] !== null)),
             ];
         }
 
         return $sections;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * The site of the redirect URI of the client: it is the address that the site
+     * has for Keycloak, so it is the one of the clients of its API.
+     */
+    public function publicUrl(): ?string
+    {
+        $uri = parse_url($this->config->getRedirectUri());
+        if (!isset($uri['scheme'], $uri['host'])) {
+            return null;
+        }
+
+        return $uri['scheme'] . '://' . $uri['host'] . (isset($uri['port']) ? ':' . $uri['port'] : '');
     }
 
     /**

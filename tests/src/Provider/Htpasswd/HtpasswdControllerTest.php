@@ -26,6 +26,7 @@ use Derafu\Form\Type\TypeProvider;
 use Derafu\Form\Type\TypeRegistry;
 use Derafu\Form\Type\TypeResolver;
 use Derafu\Renderer\Factory\RendererFactory;
+use Derafu\TestsAuth\Fixture\AppGlobal;
 use Derafu\TestsAuth\Fixture\HtpasswdFile;
 use Derafu\TestsAuth\Fixture\SessionApp;
 use Derafu\TestsAuth\Fixture\Stack;
@@ -70,6 +71,8 @@ use Twig\TwigFunction;
 final class HtpasswdControllerTest extends TestCase
 {
     private SessionApp $app;
+
+    private AppGlobal $appGlobal;
 
     private HtpasswdFile $file;
 
@@ -118,6 +121,7 @@ final class HtpasswdControllerTest extends TestCase
             }
         };
 
+        $this->appGlobal = new AppGlobal();
         $this->controller = new HtpasswdController(
             RendererFactory::create([
                 'engines' => ['twig'],
@@ -132,6 +136,7 @@ final class HtpasswdControllerTest extends TestCase
                     $routing,
                     new TranslationExtension($translator, null, 'es'),
                     new FormTwigExtension($this->app->renderer()),
+                    $this->appGlobal,
                 ],
             ]),
             $formManager,
@@ -152,6 +157,7 @@ final class HtpasswdControllerTest extends TestCase
     {
         $page = '';
         $this->app->handle($request, function (ServerRequestInterface $request) use (&$page) {
+            $this->appGlobal->request = $request;
             $page = $this->controller->login($request);
         });
 
@@ -279,6 +285,7 @@ final class HtpasswdControllerTest extends TestCase
             $this->app->request($path, sid: $sid),
             $this->authentication,
             function (ServerRequestInterface $request) use (&$result): void {
+                $this->appGlobal->request = $request;
                 $result = $this->controller->login($request->withParsedBody([]));
             }
         );

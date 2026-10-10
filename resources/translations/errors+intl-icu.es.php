@@ -132,7 +132,20 @@ return [
     'The token is not for the user of this session.' => 'El token no es del usuario de esta sesión.',
     'The token that Keycloak gave is not one for the API.' => 'El token que entregó Keycloak no es uno para la API.',
     'Keycloak did not revoke the token (HTTP status {status}).' => 'Keycloak no revocó el token (estado HTTP {status}).',
+    'Keycloak did not accept the offline token.' => 'Keycloak no aceptó el token offline.',
+    'Your user is disabled.' => 'Tu usuario está deshabilitado.',
+    'Your user has actions pending in Keycloak (a password to change, an email to verify...): complete them and try again.' =>
+        'Tu usuario tiene acciones pendientes en Keycloak (cambiar la contraseña, verificar el correo...): complétalas e inténtalo de nuevo.',
+    'The password or the code of the second factor is not valid.' => 'La contraseña o el código del segundo factor no es válido.',
+    'The password is not valid, or the code of the second factor is missing (your user has one).' =>
+        'La contraseña no es válida, o falta el código del segundo factor (tu usuario tiene uno).',
     'Keycloak did not let the sessions be read (HTTP status {status}).' => 'Keycloak no dejó leer las sesiones (estado HTTP {status}).',
+    'The token of your session does not have the role {role} of the client {client}, that Keycloak asks to read the sessions. Add it to the scope of the client {application}.' =>
+        'El token de tu sesión no tiene el rol {role} del cliente {client}, que Keycloak pide para leer las sesiones. Agrégalo al scope del cliente {application}.',
+    'The token of your session does not have the role {role} of the client {client}, that Keycloak asks to revoke a token. Add it to the scope of the client {application}.' =>
+        'El token de tu sesión no tiene el rol {role} del cliente {client}, que Keycloak pide para revocar un token. Agrégalo al scope del cliente {application}.',
+    'Too many failed login attempts. Try again in {minutes, plural, one {# minute} other {# minutes}}.' =>
+        'Demasiados intentos fallidos de inicio de sesión. Inténtalo de nuevo en {minutes, plural, one {# minuto} other {# minutos}}.',
     'Failed to read the account of Keycloak: {error}' => 'No se pudo leer la cuenta en Keycloak: {error}',
     'The password is not valid.' => 'La contraseña no es válida.',
     'Keycloak does not let this application make tokens with a password: turn on the direct access grants of its client.' =>

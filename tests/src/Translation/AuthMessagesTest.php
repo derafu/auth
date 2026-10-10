@@ -95,19 +95,18 @@ final class AuthMessagesTest extends TestCase
         // The texts of the login form are in the same domain as the ones of the
         // templates, so the audit of the templates sees them as not used: they
         // are the ones that the audit of the form finds.
-        $forms = (new FormTranslationAudit())->audit(
-            $root . '/src/Provider/Database/Web/Form',
-            new AuthTranslationResourceProvider()
-        );
-        $this->assertFalse($forms->nothingFound);
-        $this->assertSame([], $forms->describe($forms->dynamicTexts));
-        $this->assertSame([], $forms->describe($forms->withoutDomain));
-        $this->assertSame([], $forms->describe($forms->missingTranslations));
+        $usedByTheForms = [];
+        foreach (['/src/Provider/Database/Web/Form', '/src/Provider/Keycloak/Account/Form', '/src/Account/Form'] as $directory) {
+            $forms = (new FormTranslationAudit())->audit($root . $directory, new AuthTranslationResourceProvider());
+            $this->assertFalse($forms->nothingFound, $directory);
+            $this->assertSame([], $forms->describe($forms->dynamicTexts), $directory);
+            $this->assertSame([], $forms->describe($forms->withoutDomain), $directory);
+            $this->assertSame([], $forms->describe($forms->missingTranslations), $directory);
 
-        $usedByTheForms = array_map(
-            fn ($text) => ['domain' => (string) $text->domain, 'id' => (string) $text->id],
-            $forms->texts
-        );
+            foreach ($forms->texts as $text) {
+                $usedByTheForms[] = ['domain' => (string) $text->domain, 'id' => (string) $text->id];
+            }
+        }
         $this->assertSame(
             [],
             $report->describe(array_values(array_filter(
@@ -132,10 +131,12 @@ final class AuthMessagesTest extends TestCase
                     . '\\Derafu\\Auth\\Authentication\\Channel\\Web\\Flash::error($request, $e->getTranslatableMessage(), now: true)',
                 'Derafu\\Auth\\Provider\\Htpasswd\\Web\\HtpasswdWebFlow::login: '
                     . '\\Derafu\\Auth\\Authentication\\Channel\\Web\\Flash::error($request, $e->getTranslatableMessage(), now: true)',
+                // The reason that a client of the API is told (`error_description`): a few
+                // texts in English, as the RFC wants them, that are not translated.
+                'Derafu\\Auth\\Provider\\Keycloak\\Api\\KeycloakBearerScheme::authenticateToken: new \\Derafu\\Auth\\Exception\\AuthenticationException(self::reasonOf($e), 401, $e)',
                 'auth/profile/_macros.html.twig: <th scope="row" class="w-25">{{ field.label|trans }}</th>',
                 'auth/profile/_session.html.twig: <div class="card-header">{{ section.title|trans }}</div>',
                 'auth/profile/_tokens.html.twig: <div class="alert alert-warning small" role="alert">{{ tokensError|trans }}</div>',
-                'auth/profile/_tokens.html.twig: <label for="token-{{ field.name }}" class="form-label">{{ field.label|trans }}</label>',
                 'partials/flash-messages.html.twig: '
                     . '{% set text = message.message|trans(parameters, message.domain ?? null) %}',
             ],

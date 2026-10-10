@@ -40,6 +40,10 @@ interface ApiSchemeInterface
      * @param string $credentials What comes after the scheme: the token, or the
      * user and the password in Base64.
      * @return UserInterface|null The user, or null if the credentials are not valid.
+     * @throws \Derafu\Auth\Exception\AuthenticationException If the credentials are
+     * not valid and the scheme can say why: the message of the exception, in English
+     * and without what a header can not have, is the reason that the 401 gives to the
+     * client.
      */
     public function authenticate(ServerRequestInterface $request, string $credentials): ?UserInterface;
 
@@ -50,7 +54,8 @@ interface ApiSchemeInterface
      * @param string $realm The label of the protection space.
      * @param bool $credentialsSent Whether the request sent credentials of this
      * scheme (that were not valid).
+     * @param string|null $reason Why they were not valid, if the scheme said it.
      * @return string|null The challenge, or null if it is not to be sent.
      */
-    public function challenge(ServerRequestInterface $request, string $realm, bool $credentialsSent): ?string;
+    public function challenge(ServerRequestInterface $request, string $realm, bool $credentialsSent, ?string $reason = null): ?string;
 }
