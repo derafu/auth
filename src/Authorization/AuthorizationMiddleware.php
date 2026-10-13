@@ -26,8 +26,9 @@ use Psr\Http\Server\RequestHandlerInterface;
  * roles of the user is granted, and says why not if none is.
  *
  * It decides as the one of Mezzio does (without a user it is a 401, and with a
- * user it is a 403 unless one of its roles is granted, so a user without roles is
- * never granted), but it does not make a response: it throws an
+ * user it is a 403 unless one of its roles is granted), except that when the
+ * request needs no role (a public path, or one that only asks for a user) the
+ * user is let in even if it has none. It does not make a response: it throws an
  * `AuthorizationException` with the code 401 or 403. The application answers it
  * like any other error (see the error pages of `derafu/http`): an error page in
  * HTML for a browser, and a problem in JSON for a client of the API, with the
@@ -67,21 +68,18 @@ final class AuthorizationMiddleware implements MiddlewareInterface
             );
         }
 
+        $roles = $this->rules->requiredRoles($request);
+
+        // No role is required: the path is public, or it only asks for a user,
+        // and there is one. Who has no roles is let in as anybody else.
+        if ($roles === []) {
+            return $handler->handle($request);
+        }
+
         foreach ($user->getRoles() as $role) {
             if ($this->authorization->isGranted($role, $request)) {
                 return $handler->handle($request);
             }
-        }
-
-        $roles = $this->rules->requiredRoles($request);
-
-        // Nothing is required but a user: the user has no roles, and a user
-        // without roles is never granted.
-        if ($roles === []) {
-            throw new AuthorizationException(
-                ['You do not have access to {path}: your user has no roles.', 'path' => $path],
-                403
-            );
         }
 
         throw new AuthorizationException(

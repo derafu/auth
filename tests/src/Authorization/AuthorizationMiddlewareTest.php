@@ -38,7 +38,7 @@ use Psr\Http\Server\RequestHandlerInterface;
  *
  * It decides as the standard (RBAC and ACL of Mezzio) does: without a user it is
  * a 401, and with a user it is a 403 unless one of the roles of the user is
- * granted, so a user without roles is never granted. The difference is that it
+ * granted. A user without roles is only let in where no role is required. The difference is that it
  * does not make a response: it throws an exception with that code, that the
  * application answers as any other error, and its message says which roles give
  * access. What the package adds, on top of the standard: a protected path without
@@ -81,7 +81,7 @@ final class AuthorizationMiddlewareTest extends TestCase
             'a role that nobody declared and none that is asked' => [403, '/admin', ['ghost']],
             'a protected path without roles, with a role' => [200, '/private', ['user']],
             'a protected path without roles, with a role that nobody declared' => [200, '/private', ['ghost']],
-            'a protected path without roles, a user without roles' => [403, '/private', []],
+            'a protected path without roles, a user without roles' => [200, '/private', []],
             'a route with roles, a role that the route has' => [200, '/page', ['editor'], ['editor', 'owner']],
             'a route with roles, a role that the route does not have' => [403, '/page', ['user'], ['editor', 'owner']],
             'a route with roles, a user without roles' => [403, '/page', [], ['editor']],
@@ -89,6 +89,8 @@ final class AuthorizationMiddlewareTest extends TestCase
             'a route with roles in a protected path without roles' => [403, '/private', ['user'], ['editor']],
             'a route without roles in a public path' => [200, '/page', ['user'], []],
             'no route matched in a public path' => [200, '/page', ['user']],
+            'a public path, a user without roles' => [200, '/page', []],
+            'a route without roles in a public path, a user without roles' => [200, '/page', [], []],
         ];
     }
 
@@ -144,15 +146,6 @@ final class AuthorizationMiddlewareTest extends TestCase
         $this->assertSame(
             'You do not have access to /page. These roles give access: editor, owner.',
             $this->statusOf('/page', ['user'], ['editor', 'owner'])['message']
-        );
-    }
-
-    public function testAUserWithoutRolesIsToldThatItHasNone(): void
-    {
-        // The path only asks for a user, and a user without roles is never granted.
-        $this->assertSame(
-            'You do not have access to /private: your user has no roles.',
-            $this->statusOf('/private', [], null)['message']
         );
     }
 
