@@ -40,8 +40,6 @@ return [
         'A Keycloak se le consulta por los tokens con un cliente, y no está configurado: define AUTH_KEYCLOAK_CLIENT_ID y AUTH_KEYCLOAK_CLIENT_SECRET (o los de la API, AUTH_KEYCLOAK_API_CLIENT_ID y AUTH_KEYCLOAK_API_CLIENT_SECRET), o desactiva la introspección con AUTH_KEYCLOAK_API_INTROSPECTION=false.',
     'You must be authenticated to access {path}.' =>
         'Debes iniciar sesión para acceder a {path}.',
-    'You do not have access to {path}: your user has no roles.' =>
-        'No tienes acceso a {path}: tu usuario no tiene roles.',
     'You do not have access to {path}. These roles give access: {roles}.' =>
         'No tienes acceso a {path}. Estos roles dan acceso: {roles}.',
     'No channel of authentication matches the request.' =>
