@@ -306,7 +306,9 @@ final class KeycloakBearerTest extends TestCase
 
         return [
             'expired, past the margin of the clocks' => [['exp' => time() - 300], 'The token has expired.'],
-            'not valid yet' => [['nbf' => time() + 300], 'The token is not valid yet.'],
+            // Far away: the provider is evaluated when the suite starts, and the test
+            // runs minutes later, so a near `nbf` would end up inside the margin.
+            'not valid yet' => [['nbf' => time() + 100 * 365 * 86400], 'The token is not valid yet.'],
             'from another realm' => [['iss' => 'https://keycloak.test/realms/other'], $issuer],
             'from another server' => [['iss' => 'https://evil.test/realms/test'], $issuer],
             'without an issuer' => [['iss' => null], $issuer],
