@@ -143,14 +143,17 @@ final class FormManagerTest extends TestCase
     }
 
     #[Test]
-    public function theDataThatIsNotInTheFormIsKept(): void
+    public function theDataThatIsNotInTheFormIsDropped(): void
     {
         $result = $this->manager()->processForm(
             LoginForm::class,
             $this->sent(['email' => 'ana@example.com', 'password' => 'secret', 'remember' => 'on'])
         );
 
-        $this->assertSame('on', $result->getProcessedData()['remember']);
+        $this->assertSame(
+            ['email' => 'ana@example.com', 'password' => 'secret'],
+            $result->getProcessedData()
+        );
     }
 
     #[Test]

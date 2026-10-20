@@ -18,6 +18,7 @@ use Derafu\Auth\Translation\AuthTranslationResourceProvider;
 use Derafu\Translation\TranslatableMessage;
 use Derafu\Translation\TranslatorFactory;
 use Derafu\Twig\Extension\TranslationExtension;
+use Derafu\Twig\Provider\DirectoryComponentProvider;
 use Derafu\Twig\Service\TwigService;
 use Laminas\Diactoros\ServerRequest;
 use Mezzio\Flash\FlashMessageMiddleware;
@@ -97,8 +98,9 @@ final class FlashTest extends TestCase
             'paths' => [
                 $root . '/resources/templates',
                 $root . '/tests/fixtures/templates',
-                $root . '/vendor/derafu/twig/resources/templates',
+                $root . '/vendor/derafu/twig-components/resources/templates',
             ],
+            'components' => new DirectoryComponentProvider($root . '/vendor/derafu/twig-components/src/Component'),
             'extensions' => $extensions,
         ]))->getTwig()->render($template, $context);
     }

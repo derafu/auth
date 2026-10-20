@@ -34,6 +34,7 @@ use Derafu\TestsAuth\Fixture\Stack;
 use Derafu\TestsAuth\Fixture\UsersDatabase;
 use Derafu\Translation\TranslatorFactory;
 use Derafu\Twig\Extension\TranslationExtension;
+use Derafu\Twig\Provider\DirectoryComponentProvider;
 use Laminas\Diactoros\Response\RedirectResponse;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -131,9 +132,10 @@ final class DatabaseLoginPageTest extends TestCase
                 'paths' => [
                     $root . '/resources/templates',
                     $root . '/tests/fixtures/templates',
-                    $root . '/vendor/derafu/twig/resources/templates',
+                    $root . '/vendor/derafu/twig-components/resources/templates',
                     $root . '/vendor/derafu/form/resources/templates',
                 ],
+                'components' => new DirectoryComponentProvider($root . '/vendor/derafu/twig-components/src/Component'),
                 'extensions' => [
                     $routing,
                     new TranslationExtension($translator, null, 'es'),
@@ -237,8 +239,8 @@ final class DatabaseLoginPageTest extends TestCase
         $page = $this->page($this->app->request('/auth/login')->withParsedBody([]));
 
         $this->assertStringContainsString('<h1 class="border-bottom mb-4">Iniciar sesión</h1>', $page);
-        $this->assertStringContainsString('>Usuario</label>', $page);
-        $this->assertStringContainsString('>Contraseña</label>', $page);
+        $this->assertMatchesRegularExpression('/>Usuario\b[^<]*(<[^>]*>[^<]*)*<\/label>/', $page);
+        $this->assertMatchesRegularExpression('/>Contraseña\b[^<]*(<[^>]*>[^<]*)*<\/label>/', $page);
         $this->assertStringNotContainsString('>Username</label>', $page);
     }
 

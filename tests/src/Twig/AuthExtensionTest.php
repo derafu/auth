@@ -20,6 +20,7 @@ use Derafu\Auth\User;
 use Derafu\Renderer\Factory\RendererFactory;
 use Derafu\Translation\TranslatorFactory;
 use Derafu\Twig\Extension\TranslationExtension;
+use Derafu\Twig\Provider\DirectoryComponentProvider;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
@@ -70,7 +71,8 @@ final class AuthExtensionTest extends TestCase
         return RendererFactory::create([
             'engines' => ['twig'],
             'extra' => false,
-            'paths' => [self::ROOT . '/resources/templates', self::ROOT . '/vendor/derafu/twig/resources/templates'],
+            'paths' => [self::ROOT . '/resources/templates', self::ROOT . '/vendor/derafu/twig-components/resources/templates'],
+            'components' => new DirectoryComponentProvider(self::ROOT . '/vendor/derafu/twig-components/src/Component'),
             'extensions' => [
                 $globals,
                 new TranslationExtension(TranslatorFactory::create('es', ['en'], [new AuthTranslationResourceProvider()]), null, 'es'),

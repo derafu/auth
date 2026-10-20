@@ -44,6 +44,7 @@ use Derafu\Renderer\Factory\RendererFactory;
 use Derafu\Translation\TranslatableMessage;
 use Derafu\Translation\TranslatorFactory;
 use Derafu\Twig\Extension\TranslationExtension;
+use Derafu\Twig\Provider\DirectoryComponentProvider;
 use Laminas\Diactoros\Response\HtmlResponse;
 use Laminas\Diactoros\Response\RedirectResponse;
 use Laminas\Diactoros\ServerRequest;
@@ -110,9 +111,10 @@ final class AccountControllerTest extends TestCase
                 'paths' => [
                     self::ROOT . '/resources/templates',
                     self::ROOT . '/tests/fixtures/templates',
-                    self::ROOT . '/vendor/derafu/twig/resources/templates',
+                    self::ROOT . '/vendor/derafu/twig-components/resources/templates',
                     self::ROOT . '/vendor/derafu/form/resources/templates',
                 ],
+                'components' => new DirectoryComponentProvider(self::ROOT . '/vendor/derafu/twig-components/src/Component'),
                 'extensions' => [
                     $routing,
                     new TranslationExtension($translator, null, 'es'),
