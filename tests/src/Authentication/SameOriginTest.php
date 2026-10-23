@@ -27,7 +27,7 @@ use PHPUnit\Framework\TestCase;
 final class SameOriginTest extends TestCase
 {
     /**
-     * @param array<string, string> $headers
+     * @param array<non-empty-string, string> $headers
      */
     private function request(array $headers): ServerRequest
     {
@@ -55,7 +55,7 @@ final class SameOriginTest extends TestCase
     }
 
     /**
-     * @param array<string, string> $headers
+     * @param array<non-empty-string, string> $headers
      */
     #[Test]
     #[DataProvider('provideRequests')]

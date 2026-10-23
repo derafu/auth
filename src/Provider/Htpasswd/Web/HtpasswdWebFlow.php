@@ -26,6 +26,7 @@ use Derafu\Auth\Provider\Htpasswd\HtpasswdConfiguration;
 use Derafu\Auth\Provider\Htpasswd\HtpasswdUserRepository;
 use Derafu\Auth\Provider\Htpasswd\Web\Form\LoginForm;
 use Derafu\Auth\UserFactory;
+use Derafu\Support\ArrayReader;
 use Mezzio\Session\SessionInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -119,9 +120,9 @@ class HtpasswdWebFlow implements WebFlowInterface
         }
 
         // Get the identity and password.
-        $data = $result->getProcessedData();
-        $identity = $data[LoginForm::IDENTITY];
-        $password = $data[LoginForm::PASSWORD];
+        $data = $result->getProcessedDataReader();
+        $identity = $data->requireString(LoginForm::IDENTITY);
+        $password = $data->requireString(LoginForm::PASSWORD);
         $address = LoginThrottle::clientOf($request);
 
         // Too many failed attempts: the credentials are not even checked, so a
@@ -180,8 +181,11 @@ class HtpasswdWebFlow implements WebFlowInterface
             return null;
         }
 
+        $data = ArrayReader::from($userInfo);
+        $identity = $data->requireString('identity');
+
         if ($this->sessionManager->isRefreshDue($session, $this->web->getRefreshInterval() ?? WebConfiguration::DEFAULT_REFRESH_INTERVAL)) {
-            $user = $this->userRepository->find($userInfo['identity']);
+            $user = $this->userRepository->find($identity);
 
             if ($user === null) {
                 $this->sessionManager->clearSession($session);
@@ -195,7 +199,7 @@ class HtpasswdWebFlow implements WebFlowInterface
         }
 
         // Create user from session data.
-        return $this->userFactory->create($userInfo['identity']);
+        return $this->userFactory->create($identity);
     }
 
     /**

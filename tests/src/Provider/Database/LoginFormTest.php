@@ -22,6 +22,7 @@ use Derafu\Form\Type\TypeRegistry;
 use Derafu\Form\Type\TypeResolver;
 use Derafu\TestsAuth\Fixture\Stack;
 use Derafu\Translation\TranslatorFactory;
+use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
@@ -38,6 +39,7 @@ final class LoginFormTest extends TestCase
 {
     /**
      * @param array<string, string> $fields
+     * @return array<string, mixed>
      */
     private function definition(array $fields = []): array
     {
@@ -49,6 +51,10 @@ final class LoginFormTest extends TestCase
         return (new LoginForm($config))->getDefinition();
     }
 
+    /**
+     * @param array<string, mixed> $definition
+     * @return array<string, mixed>
+     */
     private function form(array $definition, string $locale): array
     {
         $translator = TranslatorFactory::create($locale, ['en'], [new AuthTranslationResourceProvider()]);
@@ -65,8 +71,13 @@ final class LoginFormTest extends TestCase
         $default = $this->definition();
         $custom = $this->definition(['identity' => 'rut', 'password' => 'clave']);
 
+        Assert::assertIsArray($default['schema']);
+        Assert::assertIsArray($default['schema']['properties']);
         $this->assertSame(['email', 'password'], array_keys($default['schema']['properties']));
+        Assert::assertIsArray($custom['schema']);
+        Assert::assertIsArray($custom['schema']['properties']);
         $this->assertSame(['rut', 'clave'], array_keys($custom['schema']['properties']));
+        Assert::assertIsArray($custom['schema']);
         $this->assertSame(['rut', 'clave'], $custom['schema']['required']);
     }
 
@@ -77,7 +88,13 @@ final class LoginFormTest extends TestCase
         // capitals ("Rut", "Clave").
         $custom = $this->definition(['identity' => 'user_login', 'password' => 'password_hash']);
 
+        Assert::assertIsArray($custom['schema']);
+        Assert::assertIsArray($custom['schema']['properties']);
+        Assert::assertIsArray($custom['schema']['properties']['user_login']);
         $this->assertSame('Username', $custom['schema']['properties']['user_login']['title']);
+        Assert::assertIsArray($custom['schema']);
+        Assert::assertIsArray($custom['schema']['properties']);
+        Assert::assertIsArray($custom['schema']['properties']['password_hash']);
         $this->assertSame('Password', $custom['schema']['properties']['password_hash']['title']);
     }
 
@@ -89,9 +106,21 @@ final class LoginFormTest extends TestCase
         $spanish = $this->form($definition, 'es');
         $english = $this->form($definition, 'en');
 
+        Assert::assertIsArray($spanish['schema']);
+        Assert::assertIsArray($spanish['schema']['properties']);
+        Assert::assertIsArray($spanish['schema']['properties']['rut']);
         $this->assertSame('Usuario', $spanish['schema']['properties']['rut']['title']);
+        Assert::assertIsArray($spanish['schema']);
+        Assert::assertIsArray($spanish['schema']['properties']);
+        Assert::assertIsArray($spanish['schema']['properties']['clave']);
         $this->assertSame('Contraseña', $spanish['schema']['properties']['clave']['title']);
+        Assert::assertIsArray($english['schema']);
+        Assert::assertIsArray($english['schema']['properties']);
+        Assert::assertIsArray($english['schema']['properties']['rut']);
         $this->assertSame('Username', $english['schema']['properties']['rut']['title']);
+        Assert::assertIsArray($english['schema']);
+        Assert::assertIsArray($english['schema']['properties']);
+        Assert::assertIsArray($english['schema']['properties']['clave']);
         $this->assertSame('Password', $english['schema']['properties']['clave']['title']);
     }
 }

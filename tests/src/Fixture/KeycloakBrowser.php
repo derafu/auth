@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Derafu\TestsAuth\Fixture;
 
 use GuzzleHttp\Client;
+use PHPUnit\Framework\Assert;
 use Psr\Http\Message\ResponseInterface;
 use RuntimeException;
 
@@ -84,7 +85,14 @@ final class KeycloakBrowser
 
         parse_str((string) parse_url($response->getHeaderLine('Location'), PHP_URL_QUERY), $query);
 
-        return $query;
+        $result = [];
+        foreach ($query as $key => $value) {
+            Assert::assertIsString($key);
+            Assert::assertIsString($value);
+            $result[$key] = $value;
+        }
+
+        return $result;
     }
 
     /**
@@ -92,6 +100,9 @@ final class KeycloakBrowser
      */
     private function send(string $method, string $url, array $options = []): ResponseInterface
     {
+        $headers = $options['headers'] ?? [];
+        Assert::assertIsArray($headers);
+        $options['headers'] = $headers;
         $options['headers']['Cookie'] = implode('; ', array_map(
             fn (string $name, string $value) => $name . '=' . $value,
             array_keys($this->cookies),

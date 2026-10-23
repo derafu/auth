@@ -30,7 +30,7 @@ class LoginForm implements FormInterface
     /**
      * The form definition.
      *
-     * @var array
+     * @var array<string, mixed>
      */
     private array $definition;
 
@@ -49,7 +49,7 @@ class LoginForm implements FormInterface
     /**
      * Creates the form definition.
      *
-     * @return array The form definition.
+     * @return array<string, mixed> The form definition.
      */
     private function createDefinition(): array
     {

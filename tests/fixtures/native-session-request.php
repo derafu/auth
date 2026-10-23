@@ -75,6 +75,7 @@ while (!file_exists((string) getenv('GO_FILE'))) {
 
 $result = new ArrayObject();
 $handler = new class ($authentication, $result) implements RequestHandlerInterface {
+    /** @param ArrayObject<string, mixed> $result */
     public function __construct(
         private readonly AuthenticationInterface $authentication,
         private readonly ArrayObject $result

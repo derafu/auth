@@ -156,6 +156,8 @@ return [
     'Too many failed login attempts. Try again in {minutes, plural, one {# minute} other {# minutes}}.' =>
         'Demasiados intentos fallidos de inicio de sesión. Inténtalo de nuevo en {minutes, plural, one {# minuto} other {# minutos}}.',
     'Failed to read the account of Keycloak: {error}' => 'No se pudo leer la cuenta en Keycloak: {error}',
+    'Invalid response from the Keycloak account API: {error}' => 'Respuesta inválida de la API de cuenta de Keycloak: {error}',
+    'The API token has invalid claims: {error}' => 'El token de la API tiene claims inválidos: {error}',
     'The password is not valid.' => 'La contraseña no es válida.',
     'Keycloak does not let this application make tokens with a password: turn on the direct access grants of its client.' =>
         'Keycloak no deja que esta aplicación cree tokens con una contraseña: activa los direct access grants de su cliente.',
@@ -163,4 +165,6 @@ return [
     'The user has no such token.' => 'El usuario no tiene ese token.',
     'There is no session with Keycloak.' => 'No hay una sesión con Keycloak.',
     'There is no user in the session.' => 'No hay un usuario en la sesión.',
+    'The flash request attribute must implement Mezzio\\Flash\\FlashMessagesInterface.' => 'El atributo flash de la solicitud debe implementar Mezzio\\Flash\\FlashMessagesInterface.',
+    'Invalid response from Keycloak: {error}' => 'Respuesta inválida de Keycloak: {error}',
 ];

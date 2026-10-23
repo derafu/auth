@@ -13,15 +13,22 @@ declare(strict_types=1);
 namespace Derafu\TestsAuth\Provider\Keycloak;
 
 use ArrayObject;
+use Derafu\Auth\Authentication\Channel\Web\WebChannel;
+use Derafu\Auth\Authentication\Channel\Web\WebConfiguration;
 use Derafu\Auth\Contract\AuthenticationInterface;
+use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Exception\AuthenticationException;
+use Derafu\Auth\Exception\ProviderUnavailableException;
+use Derafu\Auth\Provider\Keycloak\Api\KeycloakBearerScheme;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
 use Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager;
 use Derafu\Auth\Provider\Keycloak\Web\KeycloakWebFlow;
+use Derafu\Auth\Web\AuthController;
 use Derafu\TestsAuth\Fixture\SessionApp;
 use Derafu\TestsAuth\Fixture\Stack;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 use Firebase\JWT\JWT;
 use GuzzleHttp\Client as GuzzleClient;
 use GuzzleHttp\Exception\ConnectException;
@@ -33,6 +40,8 @@ use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response as Psr7Response;
 use Laminas\Diactoros\Response\JsonResponse;
 use Mezzio\Authentication\UserInterface as MezzioUserInterface;
+use Mezzio\Session\Session;
+use Mezzio\Session\SessionMiddleware;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
@@ -42,6 +51,7 @@ use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use stdClass;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 
 /**
@@ -54,14 +64,15 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
 #[CoversClass(KeycloakTokenVerifier::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationManager::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Identification::class)]
-#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
+#[CoversClass(WebChannel::class)]
+#[CoversClass(AuthController::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebConfiguration::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\Flash::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiConfiguration::class)]
 #[UsesClass(\Derafu\Auth\Authorization\AccessRules::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Api\Scheme\BearerScheme::class)]
-#[UsesClass(\Derafu\Auth\Provider\Keycloak\Api\KeycloakBearerScheme::class)]
+#[CoversClass(KeycloakBearerScheme::class)]
 #[UsesClass(\Derafu\Auth\AnonymousUser::class)]
 #[UsesClass(\Derafu\Auth\Authorization\AuthorizationManager::class)]
 #[UsesClass(\Derafu\Auth\Exception\AuthenticationException::class)]
@@ -69,7 +80,8 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
 #[UsesClass(KeycloakConfiguration::class)]
 #[UsesClass(\Derafu\Auth\Provider\Keycloak\TokenClaims::class)]
 #[UsesClass(KeycloakSessionManager::class)]
-#[UsesClass(KeycloakUserRepository::class)]
+#[CoversClass(KeycloakUserRepository::class)]
+#[UsesClass(ProviderUnavailableException::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\SessionManager::class)]
 #[UsesClass(\Derafu\Auth\User::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
@@ -180,7 +192,7 @@ final class KeycloakBearerTest extends TestCase
      * so the stand-in response here carries exactly those.
      *
      * @param array<string, string> $headers
-     * @return array{response: ResponseInterface, user: mixed}
+     * @return array{response: ResponseInterface, user: UserInterface|null}
      */
     private function call(AuthenticationInterface $authentication, array $headers = [], string $path = '/api/items'): array
     {
@@ -191,12 +203,20 @@ final class KeycloakBearerTest extends TestCase
                 $authentication,
                 function (ServerRequestInterface $request) use (&$user): null {
                     $user = $request->getAttribute(MezzioUserInterface::class);
+                    $this->assertTrue($user === null || $user instanceof UserInterface);
 
                     return null;
                 }
             );
         } catch (AuthenticationException $e) {
-            $response = new JsonResponse(['status' => $e->getCode()], $e->getCode(), $e->getHeaders());
+            $headers = $e->getHeaders();
+            $validatedHeaders = [];
+            foreach ($headers as $name => $value) {
+                $this->assertTrue($name !== '');
+                $validatedHeaders[$name] = $value;
+            }
+            $headers = $validatedHeaders;
+            $response = new JsonResponse(['status' => $e->getCode()], $e->getCode(), $headers);
         }
 
         return ['response' => $response, 'user' => $user];
@@ -526,21 +546,24 @@ final class KeycloakBearerTest extends TestCase
      * what it was asked.
      *
      * @param list<Psr7Response|\Throwable> $answers
-     * @param ArrayObject<int, array<mixed>>|null $history
+     * @param ArrayObject<int, array{request: RequestInterface}>|null $history
      * Where what was asked is kept.
      */
     private function keycloak(array $answers, ?ArrayObject $history = null): GuzzleClient
     {
         $stack = HandlerStack::create(new MockHandler($answers));
         if ($history !== null) {
-            $stack->push(Middleware::history($history));
+            $stack->push(Middleware::mapRequest(static function (RequestInterface $request) use ($history): RequestInterface {
+                $history[] = ['request' => $request];
+                return $request;
+            }));
         }
 
         return new GuzzleClient(['handler' => $stack]);
     }
 
     /**
-     * @return ArrayObject<int, array<mixed>>
+     * @return ArrayObject<int, array{request: RequestInterface}>
      */
     private function history(): ArrayObject
     {
@@ -578,7 +601,10 @@ final class KeycloakBearerTest extends TestCase
         $result = $this->call($authentication, $this->bearer($this->token(['aud' => ['derafu-billing']])));
 
         $this->assertSame('user-1', $result['user']?->getIdentity());
-        $request = $history[0]['request'];
+        $entry = $history[0];
+        $this->assertIsArray($entry);
+        $this->assertArrayHasKey('request', $entry);
+        $request = $entry['request'];
         $this->assertInstanceOf(RequestInterface::class, $request);
         parse_str((string) $request->getBody(), $form);
         $this->assertSame('derafu-billing', $form['client_id']);
@@ -596,12 +622,16 @@ final class KeycloakBearerTest extends TestCase
         $this->assertSame('user-1', $result['user']?->getIdentity());
         $this->assertCount(1, $history);
 
-        $request = $history[0]['request'];
+        $entry = $history[0];
+        $this->assertIsArray($entry);
+        $this->assertArrayHasKey('request', $entry);
+        $request = $entry['request'];
         $this->assertInstanceOf(RequestInterface::class, $request);
         $this->assertSame('POST', $request->getMethod());
         $this->assertSame(self::ISSUER . '/protocol/openid-connect/token/introspect', (string) $request->getUri());
         parse_str((string) $request->getBody(), $form);
         $this->assertSame('access_token', $form['token_type_hint']);
+        $this->assertIsString($form['token']);
         $this->assertStringStartsWith('eyJ', $form['token']);
         // The client of the application authenticates with its credentials.
         $this->assertSame('derafu-api', $form['client_id']);
@@ -774,6 +804,687 @@ final class KeycloakBearerTest extends TestCase
         $this->call($this->authentication(), $this->bearer($this->token()));
 
         $this->assertSame(self::ISSUER . '/protocol/openid-connect/certs', $this->http->lastUri);
+    }
+
+    /** @return iterable<string, array{string, string}> */
+    public static function invalidTokenResponses(): iterable
+    {
+        yield 'ID token during login' => ['login', 'id_token'];
+        yield 'access token during login' => ['login', 'access_token'];
+        yield 'access token during session refresh' => ['refresh', 'access_token'];
+        yield 'access token during offline exchange' => ['offline', 'access_token'];
+    }
+
+    #[DataProvider('invalidTokenResponses')]
+    public function testRejectsNonStringTokensFromTheTokenEndpoint(string $stage, string $key): void
+    {
+        $config = new KeycloakConfiguration([
+            'keycloak_url' => self::URL,
+            'realm' => 'test',
+            'client_id' => 'derafu-auth',
+            'client_secret' => 'a-secret',
+            'redirect_uri' => 'https://app.test/auth/callback',
+            'api_audience' => 'derafu-api',
+            'api_introspection' => false,
+        ]);
+        $answer = [
+            'access_token' => $this->token(),
+            'refresh_token' => 'renewed-refresh-token',
+            'id_token' => $this->token(['aud' => 'derafu-auth', 'nonce' => 'login-nonce']),
+            'expires_in' => 300,
+        ];
+        $answer[$key] = ['unexpected'];
+        $repository = new KeycloakUserRepository(
+            $config,
+            new KeycloakTokenVerifier($config, null, $this->http, new HttpFactory()),
+            httpClient: $this->keycloak([new Psr7Response(
+                200,
+                ['Content-Type' => 'application/json'],
+                json_encode($answer, JSON_THROW_ON_ERROR)
+            )])
+        );
+        $session = new Session([
+            'oauth2_state' => 'login-state',
+            'oauth2_nonce' => 'login-nonce',
+            'oauth2_pkce' => 'pkce-verifier',
+            'oauth2_refresh_token' => 'original-refresh-token',
+            'oauth2_expiry' => time() - 1,
+            'user' => ['sub' => 'existing-user'],
+        ]);
+        $flow = new KeycloakWebFlow($repository, $config, new WebConfiguration([]), new KeycloakSessionManager());
+
+        if ($stage === 'login') {
+            try {
+                $flow->login($this->app->request('/auth/callback', ['state' => 'login-state', 'code' => 'code']), $session);
+                $this->fail('The invalid token must be rejected before the user is logged in.');
+            } catch (AuthenticationException $e) {
+                $this->assertSame(400, $e->getCode());
+                $this->assertInstanceOf(TranslatableInvalidArgumentException::class, $e->getPrevious());
+                $this->assertStringContainsString('"' . $key . '"', $e->getPrevious()->getMessage());
+                $this->assertSame('original-refresh-token', $session->get('oauth2_refresh_token'));
+                $this->assertSame(['sub' => 'existing-user'], $session->get('user'));
+            }
+
+            return;
+        }
+
+        try {
+            if ($stage === 'refresh') {
+                $flow->userFromSession($session);
+            } else {
+                (new KeycloakBearerScheme($repository, $config))->authenticate(
+                    $this->app->request('/api/items'),
+                    $this->token(['typ' => 'Offline'])
+                );
+            }
+            $this->fail('The invalid access token must be rejected.');
+        } catch (TranslatableInvalidArgumentException $e) {
+            $this->assertStringContainsString('"access_token"', $e->getMessage());
+            if ($stage === 'refresh') {
+                $this->assertSame('renewed-refresh-token', $session->get('oauth2_refresh_token'));
+                $this->assertSame(['sub' => 'existing-user'], $session->get('user'));
+            }
+        }
+    }
+
+    /** @param list<Psr7Response> $answers */
+    private function flowWithResponses(array $answers): KeycloakWebFlow
+    {
+        $config = new KeycloakConfiguration([
+            'keycloak_url' => self::URL,
+            'realm' => 'test',
+            'client_id' => 'derafu-auth',
+            'client_secret' => 'a-secret',
+            'redirect_uri' => 'https://app.test/auth/callback',
+        ]);
+        $repository = new KeycloakUserRepository(
+            $config,
+            new KeycloakTokenVerifier($config, null, $this->http, new HttpFactory()),
+            httpClient: $this->keycloak($answers)
+        );
+
+        return new KeycloakWebFlow($repository, $config, new WebConfiguration([]), new KeycloakSessionManager());
+    }
+
+    public function testMissingIdTokenKeepsTheExistingAuthenticationError(): void
+    {
+        $flow = $this->flowWithResponses([new Psr7Response(200, ['Content-Type' => 'application/json'], json_encode([
+            'access_token' => $this->token(),
+            'expires_in' => 300,
+        ], JSON_THROW_ON_ERROR))]);
+        $session = new Session(['oauth2_state' => 'state', 'oauth2_pkce' => 'verifier']);
+        $this->expectException(AuthenticationException::class);
+        $this->expectExceptionMessage('The ID token was not received.');
+
+        $flow->login($this->app->request('/auth/callback', ['state' => 'state', 'code' => 'code']), $session);
+    }
+
+    public function testExpiredSessionWithoutARefreshTokenIsCleared(): void
+    {
+        $session = new Session([
+            'oauth2_token' => 'expired',
+            'oauth2_expiry' => time() - 1,
+            'user' => ['sub' => 'user-1'],
+            'auth_redirect' => '/private',
+        ]);
+        $user = $this->flowWithResponses([])->userFromSession($session);
+
+        $this->assertNotNull($user);
+        $this->assertTrue($user->isAnonymous());
+        $this->assertSame([], $session->toArray());
+    }
+
+    public function testAnEmptySessionHasNoUser(): void
+    {
+        $this->assertNull($this->flowWithResponses([])->userFromSession(new Session([])));
+    }
+
+    public function testUnavailableUserInfoKeepsTheRenewedTokensAndForcesAnotherCheck(): void
+    {
+        $accessToken = $this->token(['azp' => 'derafu-auth']);
+        $flow = $this->flowWithResponses([
+            new Psr7Response(200, ['Content-Type' => 'application/json'], json_encode([
+                'access_token' => $accessToken,
+                'refresh_token' => 'renewed-refresh-token',
+                'expires_in' => 300,
+            ], JSON_THROW_ON_ERROR)),
+            new Psr7Response(503, ['Content-Type' => 'application/json'], '{"error":"temporarily_unavailable"}'),
+        ]);
+        $session = new Session([
+            'oauth2_token' => 'old-access-token',
+            'oauth2_refresh_token' => 'old-refresh-token',
+            'oauth2_expiry' => time() - 1,
+            'auth_checked_at' => time() - 600,
+            'user' => ['sub' => 'user-1'],
+        ]);
+
+        $this->assertNull($flow->userFromSession($session));
+        $this->assertSame($accessToken, $session->get('oauth2_token'));
+        $this->assertSame('renewed-refresh-token', $session->get('oauth2_refresh_token'));
+        $this->assertSame(['sub' => 'user-1'], $session->get('user'));
+        $this->assertNull($session->get('auth_checked_at'));
+    }
+
+    /**
+     * @param list<Psr7Response> $answers
+     * @return array{KeycloakBearerScheme, MockHandler}
+     */
+    private function offlineScheme(array $answers, ?ArrayAdapter $cache): array
+    {
+        $config = new KeycloakConfiguration([
+            'keycloak_url' => self::URL,
+            'realm' => 'test',
+            'client_id' => 'derafu-auth',
+            'client_secret' => 'a-secret',
+            'redirect_uri' => 'https://app.test/auth/callback',
+            'api_audience' => 'derafu-api',
+            'api_introspection' => false,
+        ]);
+        $queue = new MockHandler($answers);
+        $repository = new KeycloakUserRepository(
+            $config,
+            new KeycloakTokenVerifier($config, null, $this->http, new HttpFactory()),
+            httpClient: new GuzzleClient(['handler' => HandlerStack::create($queue)])
+        );
+
+        return [new KeycloakBearerScheme($repository, $config, $cache), $queue];
+    }
+
+    /** @param array<string, mixed> $expiration */
+    private function offlineAnswer(string $accessToken, array $expiration = []): Psr7Response
+    {
+        return new Psr7Response(200, ['Content-Type' => 'application/json'], json_encode(
+            ['access_token' => $accessToken, 'refresh_token' => 'renewed-refresh-token'] + $expiration,
+            JSON_THROW_ON_ERROR
+        ));
+    }
+
+    #[DataProvider('invalidCachedAccessTokens')]
+    public function testInvalidCachedAccessTokensAreReplacedAndTheReplacementIsReused(mixed $cached): void
+    {
+        $offline = $this->token(['typ' => 'Offline']);
+        $key = 'derafu_auth.offline.' . hash('sha256', $offline);
+        $cache = new ArrayAdapter();
+        $cache->save($cache->getItem($key)->set($cached));
+        $accessToken = $this->token();
+        [$scheme, $queue] = $this->offlineScheme([
+            $this->offlineAnswer($accessToken, ['expires_in' => 300]),
+        ], $cache);
+
+        foreach ([1, 2] as $request) {
+            $user = $scheme->authenticate($this->app->request('/api/items'), $offline);
+            $this->assertNotNull($user);
+            $this->assertSame('user-1', $user->getIdentity());
+        }
+
+        $this->assertCount(0, $queue);
+        $this->assertTrue($cache->getItem($key)->isHit());
+        $this->assertSame($accessToken, $cache->getItem($key)->get());
+    }
+
+    /** @return iterable<string, array{mixed}> */
+    public static function invalidCachedAccessTokens(): iterable
+    {
+        yield 'null' => [null];
+        yield 'false' => [false];
+        yield 'true' => [true];
+        yield 'integer' => [42];
+        yield 'float' => [1.5];
+        yield 'array' => [['unexpected']];
+        yield 'object' => [new stdClass()];
+        yield 'empty string' => [''];
+        yield 'malformed JWT' => ['not-a-jwt'];
+    }
+
+    public function testAValidCachedAccessTokenDoesNotCallTheTokenEndpoint(): void
+    {
+        $offline = $this->token(['typ' => 'Offline']);
+        $key = 'derafu_auth.offline.' . hash('sha256', $offline);
+        $cache = new ArrayAdapter();
+        $accessToken = $this->token();
+        $cache->save($cache->getItem($key)->set($accessToken));
+        [$scheme, $queue] = $this->offlineScheme([], $cache);
+
+        $user = $scheme->authenticate($this->app->request('/api/items'), $offline);
+
+        $this->assertNotNull($user);
+        $this->assertSame('user-1', $user->getIdentity());
+        $this->assertSame($accessToken, $cache->getItem($key)->get());
+        $this->assertCount(0, $queue);
+    }
+
+    public function testAnExpiredCachedAccessTokenIsExchangedAgain(): void
+    {
+        $offline = $this->token(['typ' => 'Offline']);
+        $key = 'derafu_auth.offline.' . hash('sha256', $offline);
+        $cache = new ArrayAdapter();
+        $cache->save($cache->getItem($key)->set($this->token(['iat' => time() - 600, 'exp' => time() - 300])));
+        $accessToken = $this->token();
+        [$scheme, $queue] = $this->offlineScheme([
+            $this->offlineAnswer($accessToken, ['expires_in' => 300]),
+        ], $cache);
+
+        $this->assertNotNull($scheme->authenticate($this->app->request('/api/items'), $offline));
+        $this->assertCount(0, $queue);
+        $this->assertSame($accessToken, $cache->getItem($key)->get());
+    }
+
+    public function testAnInvalidCacheEntryIsRemovedEvenWhenKeycloakRefusesTheExchange(): void
+    {
+        $offline = $this->token(['typ' => 'Offline']);
+        $key = 'derafu_auth.offline.' . hash('sha256', $offline);
+        $cache = new ArrayAdapter();
+        $cache->save($cache->getItem($key)->set(['unexpected']));
+        [$scheme, $queue] = $this->offlineScheme([
+            new Psr7Response(400, [], '{"error":"invalid_grant"}'),
+        ], $cache);
+
+        try {
+            $scheme->authenticate($this->app->request('/api/items'), $offline);
+            $this->fail('A refused exchange must not authenticate the user.');
+        } catch (AuthenticationException $e) {
+            $this->assertSame(401, $e->getCode());
+            $this->assertSame('Keycloak did not accept the offline token.', $e->getMessage());
+            $this->assertFalse($cache->getItem($key)->isHit());
+            $this->assertCount(0, $queue);
+        }
+    }
+
+    public function testTheCachedTokenExpiresWithTheExistingThirtySecondMargin(): void
+    {
+        $offline = $this->token(['typ' => 'Offline']);
+        $key = 'derafu_auth.offline.' . hash('sha256', $offline);
+        $cache = new ArrayAdapter();
+        $expires = time() + 300;
+        [$scheme] = $this->offlineScheme([
+            $this->offlineAnswer($this->token(), ['expires' => $expires]),
+        ], $cache);
+
+        $this->assertNotNull($scheme->authenticate($this->app->request('/api/items'), $offline));
+        $item = $cache->getItem($key);
+        $this->assertTrue($item->isHit());
+        $this->assertSame((float) ($expires - 30), $item->getMetadata()['expiry']);
+    }
+
+    /** @param array<string, mixed> $expiration */
+    #[DataProvider('optionalOfflineExpiration')]
+    public function testAnAccessTokenWithoutExpirationAuthenticatesButIsNotCached(array $expiration): void
+    {
+        $offline = $this->token(['typ' => 'Offline']);
+        $key = 'derafu_auth.offline.' . hash('sha256', $offline);
+        $cache = new ArrayAdapter();
+        $answer = $this->offlineAnswer($this->token(), $expiration);
+        [$scheme, $queue] = $this->offlineScheme([$answer, $answer], $cache);
+
+        foreach ([1, 2] as $request) {
+            $this->assertNotNull($scheme->authenticate($this->app->request('/api/items'), $offline));
+            $this->assertFalse($cache->getItem($key)->isHit());
+        }
+        $this->assertCount(0, $queue);
+    }
+
+    /** @return iterable<string, array{array<string, mixed>}> */
+    public static function optionalOfflineExpiration(): iterable
+    {
+        yield 'missing expiration' => [[]];
+        yield 'explicit null' => [['expires' => null]];
+    }
+
+    #[DataProvider('fractionalOfflineExpirations')]
+    public function testFractionalExpirationsAreRejectedWithOrWithoutACache(float|string $duration, bool $withCache): void
+    {
+        $offline = $this->token(['typ' => 'Offline']);
+        $cache = $withCache ? new ArrayAdapter() : null;
+        // OAuth2 Client adds expires_in to the current time; a fractional
+        // duration therefore produces a float timestamp in refreshToken().
+        [$scheme, $queue] = $this->offlineScheme([
+            $this->offlineAnswer($this->token(), ['expires_in' => $duration]),
+        ], $cache);
+
+        try {
+            $scheme->authenticate($this->app->request('/api/items'), $offline);
+            $this->fail('An expiration timestamp must be an integer.');
+        } catch (TranslatableInvalidArgumentException $e) {
+            $this->assertStringContainsString('"expires"', $e->getMessage());
+            $this->assertCount(0, $queue);
+            if ($cache !== null) {
+                $key = 'derafu_auth.offline.' . hash('sha256', $offline);
+                $this->assertFalse($cache->getItem($key)->isHit());
+            }
+        }
+    }
+
+    /** @return iterable<string, array{float|string, bool}> */
+    public static function fractionalOfflineExpirations(): iterable
+    {
+        yield 'float with cache' => [300.5, true];
+        yield 'float without cache' => [300.5, false];
+        yield 'numeric string with cache' => ['300.5', true];
+        yield 'numeric string without cache' => ['300.5', false];
+    }
+
+    #[DataProvider('invalidIdTokenNonces')]
+    public function testIdTokenNoncesMustBeStringsMatchingTheLogin(mixed $nonce): void
+    {
+        $config = new KeycloakConfiguration([
+            'keycloak_url' => self::URL, 'realm' => 'test', 'client_id' => 'derafu-auth',
+        ]);
+        $verifier = new KeycloakTokenVerifier($config, null, $this->http, new HttpFactory());
+        $token = $this->token(['aud' => 'derafu-auth', 'nonce' => $nonce]);
+        $this->expectException(AuthenticationException::class);
+        $this->expectExceptionMessage('The nonce of the token is not the one of the login.');
+
+        $verifier->verifyIdToken($token, '123');
+    }
+
+    /** @return iterable<string, array{mixed}> */
+    public static function invalidIdTokenNonces(): iterable
+    {
+        yield 'missing nonce' => [null];
+        yield 'integer is not a string nonce' => [123];
+        yield 'boolean' => [true];
+        yield 'float' => [123.0];
+        yield 'array' => [['123']];
+        yield 'different string' => ['another-nonce'];
+    }
+
+    public function testAStringNonceAndNestedClaimsArePreserved(): void
+    {
+        $config = new KeycloakConfiguration([
+            'keycloak_url' => self::URL, 'realm' => 'test', 'client_id' => 'derafu-auth',
+        ]);
+        $verifier = new KeycloakTokenVerifier($config, null, $this->http, new HttpFactory());
+        $claims = $verifier->verifyIdToken($this->token([
+            'aud' => 'derafu-auth', 'nonce' => '123',
+            'custom' => ['nested' => ['label' => 'value'], 'items' => [1, 2]],
+        ]), '123');
+
+        $this->assertSame('123', $claims['nonce']);
+        $this->assertSame(['nested' => ['label' => 'value'], 'items' => [1, 2]], $claims['custom']);
+    }
+
+    #[DataProvider('malformedKeySets')]
+    public function testMalformedKeySetStructuresKeepTheirValidationCause(mixed $body, string $path): void
+    {
+        $http = new FixedKeysClient(json_encode($body, JSON_THROW_ON_ERROR));
+        $config = new KeycloakConfiguration([
+            'keycloak_url' => self::URL, 'realm' => 'test', 'client_id' => 'derafu-auth',
+        ]);
+        $verifier = new KeycloakTokenVerifier($config, null, $http, new HttpFactory());
+
+        try {
+            $verifier->verifyBearerToken($this->token(), 'derafu-api');
+            $this->fail('Malformed signing key data must not validate a token.');
+        } catch (AuthenticationException $e) {
+            $this->assertStringContainsString('Failed to validate the token:', $e->getMessage());
+            $this->assertInstanceOf(TranslatableInvalidArgumentException::class, $e->getPrevious());
+            $this->assertStringContainsString($path, $e->getPrevious()->getMessage());
+        }
+    }
+
+    /** @return iterable<string, array{mixed, string}> */
+    public static function malformedKeySets(): iterable
+    {
+        yield 'null root' => [null, 'jwks'];
+        yield 'string root' => ['keys', 'jwks'];
+        yield 'boolean root' => [true, 'jwks'];
+        yield 'number root' => [42, 'jwks'];
+        yield 'string keys' => [['keys' => 'invalid'], 'jwks.keys'];
+        yield 'boolean keys' => [['keys' => false], 'jwks.keys'];
+        yield 'null key record' => [['keys' => [null]], 'jwks.keys'];
+        yield 'string key record' => [['keys' => ['invalid']], 'jwks.keys'];
+        yield 'boolean key record' => [['keys' => [false]], 'jwks.keys'];
+    }
+
+    public function testSigningKeysWithoutUseAreAcceptedAndEncryptionKeysAreExcluded(): void
+    {
+        $jwks = json_decode(self::$jwks, true, flags: JSON_THROW_ON_ERROR);
+        $this->assertIsArray($jwks);
+        $keys = $jwks['keys'];
+        $this->assertIsArray($keys);
+        $signing = $keys[0];
+        $this->assertIsArray($signing);
+        unset($signing['use']);
+        // An encryption key must not replace the signing key with the same kid.
+        $encryption = ['use' => 'enc', 'n' => 'not-a-valid-modulus'] + $signing;
+        $http = new FixedKeysClient(json_encode(['keys' => [$signing, $encryption]], JSON_THROW_ON_ERROR));
+        $config = new KeycloakConfiguration([
+            'keycloak_url' => self::URL, 'realm' => 'test', 'client_id' => 'derafu-auth',
+        ]);
+        $verifier = new KeycloakTokenVerifier($config, null, $http, new HttpFactory());
+
+        $claims = $verifier->verifyBearerToken($this->token(), 'derafu-api');
+
+        $this->assertSame('user-1', $claims['sub']);
+    }
+
+    /** @param list<Psr7Response|\Throwable> $answers */
+    private function tokenRepository(array $answers): KeycloakUserRepository
+    {
+        $config = new KeycloakConfiguration([
+            'keycloak_url' => self::URL, 'realm' => 'test', 'client_id' => 'derafu-auth',
+            'client_secret' => 'secret', 'redirect_uri' => 'https://app.test/auth/callback',
+            'api_audience' => 'derafu-api',
+        ]);
+
+        return new KeycloakUserRepository(
+            $config,
+            new KeycloakTokenVerifier($config, null, $this->http, new HttpFactory()),
+            httpClient: $this->keycloak($answers)
+        );
+    }
+
+    #[Test]
+    public function matchingUserInfoProducesTheAuthenticatedUserAndPreservesTokenClaims(): void
+    {
+        $answer = new Psr7Response(200, [], '{"sub":"user-1","email":"otto@example.com","preferred_username":"from-userinfo"}');
+        $repository = $this->tokenRepository([$answer, $answer]);
+        $token = $this->token(['azp' => 'derafu-auth']);
+
+        $user = $repository->authenticate($token);
+
+        $this->assertInstanceOf(UserInterface::class, $user);
+        $this->assertSame('user-1', $user->getIdentity());
+        $this->assertSame('otto@example.com', $user->getEmail());
+        $this->assertSame('service-account-a-service', $user->getUsername());
+        $this->assertTrue($user->hasRole('editor'));
+        $this->assertTrue($repository->isTokenValid($token));
+    }
+
+    #[Test]
+    public function userInfoForAnotherSubjectCannotAuthenticateTheTokenUser(): void
+    {
+        $repository = $this->tokenRepository([
+            new Psr7Response(200, [], '{"sub":"another-user"}'),
+        ]);
+        $this->expectException(AuthenticationException::class);
+        $this->expectExceptionMessage('The user of the user info is not the user of the token.');
+
+        $repository->getUserInfoFromToken($this->token(['azp' => 'derafu-auth']));
+    }
+
+    #[Test]
+    #[DataProvider('unavailableUserInfoResponses')]
+    public function userInfoFailuresAreProviderErrorsRatherThanWrongCredentials(Psr7Response|\Throwable $answer): void
+    {
+        $repository = $this->tokenRepository([$answer]);
+        $this->expectException(ProviderUnavailableException::class);
+        $this->expectExceptionMessage('Failed to get user info:');
+
+        $repository->getUserInfoFromToken($this->token(['azp' => 'derafu-auth']));
+    }
+
+    /** @return iterable<string, array{Psr7Response|\Throwable}> */
+    public static function unavailableUserInfoResponses(): iterable
+    {
+        yield 'connection failure' => [new ConnectException('Connection failed', new Request('GET', self::ISSUER . '/protocol/openid-connect/userinfo'))];
+        yield 'server error' => [new Psr7Response(503, [], '{"error":"temporarily_unavailable"}')];
+        yield 'malformed JSON' => [new Psr7Response(200, ['Content-Type' => 'application/json'], '{')];
+        yield 'scalar JSON' => [new Psr7Response(200, ['Content-Type' => 'application/json'], '123')];
+    }
+
+    #[Test]
+    public function aRejectedUserInfoTokenDoesNotAuthenticate(): void
+    {
+        $answer = new Psr7Response(401, [], '{"error":"invalid_token"}');
+        $repository = $this->tokenRepository([$answer, $answer]);
+        $token = $this->token(['azp' => 'derafu-auth']);
+
+        $this->assertNull($repository->authenticate($token));
+        $this->assertFalse($repository->isTokenValid($token));
+    }
+
+    #[Test]
+    public function anIntrospectionConnectionFailureKeepsItsCause(): void
+    {
+        $failure = new ConnectException('Connection failed', new Request('POST', self::ISSUER . '/protocol/openid-connect/token/introspect'));
+        $repository = $this->tokenRepository([$failure]);
+
+        try {
+            $repository->verifyBearerToken($this->token());
+            $this->fail('An unavailable introspection must not accept the token.');
+        } catch (ProviderUnavailableException $e) {
+            $this->assertSame($failure, $e->getPrevious());
+        }
+    }
+
+    #[Test]
+    #[DataProvider('unavailableOfflineResponses')]
+    public function offlineTokenEndpointFailuresAreProviderErrors(Psr7Response|\Throwable $answer): void
+    {
+        $repository = $this->tokenRepository([$answer]);
+        $this->expectException(ProviderUnavailableException::class);
+        $this->expectExceptionMessage('Failed to ask Keycloak for a token:');
+
+        $repository->requestOfflineToken('otto', 'secret');
+    }
+
+    /** @return iterable<string, array{Psr7Response|\Throwable}> */
+    public static function unavailableOfflineResponses(): iterable
+    {
+        yield 'connection failure' => [new ConnectException('Connection failed', new Request('POST', self::ISSUER . '/protocol/openid-connect/token'))];
+        yield 'server error' => [new Psr7Response(503, [], '{"error":"temporarily_unavailable"}')];
+        yield 'non JSON response' => [new Psr7Response(200, [], 'not-json')];
+        yield 'scalar JSON response' => [new Psr7Response(200, [], '123')];
+    }
+
+    #[Test]
+    #[DataProvider('offlineClientRejections')]
+    public function aClientThatCannotIssueOfflineTokensIsNotReportedAsABadPassword(string $error): void
+    {
+        $repository = $this->tokenRepository([new Psr7Response(400, [], json_encode(['error' => $error], JSON_THROW_ON_ERROR))]);
+        $this->expectException(AuthenticationException::class);
+        $this->expectExceptionCode(400);
+        $this->expectExceptionMessage('direct access grants');
+
+        $repository->requestOfflineToken('otto', 'secret');
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function offlineClientRejections(): iterable
+    {
+        yield 'unauthorized client' => ['unauthorized_client'];
+        yield 'invalid client' => ['invalid_client'];
+    }
+
+    #[Test]
+    #[DataProvider('invalidOfflineTokens')]
+    public function theOfflineEndpointMustActuallyReturnAnOfflineToken(mixed $refresh): void
+    {
+        $repository = $this->tokenRepository([new Psr7Response(200, [], json_encode(['refresh_token' => $refresh], JSON_THROW_ON_ERROR))]);
+        $this->expectException(AuthenticationException::class);
+        $this->expectExceptionCode(400);
+        $this->expectExceptionMessage('The token that Keycloak gave is not one for the API.');
+
+        $repository->requestOfflineToken('otto', 'secret');
+    }
+
+    /** @return iterable<string, array{mixed}> */
+    public static function invalidOfflineTokens(): iterable
+    {
+        yield 'missing token' => [null];
+        yield 'array token' => [['unexpected']];
+        yield 'ordinary refresh token' => ['not-an-offline-jwt'];
+    }
+
+    #[Test]
+    public function aProtectedWebPageRemembersItsQueryBeforeRedirectingToKeycloak(): void
+    {
+        $session = new Session([]);
+        $request = $this->app->request('/private/page', ['tab' => '2'])
+            ->withAttribute(SessionMiddleware::SESSION_ATTRIBUTE, $session);
+        $channel = new WebChannel($this->flowWithResponses([]), new WebConfiguration(), new KeycloakSessionManager());
+
+        $response = $channel->unauthorizedResponse($request);
+
+        $this->assertStringStartsWith(self::ISSUER . '/protocol/openid-connect/auth?', $response->getHeaderLine('Location'));
+        $this->assertSame('/private/page?tab=2', $session->get('auth_redirect'));
+        $this->assertNotNull($session->get('oauth2_state'));
+        $this->assertNotNull($session->get('oauth2_pkce'));
+    }
+
+    #[Test]
+    public function aWebRequestWithoutSessionRemainsAnonymousAndRedirectsToTheLoginPage(): void
+    {
+        $request = $this->app->request('/private/page');
+        $channel = new WebChannel($this->flowWithResponses([]), new WebConfiguration(['unauthorized_redirect_path' => '/auth/login']), new KeycloakSessionManager());
+
+        $identification = $channel->identify($request);
+        $this->assertTrue($identification->user()?->isAnonymous());
+        $response = $channel->unauthorizedResponse($request);
+        $this->assertSame('/auth/login', $response->getHeaderLine('Location'));
+    }
+
+    #[Test]
+    public function theKeycloakLoginPageWithoutSessionUsesTheConfiguredFallback(): void
+    {
+        $config = Stack::keycloakConfiguration([
+            'keycloak_url' => self::URL, 'realm' => 'test', 'client_id' => 'derafu-auth',
+            'client_secret' => 'secret', 'redirect_uri' => 'https://app.test/auth/callback',
+            'login_redirect_path' => '/home',
+        ]);
+        $controller = Stack::keycloakController(new KeycloakUserRepository($config), $config, new KeycloakSessionManager());
+
+        $response = $controller->login($this->app->request('/auth/login'));
+
+        $this->assertInstanceOf(ResponseInterface::class, $response);
+        $this->assertSame('/home', $response->getHeaderLine('Location'));
+    }
+
+    #[Test]
+    public function aSuccessfulOfflineTokenResponsePreservesTheTokenAndItsOtherFields(): void
+    {
+        $offline = $this->token(['typ' => 'Offline']);
+        $repository = $this->tokenRepository([new Psr7Response(200, [], json_encode([
+            'refresh_token' => $offline, 'scope' => 'openid offline_access', 'expires_in' => 300,
+        ], JSON_THROW_ON_ERROR))]);
+
+        $answer = $repository->requestOfflineToken('otto', 'secret');
+
+        $this->assertSame([
+            'refresh_token' => $offline, 'scope' => 'openid offline_access', 'expires_in' => 300,
+        ], $answer);
+    }
+
+    #[Test]
+    #[DataProvider('offlineAccountRejections')]
+    public function disabledOrIncompleteAccountsKeepTheirSpecificError(string $description, string $message): void
+    {
+        $repository = $this->tokenRepository([new Psr7Response(400, [], json_encode([
+            'error' => 'invalid_grant', 'error_description' => $description,
+        ], JSON_THROW_ON_ERROR))]);
+        $this->expectException(AuthenticationException::class);
+        $this->expectExceptionCode(403);
+        $this->expectExceptionMessage($message);
+
+        $repository->requestOfflineToken('otto', 'secret');
+    }
+
+    /** @return iterable<string, array{string, string}> */
+    public static function offlineAccountRejections(): iterable
+    {
+        yield 'disabled account' => ['Account disabled', 'Your user is disabled.'];
+        yield 'incomplete account' => ['Account is not fully set up', 'Your user has actions pending in Keycloak'];
     }
 }
 

@@ -25,6 +25,7 @@ use Derafu\Auth\Authentication\Channel\Web\WebConfiguration;
 use Derafu\Auth\Authentication\Identification;
 use Derafu\Auth\Authorization\AccessRules;
 use Derafu\Auth\Contract\AuthenticationInterface;
+use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Auth\Provider\Database\Api\DatabaseBasicScheme;
@@ -166,6 +167,7 @@ final class UnconfiguredProviderTest extends TestCase
 
     /**
      * @param callable(): AuthenticationInterface $authentication
+     * @param array<string, mixed> $session
      */
     #[Test]
     #[DataProvider('provideProviders')]
@@ -178,6 +180,7 @@ final class UnconfiguredProviderTest extends TestCase
 
     /**
      * @param callable(): AuthenticationInterface $authentication
+     * @param array<string, mixed> $session
      */
     #[Test]
     #[DataProvider('provideProviders')]
@@ -191,6 +194,7 @@ final class UnconfiguredProviderTest extends TestCase
 
     /**
      * @param callable(): AuthenticationInterface $authentication
+     * @param array<string, mixed> $session
      */
     #[Test]
     #[DataProvider('provideProviders')]
@@ -204,6 +208,7 @@ final class UnconfiguredProviderTest extends TestCase
 
     /**
      * @param callable(): AuthenticationInterface $authentication
+     * @param array<string, mixed> $session
      */
     #[Test]
     #[DataProvider('provideProviders')]
@@ -220,6 +225,7 @@ final class UnconfiguredProviderTest extends TestCase
 
     /**
      * @param callable(): AuthenticationInterface $authentication
+     * @param array<string, mixed> $session
      */
     #[Test]
     #[DataProvider('provideProviders')]
@@ -237,6 +243,7 @@ final class UnconfiguredProviderTest extends TestCase
 
     /**
      * @param callable(): AuthenticationInterface $authentication
+     * @param array<string, mixed> $session
      */
     #[Test]
     #[DataProvider('provideProviders')]
@@ -256,6 +263,7 @@ final class UnconfiguredProviderTest extends TestCase
 
     /**
      * @param callable(): AuthenticationInterface $authentication
+     * @param array<string, mixed> $session
      * @param array<string, mixed> $session
      */
     #[Test]
@@ -278,11 +286,13 @@ final class UnconfiguredProviderTest extends TestCase
         $this->assertSame(200, $response->getStatusCode());
         // What the session says can not be checked without the provider, so it is
         // not believed: the visitor is the anonymous one.
-        $this->assertTrue($user?->isAnonymous());
+        $this->assertInstanceOf(UserInterface::class, $user);
+        $this->assertTrue($user->isAnonymous());
     }
 
     /**
      * @param callable(): AuthenticationInterface $authentication
+     * @param array<string, mixed> $session
      * @param array<string, mixed> $session
      */
     #[Test]

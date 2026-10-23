@@ -39,7 +39,7 @@ use Psr\Http\Message\ServerRequestInterface;
 final class AuthenticationManager implements AuthenticationInterface
 {
     /**
-     * @var list<ChannelInterface>
+     * @var array<array-key, ChannelInterface>
      */
     private readonly array $channels;
 

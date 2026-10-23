@@ -34,17 +34,18 @@ use PHPUnit\Framework\TestCase;
  * A client of the API that sends its user and its password to the provider of the
  * `.htpasswd` file.
  */
+#[CoversClass(\Derafu\Auth\Exception\TooManyAttemptsException::class)]
 #[CoversClass(HtpasswdWebFlow::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationManager::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Identification::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebConfiguration::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\Flash::class)]
-#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
+#[CoversClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiConfiguration::class)]
 #[UsesClass(\Derafu\Auth\Authorization\AccessRules::class)]
-#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\Scheme\BasicScheme::class)]
-#[UsesClass(\Derafu\Auth\Provider\Htpasswd\Api\HtpasswdBasicScheme::class)]
+#[CoversClass(\Derafu\Auth\Authentication\Channel\Api\Scheme\BasicScheme::class)]
+#[CoversClass(\Derafu\Auth\Provider\Htpasswd\Api\HtpasswdBasicScheme::class)]
 #[UsesClass(\Derafu\Auth\AnonymousUser::class)]
 #[UsesClass(\Derafu\Auth\Authorization\AuthorizationManager::class)]
 #[UsesClass(FormManager::class)]
@@ -57,7 +58,6 @@ use PHPUnit\Framework\TestCase;
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationMiddleware::class)]
 #[UsesClass(\Derafu\Auth\Exception\AuthenticationException::class)]
-#[UsesClass(\Derafu\Auth\Exception\TooManyAttemptsException::class)]
 final class HtpasswdApiBasicTest extends TestCase
 {
     use ApiBasicTests;

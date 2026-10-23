@@ -13,6 +13,9 @@ declare(strict_types=1);
 namespace Derafu\Auth\Provider\Keycloak;
 
 use Derafu\Auth\Exception\ConfigurationException;
+use Derafu\Support\ArrayReader;
+use Derafu\Support\ArrayType;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 
 /**
  * Configuration class for Keycloak authentication settings.
@@ -57,7 +60,7 @@ class KeycloakConfiguration
     /**
      * The Keycloak scopes.
      *
-     * @var array
+     * @var array<array-key, string>
      */
     private array $scopes = ['openid', 'profile', 'email'];
 
@@ -71,7 +74,7 @@ class KeycloakConfiguration
     /**
      * The Keycloak HTTP client options.
      *
-     * @var array
+     * @var array<array-key, mixed>
      */
     private array $httpClientOptions = [
         'timeout' => 30,
@@ -133,48 +136,37 @@ class KeycloakConfiguration
      * Creates a new Keycloak configuration.
      *
      * @param array<string, mixed> $config The configuration array.
+     * @throws TranslatableInvalidArgumentException If a configuration value has an invalid type.
      */
     public function __construct(array $config)
     {
-        $this->keycloakUrl = $config['keycloak_url']
-            ?? $this->keycloakUrl
-        ;
-        $this->realm = $config['realm']
-            ?? $this->realm
-        ;
-        $this->clientId = $config['client_id']
-            ?? $this->clientId
-        ;
-        $this->clientSecret = $config['client_secret']
-            ?? $this->clientSecret
-        ;
-        $this->redirectUri = $config['redirect_uri']
-            ?? $this->redirectUri
-        ;
-        $this->scopes = $config['scopes']
-            ?? $this->scopes
-        ;
-        $this->callbackPath = $config['callback_path']
-            ?? $this->callbackPath
-        ;
+        $reader = ArrayReader::from($config);
+        $this->keycloakUrl = $reader->string('keycloak_url', $this->keycloakUrl);
+        $this->realm = $reader->string('realm', $this->realm);
+        $this->clientId = $reader->string('client_id', $this->clientId);
+        $this->clientSecret = $reader->string('client_secret', $this->clientSecret);
+        $this->redirectUri = $reader->string('redirect_uri', $this->redirectUri);
+
+        $scopes = $reader->array('scopes') ?? $this->scopes;
+        $scopeReader = ArrayReader::from($scopes, 'Keycloak scopes');
+        $this->scopes = [];
+        foreach (array_keys($scopes) as $key) {
+            $this->scopes[$key] = $scopeReader->require((string) $key, ArrayType::string());
+        }
+
+        $this->callbackPath = $reader->string('callback_path', $this->callbackPath);
         $this->httpClientOptions = array_filter(
-            $config['http_client_options'] ?? [],
+            $reader->array('http_client_options') ?? [],
             fn (mixed $value) => $value !== null
         ) + $this->httpClientOptions;
-        $this->issuer = $config['issuer']
-            ?? $this->issuer
-        ;
-        $this->endSession = $config['end_session']
-            ?? $this->endSession
-        ;
-        $this->postLogoutRedirectUri = $config['post_logout_redirect_uri']
-            ?? $this->postLogoutRedirectUri
-        ;
-        $this->apiAudience = trim((string) ($config['api_audience'] ?? $this->apiAudience));
-        $this->apiIntrospection = (bool) ($config['api_introspection'] ?? $this->apiIntrospection);
+        $this->issuer = $reader->string('issuer', $this->issuer);
+        $this->endSession = $reader->bool('end_session', $this->endSession);
+        $this->postLogoutRedirectUri = $reader->string('post_logout_redirect_uri', $this->postLogoutRedirectUri);
+        $this->apiAudience = trim($reader->string('api_audience', $this->apiAudience));
+        $this->apiIntrospection = $reader->bool('api_introspection', $this->apiIntrospection);
 
-        $this->apiClientId = trim((string) ($config['api_client_id'] ?? $this->apiClientId));
-        $this->apiClientSecret = (string) ($config['api_client_secret'] ?? $this->apiClientSecret);
+        $this->apiClientId = trim($reader->string('api_client_id', $this->apiClientId));
+        $this->apiClientSecret = $reader->string('api_client_secret', $this->apiClientSecret);
     }
 
     /**
@@ -335,7 +327,7 @@ class KeycloakConfiguration
     /**
      * Gets the Keycloak scopes.
      *
-     * @return array The Keycloak scopes.
+     * @return array<array-key, string> The Keycloak scopes.
      */
     public function getScopes(): array
     {
@@ -371,7 +363,7 @@ class KeycloakConfiguration
      * `http_client_options.headers`: Keycloak and the servers in front of it have it
      * in their logs.
      *
-     * @return array The Keycloak HTTP client options.
+     * @return array<array-key, mixed> The Keycloak HTTP client options.
      */
     public function getHttpClientOptions(): array
     {

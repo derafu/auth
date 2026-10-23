@@ -24,6 +24,8 @@ use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
 use Derafu\Auth\Provider\Keycloak\TokenClaims;
 use Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager;
 use Derafu\Form\Contract\FormInterface;
+use Derafu\Support\ArrayReader;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 use Derafu\Translation\TranslatableMessage;
 use Mezzio\Authentication\UserInterface as MezzioUserInterface;
 use Mezzio\Session\SessionInterface;
@@ -88,9 +90,10 @@ class KeycloakApiTokenManager implements ApiTokenManagerInterface
 
         // The form checks what came (its CSRF token, the password that is there).
         $body = $request->getParsedBody();
-        $data = $this->formManager->processForm(ApiTokenForm::class, is_array($body) ? $body : [])->getProcessedData();
-        $password = (string) $data[ApiTokenForm::PASSWORD];
-        $otp = is_string($data[ApiTokenForm::TOTP] ?? null) ? trim($data[ApiTokenForm::TOTP]) : null;
+        $data = $this->formManager->processForm(ApiTokenForm::class, is_array($body) ? $body : [])->getProcessedDataReader();
+        $password = $data->requireString(ApiTokenForm::PASSWORD);
+        $otp = $data->string(ApiTokenForm::TOTP);
+        $otp = $otp !== null ? trim($otp) : null;
 
         try {
             $answer = $this->userRepository->requestOfflineToken(
@@ -102,7 +105,7 @@ class KeycloakApiTokenManager implements ApiTokenManagerInterface
             throw $e->getCode() === 401 ? $this->whyTheCredentialsAreNotValid($session, $otp !== null && $otp !== '', $e) : $e;
         }
 
-        $token = (string) $answer['refresh_token'];
+        $token = $answer['refresh_token'];
         $claims = TokenClaims::of($token);
         if (($claims['sub'] ?? null) !== $user->getIdentity()) {
             throw new AuthenticationException('The token is not for the user of this session.', 400);
@@ -110,11 +113,17 @@ class KeycloakApiTokenManager implements ApiTokenManagerInterface
 
         // When it was made and when it ends are what the token says (Keycloak gives an
         // end to the ones that it makes, and not every version does).
-        return new NewApiToken(
-            $token,
-            isset($claims['iat']) ? (int) $claims['iat'] : null,
-            isset($claims['exp']) ? (int) $claims['exp'] : null
-        );
+        try {
+            $reader = ArrayReader::from($claims, 'offline token claims');
+
+            return new NewApiToken($token, $reader->int('iat'), $reader->int('exp'));
+        } catch (TranslatableInvalidArgumentException $e) {
+            throw new AuthenticationException(
+                ['The API token has invalid claims: {error}', 'error' => $e->getMessage()],
+                400,
+                $e
+            );
+        }
     }
 
     /**

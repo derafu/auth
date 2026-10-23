@@ -50,6 +50,7 @@ final class DatabaseUserRepositoryTest extends TestCase
 
     /**
      * @param list<array{identity: string, password: string, roles: list<string>}>|null $users
+     * @param array<string, mixed> $config
      */
     private function repository(?array $users = null, array $config = []): DatabaseUserRepository
     {

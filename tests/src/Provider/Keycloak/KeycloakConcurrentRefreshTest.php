@@ -27,6 +27,7 @@ use Derafu\TestsAuth\Fixture\KeycloakBrowser;
 use Derafu\TestsAuth\Fixture\RealKeycloak;
 use Derafu\TestsAuth\Fixture\SessionApp;
 use Derafu\TestsAuth\Fixture\Stack;
+use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
@@ -229,18 +230,22 @@ final class KeycloakConcurrentRefreshTest extends TestCase
         // Both got the user, with its roles.
         foreach ($results as $result) {
             $this->assertTrue($result['authenticated']);
+            Assert::assertIsArray($result['roles']);
             $this->assertContains('admin', $result['roles']);
         }
 
         // The session kept the user and has the refresh token that Keycloak gave
         // in exchange of the one that it had, which is now revoked: the first
         // request renewed it, the second one did not need to.
+        Assert::assertIsArray($after['user']);
+        Assert::assertIsArray($before['user']);
         $this->assertSame($before['user']['sub'], $after['user']['sub']);
         $this->assertNotSame($before['oauth2_refresh_token'], $after['oauth2_refresh_token']);
         $this->assertGreaterThan($before['auth_checked_at'], $after['auth_checked_at']);
 
         [, $repository] = $this->logIn();
         try {
+            Assert::assertIsString($before['oauth2_refresh_token']);
             $repository->refreshToken($before['oauth2_refresh_token']);
             $this->fail('The refresh token that was used should be revoked: the realm did not renew it.');
         } catch (AuthenticationException $e) {

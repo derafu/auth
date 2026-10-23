@@ -26,8 +26,8 @@ class User implements UserInterface
      * Creates a new default user.
      *
      * @param string $identity The user identity.
-     * @param array $roles The user roles.
-     * @param array $details The user details.
+     * @param array<array-key, string> $roles The user roles.
+     * @param array<string, mixed> $details The user details.
      */
     public function __construct(
         private readonly string $identity,
@@ -46,6 +46,8 @@ class User implements UserInterface
 
     /**
      * {@inheritDoc}
+     *
+     * @return array<array-key, string>
      */
     public function getRoles(): iterable
     {
@@ -162,7 +164,7 @@ class User implements UserInterface
      */
     public function hasRole(string $role): bool
     {
-        return in_array($role, $this->getRoles(), true);
+        return in_array($role, $this->roleList(), true);
     }
 
     /**
@@ -170,7 +172,7 @@ class User implements UserInterface
      */
     public function hasAnyRole(array $roles): bool
     {
-        $userRoles = $this->getRoles();
+        $userRoles = $this->roleList();
         foreach ($roles as $role) {
             if (in_array($role, $userRoles, true)) {
                 return true;
@@ -185,6 +187,18 @@ class User implements UserInterface
      */
     public function hasAllRoles(array $roles): bool
     {
-        return count(array_intersect($roles, $this->getRoles())) === count($roles);
+        return count(array_intersect($roles, $this->roleList())) === count($roles);
+    }
+
+    /**
+     * Materializes roles once for array operations, preserving every yielded value.
+     *
+     * @return array<array-key, string>
+     */
+    private function roleList(): array
+    {
+        $roles = $this->getRoles();
+
+        return is_array($roles) ? $roles : iterator_to_array($roles, false);
     }
 }

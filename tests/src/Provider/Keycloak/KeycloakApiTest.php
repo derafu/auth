@@ -14,6 +14,7 @@ namespace Derafu\TestsAuth\Provider\Keycloak;
 
 use Derafu\Auth\Authorization\AuthorizationManager;
 use Derafu\Auth\Contract\AuthenticationInterface;
+use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
@@ -25,6 +26,7 @@ use Derafu\TestsAuth\Fixture\SessionApp;
 use Derafu\TestsAuth\Fixture\Stack;
 use Laminas\Diactoros\Response\JsonResponse;
 use Mezzio\Authentication\UserInterface as MezzioUserInterface;
+use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
@@ -122,7 +124,7 @@ final class KeycloakApiTest extends TestCase
      * status and the headers of the exception are what the package guarantees,
      * so the stand-in response here carries exactly those.
      *
-     * @return array{response: ResponseInterface, user: mixed}
+     * @return array{response: ResponseInterface, user: UserInterface|null}
      */
     private function call(AuthenticationInterface $authentication, string $token, string $path = '/api/items'): array
     {
@@ -133,20 +135,36 @@ final class KeycloakApiTest extends TestCase
                 $authentication,
                 function (ServerRequestInterface $request) use (&$user): null {
                     $user = $request->getAttribute(MezzioUserInterface::class);
+                    $this->assertTrue($user === null || $user instanceof UserInterface);
 
                     return null;
                 }
             );
         } catch (AuthenticationException $e) {
-            $response = new JsonResponse(['status' => $e->getCode()], $e->getCode(), $e->getHeaders());
+            $headers = $e->getHeaders();
+            $validatedHeaders = [];
+            foreach ($headers as $name => $value) {
+                $this->assertTrue($name !== '');
+                $validatedHeaders[$name] = $value;
+            }
+            $headers = $validatedHeaders;
+            $response = new JsonResponse(['status' => $e->getCode()], $e->getCode(), $headers);
         }
 
         return ['response' => $response, 'user' => $user];
     }
 
+    /** @param array<string, mixed> $answer */
+    private function accessToken(array $answer): string
+    {
+        $this->assertIsString($answer['access_token']);
+
+        return $answer['access_token'];
+    }
+
     private function serviceToken(): string
     {
-        return (string) self::$tokens->service('derafu-service', 'service-secret')['access_token'];
+        return $this->accessToken(self::$tokens->service('derafu-service', 'service-secret'));
     }
 
     // -------------------------------------------------------------------------
@@ -168,7 +186,7 @@ final class KeycloakApiTest extends TestCase
     #[Test]
     public function aPersonThatGaveItsPasswordToAClientIsAuthenticatedWithItsOwnRoles(): void
     {
-        $token = (string) self::$tokens->person('derafu-cli', 'ana', 'secret')['access_token'];
+        $token = $this->accessToken(self::$tokens->person('derafu-cli', 'ana', 'secret'));
 
         $result = $this->call($this->api(), $token);
 
@@ -183,7 +201,7 @@ final class KeycloakApiTest extends TestCase
     public function aPersonAndAServiceAreTheSameKindOfClientForTheApi(): void
     {
         $authentication = $this->api();
-        $person = $this->call($authentication, (string) self::$tokens->person('derafu-cli', 'ana', 'secret')['access_token']);
+        $person = $this->call($authentication, $this->accessToken(self::$tokens->person('derafu-cli', 'ana', 'secret')));
         $service = $this->call($authentication, $this->serviceToken());
 
         $this->assertSame(200, $person['response']->getStatusCode());
@@ -221,7 +239,7 @@ final class KeycloakApiTest extends TestCase
         $this->assertTrue($authorization->isGrantedAny(['reader', 'writer'], $this->app->request('/api/data')->withAttribute(MezzioUserInterface::class, $service)));
 
         // Ana is an admin.
-        $ana = $this->call($authentication, (string) self::$tokens->person('derafu-cli', 'ana', 'secret')['access_token'])['user'];
+        $ana = $this->call($authentication, $this->accessToken(self::$tokens->person('derafu-cli', 'ana', 'secret')))['user'];
         $this->assertNotNull($ana);
         $this->assertTrue($authorization->isGrantedAny(['admin'], $this->app->request('/api/admin/x')->withAttribute(MezzioUserInterface::class, $ana)));
     }
@@ -235,7 +253,7 @@ final class KeycloakApiTest extends TestCase
     {
         // A valid token of the realm, of a client that is not for the API (the
         // audience is what says it).
-        $token = (string) self::$tokens->service('derafu-noaudience', 'noaudience-secret')['access_token'];
+        $token = $this->accessToken(self::$tokens->service('derafu-noaudience', 'noaudience-secret'));
 
         $result = $this->call($this->api(), $token);
 
@@ -256,8 +274,11 @@ final class KeycloakApiTest extends TestCase
         // must not open the API of a client that is the same.
         $api = $this->api(['client_id' => 'derafu-cli', 'client_secret' => '', 'api_audience' => 'derafu-cli', 'api_introspection' => false]);
 
+        Assert::assertIsString($answer['id_token']);
         $this->assertNull($this->call($api, (string) $answer['id_token'])['user']);
+        Assert::assertIsString($answer['refresh_token']);
         $this->assertNull($this->call($this->api(), (string) $answer['refresh_token'])['user']);
+        Assert::assertIsString($answer['id_token']);
         $this->assertNull($this->call($this->api(), (string) $answer['id_token'])['user']);
     }
 
@@ -268,7 +289,7 @@ final class KeycloakApiTest extends TestCase
     #[Test]
     public function aUserThatWasDisabledLosesTheAccessAtOnceWithoutWaitingForTheTokenToExpire(): void
     {
-        $token = (string) self::$tokens->person('derafu-cli', 'ana', 'secret')['access_token'];
+        $token = $this->accessToken(self::$tokens->person('derafu-cli', 'ana', 'secret'));
         $authentication = $this->api();
         $before = $this->call($authentication, $token);
         $this->assertNotNull($before['user']);
@@ -284,7 +305,7 @@ final class KeycloakApiTest extends TestCase
     #[Test]
     public function aUserWhoseSessionsEndedLosesTheAccessAtOnce(): void
     {
-        $token = (string) self::$tokens->person('derafu-cli', 'ana', 'secret')['access_token'];
+        $token = $this->accessToken(self::$tokens->person('derafu-cli', 'ana', 'secret'));
         $authentication = $this->api();
         $before = $this->call($authentication, $token);
         $this->assertNotNull($before['user']);
@@ -300,7 +321,7 @@ final class KeycloakApiTest extends TestCase
     {
         // What it costs not to ask: the token is verified by what it says. It is
         // for the clients whose tokens last a short time.
-        $token = (string) self::$tokens->person('derafu-cli', 'ana', 'secret')['access_token'];
+        $token = $this->accessToken(self::$tokens->person('derafu-cli', 'ana', 'secret'));
         $authentication = $this->api(['api_introspection' => false]);
 
         self::$keycloak->admin()->setEnabled('ana', false);
@@ -332,7 +353,7 @@ final class KeycloakApiTest extends TestCase
     {
         // One client for the web login and the API: the token of a person that
         // has its roles in it has it in its audience, and Keycloak answers for it.
-        $token = (string) self::$tokens->person('derafu-cli', 'ana', 'secret')['access_token'];
+        $token = $this->accessToken(self::$tokens->person('derafu-cli', 'ana', 'secret'));
         $authentication = $this->api(['client_id' => 'derafu-auth', 'client_secret' => 'test-secret']);
 
         $result = $this->call($authentication, $token);

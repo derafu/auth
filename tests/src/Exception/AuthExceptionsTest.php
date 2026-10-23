@@ -35,20 +35,20 @@ use PHPUnit\Framework\TestCase;
 final class AuthExceptionsTest extends TestCase
 {
     /**
-     * @return array<string, array{Closure(mixed ...): TranslatableException}>
+     * @return array<string, array{Closure(string|array<array-key, mixed>|TranslatableInterface=, int=, ?Exception=): TranslatableException}>
      */
     public static function exceptionsProvider(): array
     {
         return [
-            'authentication' => [fn (mixed ...$arguments) => new AuthenticationException(...$arguments)],
-            'authorization' => [fn (mixed ...$arguments) => new AuthorizationException(...$arguments)],
-            'configuration' => [fn (mixed ...$arguments) => new ConfigurationException(...$arguments)],
-            'form' => [fn (mixed ...$arguments) => new FormException(...$arguments)],
+            'authentication' => [fn (string|array|TranslatableInterface $message = '', int $code = 0, ?Exception $previous = null) => new AuthenticationException($message, $code, $previous)],
+            'authorization' => [fn (string|array|TranslatableInterface $message = '', int $code = 0, ?Exception $previous = null) => new AuthorizationException($message, $code, $previous)],
+            'configuration' => [fn (string|array|TranslatableInterface $message = '', int $code = 0, ?Exception $previous = null) => new ConfigurationException($message, $code, $previous)],
+            'form' => [fn (string|array|TranslatableInterface $message = '', int $code = 0, ?Exception $previous = null) => new FormException($message, $code, $previous)],
         ];
     }
 
     /**
-     * @param Closure(mixed ...): TranslatableException $create
+     * @param Closure(string|array<array-key, mixed>|TranslatableInterface=, int=, ?Exception=): TranslatableException $create
      */
     #[DataProvider('exceptionsProvider')]
     public function testEveryExceptionIsTranslatable(Closure $create): void
@@ -64,7 +64,7 @@ final class AuthExceptionsTest extends TestCase
     }
 
     /**
-     * @param Closure(mixed ...): TranslatableException $create
+     * @param Closure(string|array<array-key, mixed>|TranslatableInterface=, int=, ?Exception=): TranslatableException $create
      */
     #[DataProvider('exceptionsProvider')]
     public function testTheMessageCanBeGivenWithNamedParameters(Closure $create): void
@@ -75,7 +75,7 @@ final class AuthExceptionsTest extends TestCase
     }
 
     /**
-     * @param Closure(mixed ...): TranslatableException $create
+     * @param Closure(string|array<array-key, mixed>|TranslatableInterface=, int=, ?Exception=): TranslatableException $create
      */
     #[DataProvider('exceptionsProvider')]
     public function testItCanBeCreatedWithoutAMessage(Closure $create): void

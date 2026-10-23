@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Derafu\TestsAuth\Authentication\Channel\Web;
 
 use Derafu\Auth\Authentication\Channel\Web\Flash;
+use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Auth\Exception\FormException;
 use Derafu\Auth\Translation\AuthTranslationResourceProvider;
 use Derafu\Translation\TranslatableMessage;
@@ -23,12 +24,14 @@ use Derafu\Twig\Service\TwigService;
 use Laminas\Diactoros\ServerRequest;
 use Mezzio\Flash\FlashMessageMiddleware;
 use Mezzio\Flash\FlashMessages;
+use Mezzio\Flash\FlashMessagesInterface;
 use Mezzio\Session\Session;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\ServerRequestInterface;
+use stdClass;
 use Twig\Extension\AbstractExtension;
 use Twig\TwigFunction;
 
@@ -43,6 +46,7 @@ use Twig\TwigFunction;
 #[CoversClass(Flash::class)]
 #[UsesClass(AuthTranslationResourceProvider::class)]
 #[UsesClass(FormException::class)]
+#[UsesClass(ConfigurationException::class)]
 final class FlashTest extends TestCase
 {
     private Session $session;
@@ -71,6 +75,7 @@ final class FlashTest extends TestCase
         return FlashMessages::createFromSession($this->session)->getFlashes();
     }
 
+    /** @param array<string, mixed> $context */
     private function render(string $template, array $context, bool $translated): string
     {
         $root = dirname(__DIR__, 5);
@@ -193,7 +198,9 @@ final class FlashTest extends TestCase
         $request = $this->request();
         Flash::error($request, 'Invalid identity or password.', now: true);
 
-        $flashes = $request->getAttribute(FlashMessageMiddleware::FLASH_ATTRIBUTE)->getFlashes();
+        $flash = $request->getAttribute(FlashMessageMiddleware::FLASH_ATTRIBUTE);
+        $this->assertInstanceOf(FlashMessagesInterface::class, $flash);
+        $flashes = $flash->getFlashes();
 
         $html = $this->render('partials/flash-messages.html.twig', ['app' => ['flashes' => $flashes]], true);
         $this->assertStringContainsString('Identidad o contraseña inválida.', $html);
@@ -284,5 +291,101 @@ final class FlashTest extends TestCase
         $this->assertSame(2, substr_count($english, 'Login'));
         $this->assertSame(2, substr_count($spanish, 'Iniciar sesión'));
         $this->assertStringNotContainsString('Login', $spanish);
+    }
+
+    public function testTheFlashServiceOfTheRequestIsReturnedUnchanged(): void
+    {
+        $request = $this->request();
+
+        $this->assertSame(
+            $request->getAttribute(FlashMessageMiddleware::FLASH_ATTRIBUTE),
+            Flash::of($request)
+        );
+    }
+
+    #[DataProvider('provideMissingFlashServices')]
+    public function testMessagesRemainOptionalWithoutAFlashService(bool $explicitNull): void
+    {
+        $request = new ServerRequest();
+        if ($explicitNull) {
+            $request = $request->withAttribute(FlashMessageMiddleware::FLASH_ATTRIBUTE, null);
+        }
+
+        Flash::error($request, 'Invalid form data.');
+        Flash::error($request, 'Invalid form data.', now: true);
+        Flash::success($request, 'Successfully logged in.');
+        Flash::success($request, 'Successfully logged in.', now: true);
+
+        $this->assertNull(Flash::of($request));
+        $this->assertSame([], $this->nextRequestFlashes());
+    }
+
+    /** @return iterable<string, array{bool}> */
+    public static function provideMissingFlashServices(): iterable
+    {
+        yield 'attribute absent' => [false];
+        yield 'explicit null' => [true];
+    }
+
+    #[DataProvider('provideInvalidFlashServices')]
+    public function testAnInvalidFlashServiceRaisesATranslatableConfigurationException(mixed $service): void
+    {
+        $request = (new ServerRequest())->withAttribute(FlashMessageMiddleware::FLASH_ATTRIBUTE, $service);
+
+        try {
+            Flash::of($request);
+            $this->fail('A present flash service must implement the Mezzio interface.');
+        } catch (ConfigurationException $e) {
+            $this->assertSame(
+                'The flash request attribute must implement Mezzio\\Flash\\FlashMessagesInterface.',
+                $e->getMessage()
+            );
+            $this->assertSame(
+                'El atributo flash de la solicitud debe implementar Mezzio\\Flash\\FlashMessagesInterface.',
+                $e->getTranslatableMessage()->trans(
+                    TranslatorFactory::create('es', [], [new AuthTranslationResourceProvider()])
+                )
+            );
+        }
+    }
+
+    /** @return iterable<string, array{mixed}> */
+    public static function provideInvalidFlashServices(): iterable
+    {
+        yield 'false is not an absent service' => [false];
+        yield 'true' => [true];
+        yield 'zero is not an absent service' => [0];
+        yield 'integer' => [42];
+        yield 'float' => [1.5];
+        yield 'empty string is not an absent service' => [''];
+        yield 'string' => ['flash'];
+        yield 'array' => [[]];
+        yield 'object without the contract' => [new stdClass()];
+    }
+
+    #[DataProvider('provideImmediateMessages')]
+    public function testImmediateMessagesAreAvailableNowAndNotInTheNextRequest(string $type, string $message): void
+    {
+        $request = $this->request();
+        if ($type === 'success') {
+            Flash::success($request, $message, now: true);
+        } else {
+            Flash::error($request, $message, now: true);
+        }
+
+        $flash = Flash::of($request);
+        $this->assertInstanceOf(FlashMessagesInterface::class, $flash);
+        $messages = $flash->getFlashes();
+        $this->assertArrayHasKey($type, $messages);
+        $this->assertInstanceOf(TranslatableMessage::class, $messages[$type]);
+        $this->assertSame($message, (string) $messages[$type]);
+        $this->assertSame([], $this->nextRequestFlashes());
+    }
+
+    /** @return iterable<string, array{string, string}> */
+    public static function provideImmediateMessages(): iterable
+    {
+        yield 'success' => ['success', 'Successfully logged in.'];
+        yield 'error' => ['error', 'Invalid form data.'];
     }
 }

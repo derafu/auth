@@ -15,6 +15,8 @@ namespace Derafu\Auth\Provider\Keycloak;
 use ArrayAccess;
 use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\ConfigurationException;
+use Derafu\Support\ArrayReader;
+use Derafu\Support\ArrayType;
 use Exception;
 use Firebase\JWT\CachedKeySet;
 use Firebase\JWT\JWK;
@@ -114,7 +116,7 @@ class KeycloakTokenVerifier
             throw new AuthenticationException('The audience of the token is not this client.');
         }
 
-        if (!isset($claims['nonce']) || !hash_equals($nonce, (string) $claims['nonce'])) {
+        if (!is_string($claims['nonce'] ?? null) || !hash_equals($nonce, $claims['nonce'])) {
             throw new AuthenticationException('The nonce of the token is not the one of the login.');
         }
 
@@ -196,6 +198,13 @@ class KeycloakTokenVerifier
             JWT::$leeway = self::LEEWAY;
 
             $claims = (array) JWT::decode($jwt, $this->keys());
+            $decoded = json_decode(json_encode($claims, JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR);
+            $fields = ArrayType::array()->parse($decoded, 'claims', 'Keycloak token');
+            $claims = [];
+            foreach ($fields as $key => $value) {
+                $name = ArrayType::string()->parse($key, 'claims.key', 'Keycloak token');
+                $claims[$name] = $value;
+            }
         } catch (Exception $e) {
             if (
                 $mayRetry
@@ -224,7 +233,7 @@ class KeycloakTokenVerifier
             throw new AuthenticationException('The issuer of the token is not the realm.');
         }
 
-        return json_decode((string) json_encode($claims), true);
+        return $claims;
     }
 
     /**
@@ -252,11 +261,17 @@ class KeycloakTokenVerifier
             $response = $this->http->sendRequest($this->requestFactory->createRequest('GET', $uri));
             $jwks = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
 
-            // The realm also publishes keys to encrypt: only the ones to sign.
-            $jwks['keys'] = array_values(array_filter(
-                $jwks['keys'] ?? [],
-                fn (array $key) => ($key['use'] ?? 'sig') === 'sig'
-            ));
+            $jwks = ArrayType::array()->parse($jwks, 'jwks', 'Keycloak');
+            $reader = new ArrayReader($jwks, 'jwks', 'Keycloak');
+            $keys = [];
+            foreach ($reader->array('keys') ?? [] as $index => $key) {
+                $key = ArrayType::array()->parse($key, ArrayType::path('jwks.keys', $index), 'Keycloak');
+                // The realm also publishes keys to encrypt: only the ones to sign.
+                if (($key['use'] ?? 'sig') === 'sig') {
+                    $keys[] = $key;
+                }
+            }
+            $jwks['keys'] = $keys;
 
             $this->keys = JWK::parseKeySet($jwks, 'RS256');
         }

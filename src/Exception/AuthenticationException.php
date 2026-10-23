@@ -34,7 +34,7 @@ class AuthenticationException extends TranslatableException implements HeadersAw
     /**
      * Creates a new authentication exception.
      *
-     * @param string|array|TranslatableInterface $message The exception message:
+     * @param string|array<array-key, mixed>|TranslatableInterface $message The exception message:
      *   - string: Will be used as both message and translation key.
      *   - array: First element must be string (message), remaining elements are
      *     parameters.

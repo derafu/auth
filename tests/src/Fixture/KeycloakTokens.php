@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Derafu\TestsAuth\Fixture;
 
 use GuzzleHttp\Client;
+use PHPUnit\Framework\Assert;
 use RuntimeException;
 
 /**
@@ -76,6 +77,13 @@ final class KeycloakTokens
             throw new RuntimeException('Keycloak did not give a token: ' . $response->getBody());
         }
 
-        return $answer;
+        $result = [];
+        foreach ($answer as $key => $value) {
+            Assert::assertIsString($key);
+            $result[$key] = $value;
+        }
+        Assert::assertIsString($result['access_token']);
+
+        return $result;
     }
 }

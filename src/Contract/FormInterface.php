@@ -23,7 +23,7 @@ interface FormInterface
     /**
      * Gets the form definition.
      *
-     * @return array The form definition.
+     * @return array<string, mixed> The form definition.
      */
     public function getDefinition(): array;
 }

@@ -162,7 +162,7 @@ class DatabaseUserRepository implements UserRepositoryInterface
         }
 
         try {
-            $value = $this->query((string) $sql, $identity)->fetchColumn();
+            $value = $this->query($sql, $identity)->fetchColumn();
         } catch (PDOException $e) {
             throw new ConfigurationException(
                 [
@@ -195,12 +195,12 @@ class DatabaseUserRepository implements UserRepositoryInterface
         $repository = $this->config->getUserRepository();
 
         // The details are what the query gives, without the password.
-        $details = $this->query((string) $repository['sql_get_details'], $identity)->fetch(PDO::FETCH_ASSOC);
+        $details = $this->query($repository['sql_get_details'], $identity)->fetch(PDO::FETCH_ASSOC);
         $details = is_array($details) ? $details : [];
         unset($details[$this->config->getUserPasswordField()]);
 
         $roles = [];
-        foreach ($this->query((string) $repository['sql_get_roles'], $identity)->fetchAll(PDO::FETCH_NUM) as $role) {
+        foreach ($this->query($repository['sql_get_roles'], $identity)->fetchAll(PDO::FETCH_NUM) as $role) {
             $roles[] = (string) $role[0];
         }
 

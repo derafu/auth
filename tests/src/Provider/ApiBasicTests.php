@@ -14,6 +14,7 @@ namespace Derafu\TestsAuth\Provider;
 
 use Derafu\Auth\Authentication\LoginThrottle;
 use Derafu\Auth\Contract\AuthenticationInterface;
+use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\TestsAuth\Fixture\SessionApp;
 use Laminas\Diactoros\Response\JsonResponse;
@@ -59,7 +60,7 @@ trait ApiBasicTests
      * `$result['exception']`.
      *
      * @param array<string, string> $headers
-     * @return array{response: ResponseInterface, user: mixed, exception: ?AuthenticationException}
+     * @return array{response: ResponseInterface, user: UserInterface|null, exception: ?AuthenticationException}
      */
     private function call(
         AuthenticationInterface $authentication,
@@ -82,15 +83,23 @@ trait ApiBasicTests
                 $authentication,
                 function (ServerRequestInterface $request) use (&$user): null {
                     $user = $request->getAttribute(MezzioUserInterface::class);
+                    $this->assertTrue($user === null || $user instanceof UserInterface);
 
                     return null;
                 }
             );
         } catch (AuthenticationException $exception) {
+            $headers = $exception->getHeaders();
+            $validatedHeaders = [];
+            foreach ($headers as $name => $value) {
+                $this->assertTrue($name !== '');
+                $validatedHeaders[$name] = $value;
+            }
+            $headers = $validatedHeaders;
             $response = new JsonResponse(
                 ['status' => $exception->getCode()],
                 $exception->getCode(),
-                $exception->getHeaders()
+                $headers
             );
         }
 
@@ -137,7 +146,9 @@ trait ApiBasicTests
         $this->assertSame(401, $result['response']->getStatusCode());
         $this->assertSame('application/json', $result['response']->getHeaderLine('Content-Type'));
         $this->assertSame('Basic realm="API", charset="UTF-8"', $result['response']->getHeaderLine('WWW-Authenticate'));
-        $this->assertSame(401, json_decode((string) $result['response']->getBody(), true)['status']);
+        $body = json_decode((string) $result['response']->getBody(), true);
+        $this->assertIsArray($body);
+        $this->assertSame(401, $body['status']);
     }
 
     #[Test]
@@ -399,7 +410,8 @@ trait ApiBasicTests
         $this->assertGreaterThan(0, (int) $limited['response']->getHeaderLine('Retry-After'));
         $this->assertLessThanOrEqual(600, (int) $limited['response']->getHeaderLine('Retry-After'));
         $this->assertFalse($limited['response']->hasHeader('WWW-Authenticate'));
-        $this->assertStringContainsString('10 minutes', $limited['exception']?->getMessage());
+        $this->assertNotNull($limited['exception']);
+        $this->assertStringContainsString('10 minutes', $limited['exception']->getMessage());
         // Another client is not.
         $other = $this->call($authentication, $this->basicHeader($this->identity(), 'secret'), address: '198.51.100.9');
         $this->assertSame($this->identity(), $other['user']?->getIdentity());

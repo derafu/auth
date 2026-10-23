@@ -14,10 +14,14 @@ namespace Derafu\TestsAuth;
 
 use Derafu\Auth\Authentication\LoginThrottle;
 use Derafu\Auth\Exception\ConfigurationException;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
+use Laminas\Diactoros\ServerRequest;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 
 /**
@@ -191,5 +195,108 @@ final class LoginThrottleTest extends TestCase
         $this->expectExceptionMessage('PSR-6 cache pool');
 
         $throttle->isLimited('ana@example.com', '203.0.113.7');
+    }
+
+    /** @return iterable<string, array{mixed}> */
+    public static function invalidWindows(): iterable
+    {
+        yield 'null' => [null];
+        yield 'string' => ['invalid'];
+        yield 'boolean' => [false];
+        yield 'integer' => [1];
+        yield 'float' => [1.5];
+        yield 'object' => [new stdClass()];
+        yield 'empty array' => [[]];
+        yield 'missing expiry' => [['count' => 1]];
+        yield 'null expiry' => [['count' => 1, 'until' => null]];
+        yield 'string expiry' => [['count' => 1, 'until' => '123']];
+        yield 'boolean expiry' => [['count' => 1, 'until' => true]];
+        yield 'float expiry' => [['count' => 1, 'until' => 123.5]];
+        yield 'array expiry' => [['count' => 1, 'until' => []]];
+    }
+
+    #[DataProvider('invalidWindows')]
+    public function testRejectsMalformedCachedWindows(mixed $window): void
+    {
+        $key = 'auth_login_identity_' . hash('sha256', 'ana@example.com|203.0.113.7');
+        $this->cache->save($this->cache->getItem($key)->set($window));
+        $this->assertTrue($this->cache->getItem($key)->isHit());
+        $this->expectException(TranslatableInvalidArgumentException::class);
+
+        $this->throttle->retryAfter('ana@example.com', '203.0.113.7');
+    }
+
+    /** @return iterable<string, array{mixed}> */
+    public static function invalidCounts(): iterable
+    {
+        yield 'null' => [null];
+        yield 'numeric string' => ['3'];
+        yield 'boolean' => [true];
+        yield 'float' => [3.5];
+        yield 'array' => [[]];
+        yield 'object' => [new stdClass()];
+    }
+
+    #[DataProvider('invalidCounts')]
+    public function testInvalidCountersAreNotConvertedOrReset(mixed $count): void
+    {
+        $key = 'auth_login_identity_' . hash('sha256', 'ana@example.com|203.0.113.7');
+        $window = ['count' => $count, 'until' => time() + 600];
+        $this->cache->save($this->cache->getItem($key)->set($window));
+
+        try {
+            $this->throttle->hit('ana@example.com', '203.0.113.7');
+            $this->fail('The malformed counter must be rejected.');
+        } catch (TranslatableInvalidArgumentException $e) {
+            $this->assertStringContainsString('"count"', $e->getMessage());
+            $this->assertSame(serialize($window), serialize($this->cache->getItem($key)->get()));
+        }
+    }
+
+    public function testAnActiveWindowRequiresACounter(): void
+    {
+        $key = 'auth_login_identity_' . hash('sha256', 'ana@example.com|203.0.113.7');
+        $this->cache->save($this->cache->getItem($key)->set(['until' => time() + 600]));
+        $this->expectException(TranslatableInvalidArgumentException::class);
+        $this->expectExceptionMessage('"count"');
+
+        $this->throttle->retryAfter('ana@example.com', '203.0.113.7');
+    }
+
+    public function testExpiredWindowsAreDiscardedBeforeReadingTheirCounter(): void
+    {
+        $key = 'auth_login_identity_' . hash('sha256', 'ana@example.com|203.0.113.7');
+        $this->cache->save($this->cache->getItem($key)->set(['count' => 'malformed', 'until' => time() - 1]));
+
+        $this->assertSame(0, $this->throttle->retryAfter('ana@example.com', '203.0.113.7'));
+        $this->throttle->hit('ana@example.com', '203.0.113.7');
+        $window = $this->cache->getItem($key)->get();
+        $this->assertIsArray($window);
+        $this->assertSame(1, $window['count']);
+        $this->assertGreaterThan(time(), $window['until']);
+    }
+
+    /** @return iterable<string, array{array<string, mixed>, mixed, string}> */
+    public static function clientAddresses(): iterable
+    {
+        yield 'trusted network attribute' => [['REMOTE_ADDR' => '127.0.0.1'], '203.0.113.0/24', '203.0.113.0/24'];
+        yield 'connection address' => [['REMOTE_ADDR' => '203.0.113.7'], null, '203.0.113.7'];
+        yield 'unknown connection' => [[], null, 'unknown'];
+        yield 'empty network attribute' => [['REMOTE_ADDR' => '203.0.113.7'], '', '203.0.113.7'];
+        yield 'nonstring network attribute' => [['REMOTE_ADDR' => '203.0.113.7'], [], '203.0.113.7'];
+    }
+
+    /** @param array<string, mixed> $serverParams */
+    #[DataProvider('clientAddresses')]
+    public function testClientAddressesUseTheTrustedAttributeOrConnectionAndIgnoreHeaders(
+        array $serverParams,
+        mixed $network,
+        string $expected
+    ): void {
+        $request = (new ServerRequest(serverParams: $serverParams))
+            ->withAttribute('client_network', $network)
+            ->withHeader('X-Forwarded-For', '198.51.100.99');
+
+        $this->assertSame($expected, LoginThrottle::clientOf($request));
     }
 }

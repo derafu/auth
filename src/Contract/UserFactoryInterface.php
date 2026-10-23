@@ -27,7 +27,7 @@ interface UserFactoryInterface
      * Makes a user.
      *
      * @param string $identity The identity of the user.
-     * @param list<string> $roles The roles of the user.
+     * @param array<array-key, string> $roles The roles of the user.
      * @param array<string, mixed> $details The details of the user: what the
      * provider knows about it (the standard fields, when it has them, and any
      * other).

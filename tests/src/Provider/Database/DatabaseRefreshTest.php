@@ -14,6 +14,7 @@ namespace Derafu\TestsAuth\Provider\Database;
 
 use Derafu\Auth\Authentication\Channel\Web\FormManager;
 use Derafu\Auth\Authentication\Channel\Web\SessionManager;
+use Derafu\Auth\Authentication\Channel\Web\WebConfiguration;
 use Derafu\Auth\Contract\AuthenticationInterface;
 use Derafu\Auth\Contract\UserFactoryInterface;
 use Derafu\Auth\Contract\UserInterface;
@@ -29,8 +30,12 @@ use Derafu\TestsAuth\Fixture\CustomUserFactory;
 use Derafu\TestsAuth\Fixture\SessionApp;
 use Derafu\TestsAuth\Fixture\Stack;
 use Derafu\TestsAuth\Fixture\UsersDatabase;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 use Laminas\Diactoros\Response\RedirectResponse;
+use Mezzio\Session\Session;
+use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
@@ -48,7 +53,7 @@ use Psr\Http\Message\ServerRequestInterface;
 #[UsesClass(SessionManager::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationManager::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Identification::class)]
-#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
+#[CoversClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebConfiguration::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\Flash::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
@@ -162,6 +167,7 @@ final class DatabaseRefreshTest extends TestCase
 
         $this->assertEqualsCanonicalizing(['editor', 'accountant'], $third[1]?->getRoles());
         // The session has the new roles, and a new time for the next check.
+        Assert::assertIsArray($this->app->persistence->store[$sid]['user']);
         $this->assertEqualsCanonicalizing(['editor', 'accountant'], $this->app->persistence->store[$sid]['user']['roles']);
         $this->assertEqualsWithDelta(time(), $this->app->persistence->store[$sid]['auth_checked_at'], 2);
     }
@@ -194,6 +200,8 @@ final class DatabaseRefreshTest extends TestCase
         $user = $this->visit($authentication, $sid)[1];
 
         $this->assertSame('Ana Perez', $user?->getDetails()['name']);
+        Assert::assertIsArray($this->app->persistence->store[$sid]['user']);
+        $this->assertIsArray($this->app->persistence->store[$sid]['user']['details']);
         $this->assertArrayNotHasKey('password', $this->app->persistence->store[$sid]['user']['details']);
     }
 
@@ -316,5 +324,127 @@ final class DatabaseRefreshTest extends TestCase
         $this->app->persistence->store[$sid]['auth_checked_at'] = time() - 301;
         $afterTheCheck = $this->visit($authentication, $sid);
         $this->assertInstanceOf(CustomUser::class, $afterTheCheck[1]);
+    }
+
+    private function sessionFlow(): DatabaseWebFlow
+    {
+        $config = $this->database->config();
+
+        return new DatabaseWebFlow(
+            new DatabaseUserRepository($config),
+            $config,
+            new WebConfiguration(['refresh_interval' => 300]),
+            new SessionManager(),
+            new FormManager(
+                new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
+                $this->app->processor(),
+                $config
+            )
+        );
+    }
+
+    /** @return iterable<string, array{array<string, mixed>}> */
+    public static function invalidSessionIdentities(): iterable
+    {
+        yield 'absent' => [['roles' => []]];
+        foreach (['null' => null, 'integer' => 1, 'boolean' => false, 'float' => 1.5, 'array' => []] as $type => $value) {
+            yield $type => [['identity' => $value]];
+        }
+    }
+
+    /** @param array<string, mixed> $userInfo */
+    #[DataProvider('invalidSessionIdentities')]
+    public function testRejectsInvalidSessionIdentitiesBeforeReuseOrRefresh(array $userInfo): void
+    {
+        $flow = $this->sessionFlow();
+        foreach ([time(), time() - 301] as $checkedAt) {
+            try {
+                $flow->userFromSession(new Session(['user' => $userInfo, 'auth_checked_at' => $checkedAt]));
+                $this->fail('The identity must be a required string.');
+            } catch (TranslatableInvalidArgumentException $e) {
+                $this->assertStringContainsString('"identity"', $e->getMessage());
+            }
+        }
+    }
+
+    /** @return iterable<string, array{array<string, mixed>, string}> */
+    public static function invalidSessionAttributes(): iterable
+    {
+        foreach (['string' => 'editor', 'boolean' => false, 'integer' => 1] as $type => $value) {
+            yield 'roles as ' . $type => [['roles' => $value], 'roles'];
+            yield 'details as ' . $type => [['details' => $value], 'details'];
+        }
+        yield 'integer role' => [['roles' => ['editor', 1]], 'roles'];
+        yield 'null role' => [['roles' => ['editor', null]], 'roles'];
+        yield 'array role' => [['roles' => [['editor']]], 'roles'];
+        yield 'details as list' => [['details' => ['detail']], 'details'];
+        yield 'details with mixed keys' => [['details' => ['name' => 'Ana', 7 => 'detail']], 'details'];
+    }
+
+    /** @param array<string, mixed> $attributes */
+    #[DataProvider('invalidSessionAttributes')]
+    public function testRejectsInvalidRolesAndDetailsWhenReusingTheSession(array $attributes, string $key): void
+    {
+        $session = new Session([
+            'user' => ['identity' => 'ana@example.com'] + $attributes,
+            'auth_checked_at' => time(),
+        ]);
+        $this->expectException(TranslatableInvalidArgumentException::class);
+        $this->expectExceptionMessage($key);
+
+        $this->sessionFlow()->userFromSession($session);
+    }
+
+    public function testSessionRolesKeepTheirKeysAndDetailsKeepTheirValues(): void
+    {
+        $roles = ['main' => 'admin', 7 => 'editor'];
+        $details = ['name' => 'Ana', 'active' => false, 'optional' => null, 'nested' => [3 => 'detail']];
+        $user = $this->sessionFlow()->userFromSession(new Session([
+            'user' => ['identity' => 'ana@example.com', 'roles' => $roles, 'details' => $details],
+            'auth_checked_at' => time(),
+        ]));
+
+        $this->assertNotNull($user);
+        $this->assertSame('ana@example.com', $user->getIdentity());
+        $this->assertSame($roles, $user->getRoles());
+        $this->assertSame($details, $user->getDetails());
+    }
+
+    public function testMissingAndNullRolesAndDetailsKeepEmptyDefaults(): void
+    {
+        foreach ([[], ['roles' => null, 'details' => null]] as $attributes) {
+            $user = $this->sessionFlow()->userFromSession(new Session([
+                'user' => ['identity' => 'ana@example.com'] + $attributes,
+                'auth_checked_at' => time(),
+            ]));
+
+            $this->assertNotNull($user);
+            $this->assertSame([], $user->getRoles());
+            $this->assertSame([], $user->getDetails());
+        }
+    }
+
+    public function testRefreshUsesTheDatabaseInsteadOfMalformedSessionAttributes(): void
+    {
+        $session = new Session([
+            'user' => ['identity' => 'ana@example.com', 'roles' => 'old format', 'details' => false],
+            'auth_checked_at' => time() - 301,
+        ]);
+        $user = $this->sessionFlow()->userFromSession($session);
+
+        $this->assertNotNull($user);
+        $this->assertSame('ana@example.com', $user->getIdentity());
+        $this->assertSame(['admin'], $user->getRoles());
+        $stored = $session->get('user');
+        $this->assertIsArray($stored);
+        $this->assertSame($user->getDetails(), $stored['details']);
+    }
+
+    public function testAbsentNullAndEmptySessionUsersAreNotReconstructed(): void
+    {
+        $flow = $this->sessionFlow();
+        foreach ([[], ['user' => null], ['user' => []]] as $data) {
+            $this->assertNull($flow->userFromSession(new Session($data)));
+        }
     }
 }

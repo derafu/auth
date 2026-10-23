@@ -30,7 +30,7 @@ interface FormManagerInterface
      * @param class-string<AuthFormInterface>|AuthFormInterface $form The form type,
      * or the form itself when it has what only the caller knows (the help of a
      * field that says which user it is for, for example).
-     * @param array $data The form data.
+     * @param array<array-key, mixed> $data The form data.
      * @return FormInterface The form instance.
      */
     public function createForm(string|AuthFormInterface $form, array $data = []): FormInterface;
@@ -39,7 +39,7 @@ interface FormManagerInterface
      * Processes a form.
      *
      * @param class-string<AuthFormInterface> $formType The form type.
-     * @param array $data The form data.
+     * @param array<array-key, mixed> $data The form data.
      * @return ProcessResultInterface The form result.
      */
     public function processForm(string $formType, array $data = []): ProcessResultInterface;

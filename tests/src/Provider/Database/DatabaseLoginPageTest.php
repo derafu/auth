@@ -36,10 +36,12 @@ use Derafu\Translation\TranslatorFactory;
 use Derafu\Twig\Extension\TranslationExtension;
 use Derafu\Twig\Provider\DirectoryComponentProvider;
 use Laminas\Diactoros\Response\RedirectResponse;
+use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Twig\Extension\AbstractExtension;
 use Twig\TwigFunction;
@@ -53,7 +55,7 @@ use Twig\TwigFunction;
 #[UsesClass(AuthenticationException::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationManager::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Identification::class)]
-#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
+#[CoversClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebConfiguration::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\Flash::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
@@ -63,7 +65,7 @@ use Twig\TwigFunction;
 #[UsesClass(\Derafu\Auth\Provider\Database\Api\DatabaseBasicScheme::class)]
 #[UsesClass(\Derafu\Auth\AnonymousUser::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\FormManager::class)]
-#[UsesClass(\Derafu\Auth\Provider\Database\Web\DatabaseWebFlow::class)]
+#[CoversClass(\Derafu\Auth\Provider\Database\Web\DatabaseWebFlow::class)]
 #[UsesClass(\Derafu\Auth\Provider\Database\DatabaseConfiguration::class)]
 #[UsesClass(\Derafu\Auth\Provider\Database\DatabaseUserRepository::class)]
 #[UsesClass(\Derafu\Auth\Provider\Database\Web\Form\LoginForm::class)]
@@ -172,6 +174,8 @@ final class DatabaseLoginPageTest extends TestCase
             $page = $this->controller->login($request);
         });
 
+        $this->assertIsString($page);
+
         return $page;
     }
 
@@ -197,6 +201,7 @@ final class DatabaseLoginPageTest extends TestCase
 
         $valid = false;
         $this->app->handle($this->app->request('/'), function () use ($matches, &$valid): void {
+            $this->assertTrue(isset($matches[1]));
             $valid = $this->app->csrf->isValid('login', $matches[1]);
         });
         $this->assertTrue($valid);
@@ -209,7 +214,10 @@ final class DatabaseLoginPageTest extends TestCase
 
         $this->assertStringContainsString('<altcha-widget', $page);
         $this->assertSame(1, preg_match('/ challenge="([^"]*)"/', $page, $matches));
+        $this->assertTrue(isset($matches[1]));
         $challenge = json_decode(html_entity_decode($matches[1], ENT_QUOTES), true);
+        Assert::assertIsArray($challenge);
+        Assert::assertIsArray($challenge['parameters']);
         $this->assertSame(['form' => 'login'], $challenge['parameters']['data']);
         $this->assertStringContainsString('name="altcha"', $page);
     }
@@ -289,6 +297,7 @@ final class DatabaseLoginPageTest extends TestCase
      *
      * @return string|\Psr\Http\Message\ResponseInterface
      */
+    /** @param array<string, string> $query */
     private function loginPageThroughTheAuthentication(?string $sid, string $path = '/auth/login', array $query = []): mixed
     {
         $result = null;
@@ -300,6 +309,8 @@ final class DatabaseLoginPageTest extends TestCase
                 $result = $this->controller->login($request->withParsedBody([]));
             }
         );
+
+        $this->assertNotNull($result);
 
         return $result;
     }
@@ -402,6 +413,7 @@ final class DatabaseLoginPageTest extends TestCase
         foreach (['//evil.test/x', 'https://evil.test/', 'page'] as $next) {
             $response = $this->loginPageThroughTheAuthentication(SessionApp::KNOWN, '/auth/login', ['next' => $next]);
 
+            $this->assertInstanceOf(ResponseInterface::class, $response);
             $this->assertSame('/', $response->getHeaderLine('Location'), $next);
         }
     }

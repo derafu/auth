@@ -21,6 +21,8 @@ use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\ProviderUnavailableException;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
+use Derafu\Support\ArrayReader;
+use Derafu\Support\ArrayType;
 use Exception;
 use Laminas\Diactoros\Response\RedirectResponse;
 use Mezzio\Session\SessionInterface;
@@ -137,13 +139,15 @@ class KeycloakWebFlow implements WebFlowInterface
             }
 
             $idToken = $this->userRepository->verifyIdToken(
-                $tokenInfo['id_token'],
+                ArrayReader::from($tokenInfo)->require('id_token', ArrayType::string()),
                 (string) $this->sessionManager->getNonce($session)
             );
 
             // Get the user (the access token is verified) and check that it is
             // the user of the ID token.
-            $userInfo = $this->userRepository->getUserInfoFromToken($tokenInfo['access_token']);
+            $userInfo = $this->userRepository->getUserInfoFromToken(
+                ArrayReader::from($tokenInfo)->require('access_token', ArrayType::string())
+            );
             if (($idToken['sub'] ?? null) !== ($userInfo['sub'] ?? null)) {
                 throw new AuthenticationException(
                     'The user of the ID token is not the user of the access token.',
@@ -214,7 +218,9 @@ class KeycloakWebFlow implements WebFlowInterface
                     $this->sessionManager->storeAuthInfo($session, $tokenInfo);
 
                     try {
-                        $userInfo = $this->userRepository->getUserInfoFromToken($tokenInfo['access_token']);
+                        $userInfo = $this->userRepository->getUserInfoFromToken(
+                            ArrayReader::from($tokenInfo)->require('access_token', ArrayType::string())
+                        );
                     } catch (ProviderUnavailableException) {
                         // The next request asks again, with the new tokens.
                         $this->sessionManager->forgetCheck($session);

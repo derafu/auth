@@ -27,6 +27,7 @@ use Derafu\TestsAuth\Fixture\Stack;
 use Derafu\TestsAuth\Fixture\UsersDatabase;
 use Laminas\Diactoros\Response\RedirectResponse;
 use Mezzio\Session\Session;
+use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
@@ -127,6 +128,7 @@ final class SessionRenewalTest extends TestCase
         // The identifier that was known is destroyed, and the data goes to the new.
         $this->assertArrayNotHasKey(self::KNOWN, $this->app->persistence->store);
         $this->assertTrue($this->app->persistence->store[$id]['visited']);
+        Assert::assertIsArray($this->app->persistence->store[$id]['user']);
         $this->assertSame('ana@example.com', $this->app->persistence->store[$id]['user']['identity']);
     }
 

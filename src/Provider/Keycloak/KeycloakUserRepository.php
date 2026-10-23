@@ -19,6 +19,8 @@ use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Auth\Exception\ProviderUnavailableException;
 use Derafu\Auth\UserFactory;
+use Derafu\Support\ArrayReader;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 use Exception;
 use GuzzleHttp\Client;
 use GuzzleHttp\ClientInterface;
@@ -218,7 +220,7 @@ class KeycloakUserRepository implements UserRepositoryInterface
         try {
             // Always set: a code that this repository made for another login must
             // not go with this one.
-            $this->provider->setPkceCode($pkceCode);
+            $this->provider->setPkceCode($pkceCode ?? '');
 
             $token = $this->provider->getAccessToken('authorization_code', [
                 'code' => $code,
@@ -283,7 +285,7 @@ class KeycloakUserRepository implements UserRepositoryInterface
      * @param string $username The user name (the claim `preferred_username`).
      * @param string $password Its password.
      * @param string|null $otp The code of its second factor, if it has one.
-     * @return array<string, mixed> What Keycloak gives: `refresh_token` is the offline
+     * @return array{refresh_token: string} What Keycloak gives: `refresh_token` is the offline
      * token.
      * @throws AuthenticationException If Keycloak does not accept the credentials, or
      * it does not give an offline token.
@@ -328,7 +330,15 @@ class KeycloakUserRepository implements UserRepositoryInterface
             // What is wrong with the user, when Keycloak says it. For a password that is
             // not valid, a code of the second factor that is not valid and one that is
             // missing it says the same, so the caller works out which is more likely.
-            $description = (string) ($answer['error_description'] ?? '');
+            try {
+                $description = ArrayReader::from($answer, 'Keycloak token response')->string('error_description', '');
+            } catch (TranslatableInvalidArgumentException $e) {
+                throw new AuthenticationException(
+                    ['Invalid response from Keycloak: {error}', 'error' => $e->getMessage()],
+                    400,
+                    $e
+                );
+            }
             if ($description === 'Account disabled') {
                 throw new AuthenticationException('Your user is disabled.', 403);
             }
@@ -346,6 +356,8 @@ class KeycloakUserRepository implements UserRepositoryInterface
         if (!is_string($token) || !TokenClaims::isOffline($token)) {
             throw new AuthenticationException('The token that Keycloak gave is not one for the API.', 400);
         }
+
+        $answer['refresh_token'] = $token;
 
         return $answer;
     }
@@ -388,7 +400,9 @@ class KeycloakUserRepository implements UserRepositoryInterface
      */
     public function getPkceCode(): ?string
     {
-        return $this->provider->getPkceCode();
+        $code = $this->provider->getPkceCode();
+
+        return $code === '' ? null : $code;
     }
 
     /**
@@ -470,11 +484,22 @@ class KeycloakUserRepository implements UserRepositoryInterface
      */
     public function createUser(array $userInfo, ?string $client = null): DerafuUserInterface
     {
-        $identity = $userInfo['sub']
-            ?? throw new AuthenticationException('User identity not found in keycloak user info.');
+        if (!isset($userInfo['sub'])) {
+            throw new AuthenticationException('User identity not found in keycloak user info.');
+        }
+
+        try {
+            $identity = ArrayReader::from($userInfo, 'Keycloak user info')->requireString('sub');
+        } catch (TranslatableInvalidArgumentException $e) {
+            throw new AuthenticationException(
+                ['Invalid response from Keycloak: {error}', 'error' => $e->getMessage()],
+                400,
+                $e
+            );
+        }
 
         return $this->userFactory->create(
-            (string) $identity,
+            $identity,
             $this->extractRoles($userInfo, $client ?? $this->config->getClientId()),
             $userInfo
         );

@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth\Fixture;
 
+use PHPUnit\Framework\Assert;
 use RuntimeException;
 
 /**
@@ -51,7 +52,11 @@ final class RealKeycloak
         if ($socket === false) {
             throw new RuntimeException('No free port: ' . $error);
         }
-        $port = (int) substr(strrchr((string) stream_socket_get_name($socket, false), ':'), 1);
+        $address = stream_socket_get_name($socket, false);
+        Assert::assertIsString($address);
+        $suffix = strrchr($address, ':');
+        Assert::assertIsString($suffix);
+        $port = (int) substr($suffix, 1);
         fclose($socket);
 
         $command = sprintf(

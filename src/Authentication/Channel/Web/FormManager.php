@@ -94,7 +94,7 @@ class FormManager implements FormManagerInterface
      * Gets the form definition.
      *
      * @param class-string<AuthFormInterface> $formType The form type.
-     * @return array The form definition.
+     * @return array<string, mixed> The form definition.
      */
     private function getFormDefinition(string $formType): array
     {

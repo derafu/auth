@@ -15,6 +15,7 @@ namespace Derafu\TestsAuth\Provider\Keycloak;
 use Derafu\Auth\AnonymousUser;
 use Derafu\Auth\Authentication\Channel\Web\SessionManager;
 use Derafu\Auth\Contract\AuthenticationInterface;
+use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier;
@@ -167,6 +168,7 @@ final class KeycloakRefreshTest extends TestCase
             $authentication,
             function (ServerRequestInterface $request) use (&$user): void {
                 $user = $request->getAttribute(MezzioUserInterface::class);
+                $this->assertTrue($user === null || $user instanceof UserInterface);
             }
         );
 
@@ -255,7 +257,9 @@ final class KeycloakRefreshTest extends TestCase
         [$response, $user] = $this->visit($authentication, $sid);
 
         $this->assertNull($user);
-        $this->assertStringStartsWith(self::$keycloak->url(), $response->getHeaderLine('Location'));
+        $url = self::$keycloak->url();
+        $this->assertTrue($url !== '');
+        $this->assertStringStartsWith($url, $response->getHeaderLine('Location'));
         foreach (['user', 'oauth2_token', 'oauth2_refresh_token', 'auth_checked_at'] as $key) {
             $this->assertArrayNotHasKey($key, $this->app->persistence->store[$sid]);
         }
@@ -272,7 +276,9 @@ final class KeycloakRefreshTest extends TestCase
         [$response, $user] = $this->visit($authentication, $sid);
 
         $this->assertNull($user);
-        $this->assertStringStartsWith(self::$keycloak->url(), $response->getHeaderLine('Location'));
+        $url = self::$keycloak->url();
+        $this->assertTrue($url !== '');
+        $this->assertStringStartsWith($url, $response->getHeaderLine('Location'));
         $this->assertArrayNotHasKey('user', $this->app->persistence->store[$sid]);
         $this->assertArrayNotHasKey('oauth2_refresh_token', $this->app->persistence->store[$sid]);
     }

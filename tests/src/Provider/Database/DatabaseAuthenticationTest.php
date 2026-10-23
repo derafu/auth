@@ -32,6 +32,7 @@ use Derafu\TestsAuth\Fixture\UsersDatabase;
 use Laminas\Diactoros\Response\RedirectResponse;
 use Mezzio\Flash\FlashMessageMiddleware;
 use Mezzio\Flash\FlashMessagesInterface;
+use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
@@ -48,7 +49,7 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
 #[UsesClass(\Derafu\Auth\Authentication\SameOrigin::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationManager::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Identification::class)]
-#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
+#[CoversClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebConfiguration::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\Flash::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
@@ -126,7 +127,13 @@ final class DatabaseAuthenticationTest extends TestCase
             $flash = $request->getAttribute(FlashMessageMiddleware::FLASH_ATTRIBUTE);
             $this->assertInstanceOf(FlashMessagesInterface::class, $flash);
             // The messages are data: what the session gives back is the same.
-            $result['flashes'] = json_decode((string) json_encode($flash->getFlashes()), true);
+            $flashes = json_decode((string) json_encode($flash->getFlashes()), true);
+            $this->assertIsArray($flashes);
+            $result['flashes'] = [];
+            foreach ($flashes as $key => $value) {
+                $this->assertIsString($key);
+                $result['flashes'][$key] = $value;
+            }
         });
 
         return $result;
@@ -219,6 +226,8 @@ final class DatabaseAuthenticationTest extends TestCase
 
         $session = $this->app->persistence->store[SessionApp::KNOWN];
         $this->assertSame('/private/page', $session['auth_redirect']);
+        Assert::assertIsArray($session[self::NEXT]);
+        Assert::assertIsArray($session[self::NEXT]['error']);
         $this->assertSame(
             [
                 'message' => 'You must be logged in to access the requested page {path}',
@@ -281,6 +290,7 @@ final class DatabaseAuthenticationTest extends TestCase
         $result = $this->authenticate($this->app->request('/auth/login')->withMethod('POST'));
 
         $this->assertTrue($result['user']?->isAnonymous());
+        Assert::assertIsArray($result['flashes']['error']);
         $this->assertSame(self::EXPIRED, $result['flashes']['error']['message']);
     }
 
@@ -313,6 +323,7 @@ final class DatabaseAuthenticationTest extends TestCase
         ));
 
         $this->assertTrue($result['user']?->isAnonymous());
+        Assert::assertIsArray($result['flashes']['error']);
         $this->assertSame(self::EXPIRED, $result['flashes']['error']['message']);
     }
 
@@ -342,6 +353,7 @@ final class DatabaseAuthenticationTest extends TestCase
         ));
 
         $this->assertTrue($result['user']?->isAnonymous());
+        Assert::assertIsArray($result['flashes']['error']);
         $this->assertSame(self::NO_CAPTCHA, $result['flashes']['error']['message']);
     }
 
@@ -365,6 +377,7 @@ final class DatabaseAuthenticationTest extends TestCase
         );
 
         $this->assertTrue($result['user']?->isAnonymous());
+        Assert::assertIsArray($result['flashes']['error']);
         $this->assertSame('Invalid form data.', $result['flashes']['error']['message']);
     }
 
@@ -410,6 +423,7 @@ final class DatabaseAuthenticationTest extends TestCase
         );
 
         $this->assertTrue($result['user']?->isAnonymous());
+        Assert::assertIsArray($result['flashes']['error']);
         $this->assertSame('Invalid identity or password.', $result['flashes']['error']['message']);
     }
 
@@ -428,11 +442,17 @@ final class DatabaseAuthenticationTest extends TestCase
         $this->assertCount(1, $this->app->persistence->store);
         $this->assertArrayNotHasKey(SessionApp::KNOWN, $this->app->persistence->store);
         $store = array_values($this->app->persistence->store)[0];
+        Assert::assertIsArray($store['user']);
         $this->assertSame('ana@example.com', $store['user']['identity']);
+        Assert::assertIsArray($store['user']);
         $this->assertSame(['admin'], $store['user']['roles']);
 
         // The session does not keep the hash of the password.
+        Assert::assertIsArray($store['user']);
+        $this->assertIsArray($store['user']['details']);
         $this->assertSame(['id', 'email', 'name', 'active'], array_keys($store['user']['details']));
+        Assert::assertIsArray($store[self::NEXT]);
+        Assert::assertIsArray($store[self::NEXT]['success']);
         $this->assertSame(
             ['message' => 'Successfully logged in.', 'parameters' => [], 'domain' => 'auth', 'defaultLocale' => null],
             $store[self::NEXT]['success']['value']
@@ -462,6 +482,9 @@ final class DatabaseAuthenticationTest extends TestCase
         $store = array_values($this->app->persistence->store)[0];
         $this->assertArrayNotHasKey('user', $store);
         $this->assertArrayNotHasKey('auth_redirect', $store);
+        Assert::assertIsArray($store[self::NEXT]);
+        Assert::assertIsArray($store[self::NEXT]['success']);
+        Assert::assertIsArray($store[self::NEXT]['success']['value']);
         $this->assertSame('The session has been closed successfully.', $store[self::NEXT]['success']['value']['message']);
     }
 
@@ -580,7 +603,7 @@ final class DatabaseAuthenticationTest extends TestCase
      * An authentication that limits the failed attempts to 3 in ten minutes, and
      * the repository that it uses, that counts the passwords that it checked.
      *
-     * @return array{AuthenticationInterface, object, ArrayAdapter}
+     * @return array{AuthenticationInterface, DatabaseUserRepository&object{checked: int}, ArrayAdapter}
      */
     private function throttled(): array
     {
@@ -618,6 +641,7 @@ final class DatabaseAuthenticationTest extends TestCase
      * A login attempt through the middlewares: the user and the flash messages.
      *
      * @return array{user: \Derafu\Auth\Contract\UserInterface|null, flashes: array<string, mixed>}
+     * @param array<non-empty-string, string> $headers
      */
     private function tryToLogIn(
         AuthenticationInterface $authentication,
@@ -640,9 +664,15 @@ final class DatabaseAuthenticationTest extends TestCase
 
         $this->app->handle($request, function (ServerRequestInterface $request) use ($authentication, &$result) {
             $result['user'] = $authentication->authenticate($request);
-            $result['flashes'] = json_decode((string) json_encode(
-                $request->getAttribute(FlashMessageMiddleware::FLASH_ATTRIBUTE)->getFlashes()
-            ), true);
+            $flash = $request->getAttribute(FlashMessageMiddleware::FLASH_ATTRIBUTE);
+            $this->assertInstanceOf(FlashMessagesInterface::class, $flash);
+            $flashes = json_decode((string) json_encode($flash->getFlashes()), true);
+            $this->assertIsArray($flashes);
+            $result['flashes'] = [];
+            foreach ($flashes as $key => $value) {
+                $this->assertIsString($key);
+                $result['flashes'][$key] = $value;
+            }
         });
 
         return $result;
@@ -661,6 +691,8 @@ final class DatabaseAuthenticationTest extends TestCase
 
         $blocked = $this->tryToLogIn($authentication, 'secret', address: '10.0.0.1', network: '203.0.113.9/32');
         $this->assertTrue($blocked['user']?->isAnonymous());
+        Assert::assertIsArray($blocked['flashes']['error']);
+        $this->assertIsString($blocked['flashes']['error']['message']);
         $this->assertStringContainsString('Too many failed login attempts', $blocked['flashes']['error']['message']);
 
         // The same client from another connection is still blocked, and another
@@ -682,6 +714,8 @@ final class DatabaseAuthenticationTest extends TestCase
 
         $blocked = $this->tryToLogIn($authentication, 'secret', headers: ['X-Forwarded-For' => '198.51.100.99']);
         $this->assertTrue($blocked['user']?->isAnonymous());
+        Assert::assertIsArray($blocked['flashes']['error']);
+        $this->assertIsString($blocked['flashes']['error']['message']);
         $this->assertStringContainsString('Too many failed login attempts', $blocked['flashes']['error']['message']);
     }
 
@@ -691,7 +725,9 @@ final class DatabaseAuthenticationTest extends TestCase
         [$authentication, $repository] = $this->throttled();
 
         foreach ([1, 2, 3] as $attempt) {
-            $this->assertSame('Invalid identity or password.', $this->tryToLogIn($authentication, 'wrong')['flashes']['error']['message']);
+            $attemptResult = $this->tryToLogIn($authentication, 'wrong');
+            $this->assertIsArray($attemptResult['flashes']['error']);
+            $this->assertSame('Invalid identity or password.', $attemptResult['flashes']['error']['message']);
         }
         $this->assertSame(3, $repository->checked);
 
@@ -847,7 +883,10 @@ final class DatabaseAuthenticationTest extends TestCase
 
     private function rememberedPage(): ?string
     {
-        return $this->app->persistence->store[SessionApp::KNOWN]['auth_redirect'] ?? null;
+        $redirect = $this->app->persistence->store[SessionApp::KNOWN]['auth_redirect'] ?? null;
+        $this->assertTrue($redirect === null || is_string($redirect));
+
+        return $redirect;
     }
 
     private function authenticationWithProtected(string $path): AuthenticationInterface
@@ -864,5 +903,25 @@ final class DatabaseAuthenticationTest extends TestCase
                 $config
             )
         );
+    }
+
+    public function testStringZeroCredentialsPassThroughTheTypedReaderAndAuthenticate(): void
+    {
+        $this->database->remove();
+        $this->database = new UsersDatabase([['identity' => '0', 'password' => '0', 'roles' => []]]);
+        $config = $this->database->config(['enabled' => true, 'protected_paths' => ['/private']]);
+        $this->authentication = Stack::database(
+            new DatabaseUserRepository($config),
+            $config,
+            new SessionManager(),
+            new FormManager(
+                new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
+                $this->app->processor(),
+                $config
+            )
+        );
+        $result = $this->authenticate($this->app->request('/auth/login', body: ['email' => '0', 'password' => '0']));
+
+        $this->assertSame('0', $this->identityOf($result));
     }
 }

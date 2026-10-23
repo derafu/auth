@@ -120,4 +120,17 @@ final class AuthExtensionTest extends TestCase
 
         return $path;
     }
+
+    #[Test]
+    public function roleChecksAcceptArrayContextsAndRejectMissingUsers(): void
+    {
+        $extension = new AuthExtension(new WebConfiguration());
+        $user = new User('ana', ['admin']);
+
+        $this->assertTrue($extension->isGranted(['app' => ['user' => $user]], 'admin'));
+        $this->assertTrue($extension->isGranted(['app' => ['user' => $user]], ['editor', 'admin']));
+        $this->assertFalse($extension->isGranted(['app' => ['user' => $user]], 'editor'));
+        $this->assertFalse($extension->isGranted(['app' => []], 'admin'));
+        $this->assertFalse($extension->isGranted([], 'admin'));
+    }
 }

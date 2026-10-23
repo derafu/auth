@@ -12,7 +12,6 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth\Provider\Keycloak;
 
-use Derafu\Auth\Account\Form\ApiTokenValueForm;
 use Derafu\Auth\Account\NewApiToken;
 use Derafu\Auth\Authentication\Channel\Web\FormManager;
 use Derafu\Auth\Exception\AuthenticationException;
@@ -21,18 +20,22 @@ use Derafu\Auth\Provider\Keycloak\Account\Form\ApiTokenForm;
 use Derafu\Auth\Provider\Keycloak\Account\KeycloakAccountClient;
 use Derafu\Auth\Provider\Keycloak\Account\KeycloakApiTokenManager;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
+use Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
 use Derafu\Auth\Provider\Keycloak\TokenClaims;
 use Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager;
 use Derafu\Auth\User;
+use Derafu\Form\Contract\FormInterface;
 use Derafu\Form\Factory\FormFactory;
 use Derafu\Form\Type\TypeProvider;
 use Derafu\Form\Type\TypeRegistry;
 use Derafu\Form\Type\TypeResolver;
 use Derafu\TestsAuth\Fixture\SessionApp;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 use GuzzleHttp\Client;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Middleware;
 use GuzzleHttp\Psr7\Response;
 use Mezzio\Authentication\UserInterface as MezzioUserInterface;
 use Mezzio\Session\Session;
@@ -41,32 +44,199 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
- * What the user is told when a token can not be made. Keycloak says the same for a
- * password that is not valid, for a code of the second factor that is not valid and
- * for one that is missing, so the message is worked out with what is known of the
- * user (if it has a second factor), and what Keycloak does tell (a user that is
- * disabled, or with actions pending) is said as it is.
+ * Token creation uses the real form processor and CSRF middleware. Controlled
+ * token endpoint responses exercise claims that a normal Keycloak never emits.
  */
 #[CoversClass(KeycloakApiTokenManager::class)]
-#[UsesClass(KeycloakConfiguration::class)]
-#[UsesClass(KeycloakUserRepository::class)]
-#[UsesClass(\Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier::class)]
-#[UsesClass(\Derafu\Auth\UserFactory::class)]
-#[UsesClass(KeycloakAccountClient::class)]
-#[UsesClass(KeycloakSessionManager::class)]
+#[CoversClass(NewApiToken::class)]
 #[UsesClass(FormManager::class)]
-#[UsesClass(ApiTokenForm::class)]
-#[UsesClass(ApiTokenValueForm::class)]
-#[UsesClass(NewApiToken::class)]
-#[UsesClass(TokenClaims::class)]
 #[UsesClass(AuthenticationException::class)]
 #[UsesClass(FormException::class)]
+#[CoversClass(ApiTokenForm::class)]
+#[UsesClass(KeycloakAccountClient::class)]
+#[UsesClass(KeycloakConfiguration::class)]
+#[UsesClass(KeycloakUserRepository::class)]
+#[UsesClass(KeycloakTokenVerifier::class)]
+#[UsesClass(TokenClaims::class)]
+#[UsesClass(KeycloakSessionManager::class)]
 #[UsesClass(User::class)]
+#[UsesClass(\Derafu\Auth\UserFactory::class)]
+#[UsesClass(\Derafu\Auth\Account\Form\ApiTokenValueForm::class)]
 final class KeycloakApiTokenManagerTest extends TestCase
 {
+    /** @var list<RequestInterface> */
+    private array $requests = [];
+
+    /**
+     * @param array<string, mixed> $claims
+     * @param array<string, mixed> $body
+     */
+    private function createToken(array $claims, array $body = ['password' => 'secret'], bool $authenticated = true): NewApiToken
+    {
+        $app = new SessionApp();
+        $config = new KeycloakConfiguration([
+            'keycloak_url' => 'https://keycloak.test',
+            'realm' => 'test',
+            'client_id' => 'app',
+            'client_secret' => 'secret',
+            'redirect_uri' => 'https://app.test/auth/callback',
+        ]);
+        $payload = json_encode($claims + ['typ' => 'Offline', 'sub' => 'user-1'], JSON_THROW_ON_ERROR);
+        $token = 'eyJhbGciOiJIUzI1NiJ9.' . rtrim(strtr(base64_encode($payload), '+/', '-_'), '=') . '.signature';
+        $stack = HandlerStack::create(new MockHandler([
+            new Response(200, [], json_encode(['refresh_token' => $token], JSON_THROW_ON_ERROR)),
+        ]));
+        $stack->push(Middleware::mapRequest(function (RequestInterface $request): RequestInterface {
+            $this->requests[] = $request;
+            return $request;
+        }));
+        $http = new Client(['handler' => $stack]);
+        $manager = new KeycloakApiTokenManager(
+            new KeycloakUserRepository($config, httpClient: $http),
+            new KeycloakAccountClient($config, $http),
+            new KeycloakSessionManager(),
+            new FormManager(
+                new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
+                $app->processor(),
+                $config
+            )
+        );
+        $request = $app->request('/auth/profile/tokens', body: [], csrf: false, captcha: false)
+            ->withParsedBody($body + [FormInterface::CSRF_FIELD => $app->token(null, 'api_token')]);
+        if ($authenticated) {
+            $request = $request->withAttribute(MezzioUserInterface::class, new User('user-1', [], ['preferred_username' => 'otto']));
+        }
+        $result = null;
+        $app->handle($request, function (ServerRequestInterface $request) use ($manager, &$result): void {
+            $result = $manager->create($request, new Session([]));
+        });
+        $this->assertInstanceOf(NewApiToken::class, $result);
+
+        return $result;
+    }
+
+    #[Test]
+    public function aRequestWithoutAnAuthenticatedUserDoesNotCallKeycloak(): void
+    {
+        try {
+            $this->createToken([], authenticated: false);
+            $this->fail('Token creation requires an authenticated user.');
+        } catch (AuthenticationException $e) {
+            $this->assertSame(401, $e->getCode());
+            $this->assertSame('There is no user in the session.', $e->getMessage());
+            $this->assertSame([], $this->requests);
+        }
+    }
+
+    #[Test]
+    public function aTokenForAnotherUserCannotBeReturnedToTheSessionUser(): void
+    {
+        try {
+            $this->createToken(['sub' => 'another-user']);
+            $this->fail('A token belonging to another user must not be returned.');
+        } catch (AuthenticationException $e) {
+            $this->assertSame(400, $e->getCode());
+            $this->assertSame('The token is not for the user of this session.', $e->getMessage());
+            $this->assertCount(1, $this->requests);
+        }
+    }
+
+    /** @param array<string, mixed> $claims */
+    #[Test]
+    #[DataProvider('validDates')]
+    public function optionalDatesArePreservedWithoutCoercion(array $claims, ?int $createdAt, ?int $expiresAt): void
+    {
+        $result = $this->createToken($claims);
+
+        $this->assertSame($createdAt, $result->createdAt);
+        $this->assertSame($expiresAt, $result->expiresAt);
+        $this->assertSame($claims + ['typ' => 'Offline', 'sub' => 'user-1'], TokenClaims::of($result->value));
+    }
+
+    /** @return iterable<string, array{array<string, mixed>, int|null, int|null}> */
+    public static function validDates(): iterable
+    {
+        yield 'missing dates' => [[], null, null];
+        yield 'null dates' => [['iat' => null, 'exp' => null], null, null];
+        yield 'integer dates' => [['iat' => 1700000000, 'exp' => 1800000000], 1700000000, 1800000000];
+        yield 'zero is not missing' => [['iat' => 0, 'exp' => 0], 0, 0];
+    }
+
+    #[Test]
+    #[DataProvider('invalidDates')]
+    public function malformedDatesReportTheClaimAndKeepTheReaderException(string $field, mixed $value): void
+    {
+        try {
+            $this->createToken([$field => $value]);
+            $this->fail('A malformed date must not create an API token.');
+        } catch (AuthenticationException $e) {
+            $this->assertSame(400, $e->getCode());
+            $this->assertStringContainsString('The API token has invalid claims:', $e->getMessage());
+            $this->assertInstanceOf(TranslatableInvalidArgumentException::class, $e->getPrevious());
+            $this->assertStringContainsString($field, $e->getPrevious()->getMessage());
+            $this->assertCount(1, $this->requests);
+        }
+    }
+
+    /** @return iterable<string, array{string, mixed}> */
+    public static function invalidDates(): iterable
+    {
+        foreach (['iat', 'exp'] as $field) {
+            foreach (['numeric string' => '1700000000', 'boolean' => true, 'float' => 1700000000.5, 'array' => []] as $type => $value) {
+                yield $field . ' as ' . $type => [$field, $value];
+            }
+        }
+    }
+
+    #[Test]
+    public function passwordZeroAndTrimmedOtpReachTheTokenEndpoint(): void
+    {
+        $this->createToken([], ['password' => '0', 'totp' => ' 123456 ']);
+        $this->assertCount(1, $this->requests);
+        parse_str((string) $this->requests[0]->getBody(), $parameters);
+
+        $this->assertSame('0', $parameters['password']);
+        $this->assertSame('123456', $parameters['totp']);
+        $this->assertSame('otto', $parameters['username']);
+        $this->assertSame('openid offline_access', $parameters['scope']);
+    }
+
+    /** @param array<string, mixed> $body */
+    #[Test]
+    #[DataProvider('optionalOtp')]
+    public function anOptionalOtpDoesNotSendAnEmptyParameter(array $body): void
+    {
+        $this->createToken([], ['password' => 'secret'] + $body);
+        $this->assertCount(1, $this->requests);
+        parse_str((string) $this->requests[0]->getBody(), $parameters);
+
+        $this->assertArrayNotHasKey('totp', $parameters);
+    }
+
+    /** @return iterable<string, array{array<string, mixed>}> */
+    public static function optionalOtp(): iterable
+    {
+        yield 'absent' => [[]];
+        yield 'empty' => [['totp' => '']];
+        yield 'whitespace' => [['totp' => '   ']];
+    }
+
+    #[Test]
+    public function anArrayOtpIsRejectedByTheFormBeforeCallingKeycloak(): void
+    {
+        try {
+            $this->createToken([], ['password' => 'secret', 'totp' => ['123456']]);
+            $this->fail('The form must reject an array OTP.');
+        } catch (FormException $e) {
+            $this->assertSame(400, $e->getCode());
+            $this->assertSame([], $this->requests);
+        }
+    }
+
     private const NOT_VALID = 'The password is not valid.';
 
     private const CODE_MISSING = 'The password is not valid, or the code of the second factor is missing (your user has one).';

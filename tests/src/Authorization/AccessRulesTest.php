@@ -16,6 +16,7 @@ use Derafu\Auth\Authorization\AccessRules;
 use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Routing\ValueObject\Route;
 use Derafu\Routing\ValueObject\RouteMatch;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 use Laminas\Diactoros\ServerRequest;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -316,5 +317,36 @@ final class AccessRulesTest extends TestCase
         // Only a real true counts: a text is not a promise.
         $this->assertFalse($rules->requiresAuthentication($this->requestOfRoute('/page', [AccessRules::REQUIRES_USER => 'yes'])));
         $this->assertFalse($rules->requiresAuthentication(new ServerRequest([], [], 'https://app.test/page', 'GET')));
+    }
+
+    #[DataProvider('invalidConfiguredRoles')]
+    public function testConfiguredRolesRejectNonStringValues(mixed $roles): void
+    {
+        $this->expectException(TranslatableInvalidArgumentException::class);
+        $this->expectExceptionMessage('protected_paths');
+
+        $this->config(['/admin' => $roles]);
+    }
+
+    /** @return iterable<string, array{mixed}> */
+    public static function invalidConfiguredRoles(): iterable
+    {
+        yield 'integer role' => [123];
+        yield 'boolean role' => [true];
+        yield 'null role' => [null];
+        yield 'float role' => [1.5];
+        yield 'integer in array' => [['admin', 123]];
+        yield 'null in array' => [['admin', null]];
+        yield 'nested array' => [[['admin']]];
+    }
+
+    public function testConfiguredRoleArraysKeepTheirKeysAndValues(): void
+    {
+        $roles = [2 => 'admin', 'secondary' => 'editor', 8 => 'reader'];
+        $rules = $this->config(['/admin' => $roles, '/private' => [], '/staff' => 'staff']);
+
+        $this->assertSame($roles, $rules->rolesOf('/admin/users'));
+        $this->assertSame([], $rules->rolesOf('/private/page'));
+        $this->assertSame(['staff'], $rules->rolesOf('/staff/page'));
     }
 }

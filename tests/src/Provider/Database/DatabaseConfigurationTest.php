@@ -14,10 +14,14 @@ namespace Derafu\TestsAuth\Provider\Database;
 
 use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Auth\Provider\Database\DatabaseConfiguration;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use stdClass;
+use Stringable;
 
 /**
  * The configuration of the database provider: where the database is and how its
@@ -217,5 +221,126 @@ final class DatabaseConfigurationTest extends TestCase
             'database_url' => 'sqlite::memory:',
             'user_repository' => ['field' => ['active' => 'active; DROP TABLE user']],
         ]);
+    }
+
+    /** @return iterable<string, array{array<string, mixed>, string}> */
+    public static function invalidConfigurationTypes(): iterable
+    {
+        $values = [
+            'boolean' => false,
+            'integer' => 0,
+            'float' => 1.5,
+            'array' => [],
+            'object' => new stdClass(),
+            'Stringable' => new class () implements Stringable {
+                public function __toString(): string
+                {
+                    return 'user';
+                }
+            },
+        ];
+        foreach ($values as $type => $value) {
+            foreach (['database_url', 'project_dir'] as $key) {
+                yield $key . ' as ' . $type => [[$key => $value], $key];
+            }
+            foreach (['table', 'sql_get_roles', 'sql_get_details'] as $key) {
+                yield $key . ' as ' . $type => [['user_repository' => [$key => $value]], $key];
+            }
+            foreach (['identity', 'password', 'active'] as $key) {
+                yield $key . ' as ' . $type => [['user_repository' => ['field' => [$key => $value]]], $key];
+            }
+            if ($value !== false) {
+                yield 'sql_is_active as ' . $type => [['user_repository' => ['sql_is_active' => $value]], 'sql_is_active'];
+            }
+        }
+        yield 'sql_is_active as true' => [['user_repository' => ['sql_is_active' => true]], 'sql_is_active'];
+
+        foreach (['string' => 'user', 'boolean' => false, 'integer' => 0, 'object' => new stdClass()] as $type => $value) {
+            yield 'user_repository as ' . $type => [['user_repository' => $value], 'user_repository'];
+            yield 'field as ' . $type => [['user_repository' => ['field' => $value]], 'field'];
+        }
+    }
+
+    /** @param array<string, mixed> $values */
+    #[DataProvider('invalidConfigurationTypes')]
+    public function testRejectsInvalidTypesBeforeBuildingQueries(array $values, string $key): void
+    {
+        $this->expectException(TranslatableInvalidArgumentException::class);
+        $this->expectExceptionMessage('"' . $key . '"');
+
+        new DatabaseConfiguration($values);
+    }
+
+    public function testNullValuesKeepTheDefaultUrlNamesAndQueries(): void
+    {
+        $config = new DatabaseConfiguration([
+            'database_url' => null,
+            'project_dir' => null,
+            'user_repository' => [
+                'table' => null,
+                'field' => ['identity' => null, 'password' => null, 'active' => null],
+                'sql_get_roles' => null,
+                'sql_get_details' => null,
+                'sql_is_active' => null,
+            ],
+        ]);
+
+        $this->assertSame('', $config->getDatabaseUrl());
+        $this->assertSame((new DatabaseConfiguration([]))->getUserRepository(), $config->getUserRepository());
+    }
+
+    public function testNullRepositoryAndNullFieldsKeepTheDefaults(): void
+    {
+        $defaults = (new DatabaseConfiguration([]))->getUserRepository();
+
+        $this->assertSame($defaults, (new DatabaseConfiguration(['user_repository' => null]))->getUserRepository());
+        $this->assertSame($defaults, (new DatabaseConfiguration(['user_repository' => ['field' => null]]))->getUserRepository());
+    }
+
+    public function testEmptyRoleAndDetailQueriesArePreserved(): void
+    {
+        $config = new DatabaseConfiguration([
+            'user_repository' => ['sql_get_roles' => '', 'sql_get_details' => ''],
+        ]);
+
+        $this->assertSame('', $config->getUserRepository()['sql_get_roles']);
+        $this->assertSame('', $config->getUserRepository()['sql_get_details']);
+    }
+
+    /** @return iterable<string, array{string|false|null, string|null}> */
+    public static function activeQueryOptions(): iterable
+    {
+        yield 'null uses the default' => [null, 'SELECT active FROM user WHERE email = :identity'];
+        yield 'empty string uses the default' => ['', 'SELECT active FROM user WHERE email = :identity'];
+        yield 'false disables the check' => [false, null];
+        yield 'false text disables the check' => ['false', null];
+        yield 'mixed case and spaces disable the check' => ['  FaLsE  ', null];
+        yield 'custom query keeps its spaces' => [' SELECT 1 ', ' SELECT 1 '];
+        yield 'zero remains a query string' => ['0', '0'];
+    }
+
+    #[DataProvider('activeQueryOptions')]
+    public function testPreservesTheActiveQueryPolicy(string|false|null $value, ?string $expected): void
+    {
+        $config = new DatabaseConfiguration(['user_repository' => ['sql_is_active' => $value]]);
+
+        $this->assertSame($expected, $config->getUserRepository()['sql_is_active']);
+    }
+
+    /** @return iterable<string, array{string|null}> */
+    public static function emptyProjectDirectories(): iterable
+    {
+        yield 'null' => [null];
+        yield 'empty string' => [''];
+        yield 'string zero' => ['0'];
+    }
+
+    #[DataProvider('emptyProjectDirectories')]
+    public function testEmptyProjectDirectoriesKeepTheUrlPlaceholder(?string $directory): void
+    {
+        $url = 'sqlite:%kernel.project_dir%/users.db';
+        $config = new DatabaseConfiguration(['database_url' => $url, 'project_dir' => $directory]);
+
+        $this->assertSame($url, $config->getDatabaseUrl());
     }
 }

@@ -19,6 +19,8 @@ use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
 use Derafu\Auth\Provider\Keycloak\TokenClaims;
+use Derafu\Support\ArrayReader;
+use Derafu\Support\ArrayType;
 use Firebase\JWT\BeforeValidException;
 use Firebase\JWT\ExpiredException;
 use Firebase\JWT\SignatureInvalidException;
@@ -154,11 +156,15 @@ class KeycloakBearerScheme extends BearerScheme
         // valid.
         $cached = $this->cache?->getItem($key);
         if ($cached !== null && $cached->isHit()) {
-            try {
-                return $this->userOfAccessToken((string) $cached->get());
-            } catch (AuthenticationException) {
-                $this->cache->deleteItem($key);
+            $accessToken = $cached->get();
+            if (is_string($accessToken)) {
+                try {
+                    return $this->userOfAccessToken($accessToken);
+                } catch (AuthenticationException) {
+                    // A cached token that is no longer valid must be exchanged again.
+                }
             }
+            $this->cache->deleteItem($key);
         }
 
         try {
@@ -166,13 +172,16 @@ class KeycloakBearerScheme extends BearerScheme
         } catch (AuthenticationException $e) {
             throw new AuthenticationException('Keycloak did not accept the offline token.', 401, $e);
         }
-        $user = $this->userOfAccessToken($tokens['access_token']);
+        $user = $this->userOfAccessToken(
+            ArrayReader::from($tokens)->require('access_token', ArrayType::string())
+        );
 
-        if ($this->cache !== null && isset($tokens['expires'])) {
+        $expires = ArrayReader::from($tokens)->int('expires');
+        if ($this->cache !== null && $expires !== null) {
             $this->cache->save(
                 $this->cache->getItem($key)
                     ->set($tokens['access_token'])
-                    ->expiresAt(new DateTimeImmutable('@' . ((int) $tokens['expires'] - self::MARGIN)))
+                    ->expiresAt(new DateTimeImmutable('@' . ($expires - self::MARGIN)))
             );
         }
 

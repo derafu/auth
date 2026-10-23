@@ -121,7 +121,10 @@ final class ApiChannelTest extends TestCase
         try {
             $channel->unauthorizedResponse($request);
         } catch (AuthenticationException $e) {
-            return $e->getHeaders()['WWW-Authenticate'] ?? '';
+            $header = $e->getHeaders()['WWW-Authenticate'] ?? '';
+            $this->assertIsString($header);
+
+            return $header;
         }
 
         $this->fail('unauthorizedResponse() did not throw.');

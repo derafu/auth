@@ -20,6 +20,7 @@ use Derafu\Form\Type\TypeProvider;
 use Derafu\Form\Type\TypeRegistry;
 use Derafu\Form\Type\TypeResolver;
 use Derafu\Translation\TranslatorFactory;
+use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
@@ -38,9 +39,14 @@ final class LoginFormTest extends TestCase
     {
         $definition = (new LoginForm())->getDefinition();
 
+        Assert::assertIsArray($definition['schema']);
+        Assert::assertIsArray($definition['schema']['properties']);
         $this->assertSame(['username', 'password'], array_keys($definition['schema']['properties']));
+        Assert::assertIsArray($definition['schema']);
         $this->assertSame(['username', 'password'], $definition['schema']['required']);
+        Assert::assertIsArray($definition['schema']);
         $this->assertSame('login', $definition['schema']['name']);
+        Assert::assertIsArray($definition['options']);
         $this->assertTrue($definition['options']['captcha_protection']);
         // The definition is made once.
         $this->assertSame($definition, (new LoginForm())->getDefinition());
@@ -58,9 +64,21 @@ final class LoginFormTest extends TestCase
         $spanish = $create('es');
         $english = $create('en');
 
+        Assert::assertIsArray($spanish['schema']);
+        Assert::assertIsArray($spanish['schema']['properties']);
+        Assert::assertIsArray($spanish['schema']['properties']['username']);
         $this->assertSame('Usuario', $spanish['schema']['properties']['username']['title']);
+        Assert::assertIsArray($spanish['schema']);
+        Assert::assertIsArray($spanish['schema']['properties']);
+        Assert::assertIsArray($spanish['schema']['properties']['password']);
         $this->assertSame('Contraseña', $spanish['schema']['properties']['password']['title']);
+        Assert::assertIsArray($english['schema']);
+        Assert::assertIsArray($english['schema']['properties']);
+        Assert::assertIsArray($english['schema']['properties']['username']);
         $this->assertSame('Username', $english['schema']['properties']['username']['title']);
+        Assert::assertIsArray($english['schema']);
+        Assert::assertIsArray($english['schema']['properties']);
+        Assert::assertIsArray($english['schema']['properties']['password']);
         $this->assertSame('Password', $english['schema']['properties']['password']['title']);
     }
 }

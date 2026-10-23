@@ -14,10 +14,14 @@ namespace Derafu\Auth\Tests\Provider\Keycloak;
 
 use Derafu\Auth\Authentication\Channel\Web\WebConfiguration;
 use Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 use Mezzio\Session\Session;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
+use Stringable;
 
 /**
  * Tests for KeycloakSessionManager.
@@ -379,5 +383,56 @@ class KeycloakSessionManagerTest extends TestCase
         $this->assertSame($redirectUrl, $this->sessionManager->getRedirectUrl($session));
         $this->assertNull($this->sessionManager->getState($session)); // Should be cleared
         $this->assertFalse($this->sessionManager->isRefreshDue($session, null));
+    }
+
+    /** @return iterable<string, array{string, mixed}> */
+    public static function invalidStoredTokens(): iterable
+    {
+        $values = [
+            'array' => [], 'boolean' => false, 'integer' => 0,
+            'float' => 1.5, 'object' => new stdClass(),
+            'Stringable' => new class () implements Stringable {
+                public function __toString(): string
+                {
+                    return 'token';
+                }
+            },
+        ];
+        foreach (['oauth2_refresh_token', 'oauth2_state', 'oauth2_nonce', 'oauth2_pkce', 'oauth2_id_token'] as $key) {
+            foreach ($values as $type => $value) {
+                yield $key . ' as ' . $type => [$key, $value];
+            }
+        }
+    }
+
+    private function storedLoginValue(Session $session, string $key): ?string
+    {
+        return match ($key) {
+            'oauth2_refresh_token' => $this->sessionManager->getRefreshToken($session),
+            'oauth2_state' => $this->sessionManager->getState($session),
+            'oauth2_nonce' => $this->sessionManager->getNonce($session),
+            'oauth2_pkce' => $this->sessionManager->getPkceCode($session),
+            'oauth2_id_token' => $this->sessionManager->getIdToken($session),
+            default => $this->fail('Unknown session key: ' . $key),
+        };
+    }
+
+    #[DataProvider('invalidStoredTokens')]
+    public function testRejectsNonStringLoginDataInTheSession(string $key, mixed $value): void
+    {
+        $this->expectException(TranslatableInvalidArgumentException::class);
+        $this->expectExceptionMessage('"' . $key . '"');
+
+        $this->storedLoginValue(new Session([$key => $value]), $key);
+    }
+
+    public function testOptionalLoginDataAndExactStringValuesArePreserved(): void
+    {
+        foreach (['oauth2_refresh_token', 'oauth2_state', 'oauth2_nonce', 'oauth2_pkce', 'oauth2_id_token'] as $key) {
+            $this->assertNull($this->storedLoginValue(new Session([]), $key));
+            foreach ([null, '', '0', ' token '] as $value) {
+                $this->assertSame($value, $this->storedLoginValue(new Session([$key => $value]), $key));
+            }
+        }
     }
 }

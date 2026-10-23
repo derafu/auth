@@ -17,6 +17,9 @@ use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\ProviderUnavailableException;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\TokenClaims;
+use Derafu\Support\ArrayReader;
+use Derafu\Support\ArrayType;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 use Exception;
 use GuzzleHttp\Client;
 use GuzzleHttp\ClientInterface;
@@ -69,33 +72,45 @@ class KeycloakAccountClient
      */
     public function tokens(string $accessToken): array
     {
-        $online = [];
-        foreach ($this->get($accessToken, '/sessions') as $session) {
-            $online[(string) ($session['id'] ?? '')] = true;
-        }
-
-        $tokens = [];
-        foreach ($this->get($accessToken, '/sessions/devices') as $device) {
-            foreach ($device['sessions'] ?? [] as $session) {
-                $id = (string) ($session['id'] ?? '');
-                if ($id === '' || isset($online[$id]) || !$this->isOfThisClient($session)) {
-                    continue;
-                }
-
-                $tokens[] = new ApiToken(
-                    $id,
-                    (int) ($session['started'] ?? 0),
-                    (int) ($session['lastAccess'] ?? 0),
-                    (int) ($session['expires'] ?? 0),
-                    isset($session['ipAddress']) ? (string) $session['ipAddress'] : null,
-                    isset($session['browser']) && $session['browser'] !== self::UNKNOWN_BROWSER ? (string) $session['browser'] : null
-                );
+        try {
+            $online = [];
+            foreach ($this->get($accessToken, '/sessions') as $session) {
+                $reader = new ArrayReader($session, 'sessions', 'Keycloak account API');
+                $online[$reader->string('id', '')] = true;
             }
+
+            $tokens = [];
+            foreach ($this->get($accessToken, '/sessions/devices') as $device) {
+                $deviceReader = new ArrayReader($device, 'devices', 'Keycloak account API');
+                foreach ($this->records($deviceReader->array('sessions') ?? [], 'devices.sessions') as $session) {
+                    $reader = new ArrayReader($session, 'session', 'Keycloak account API');
+                    $id = $reader->string('id', '');
+                    if ($id === '' || isset($online[$id]) || !$this->isOfThisClient($session)) {
+                        continue;
+                    }
+
+                    $browser = $reader->string('browser');
+                    $tokens[] = new ApiToken(
+                        $id,
+                        $reader->int('started', 0),
+                        $reader->int('lastAccess', 0),
+                        $reader->int('expires', 0),
+                        $reader->string('ipAddress'),
+                        $browser !== self::UNKNOWN_BROWSER ? $browser : null
+                    );
+                }
+            }
+
+            usort($tokens, fn (ApiToken $a, ApiToken $b) => $b->createdAt <=> $a->createdAt);
+
+            return $tokens;
+        } catch (TranslatableInvalidArgumentException $e) {
+            throw new AuthenticationException(
+                ['Invalid response from the Keycloak account API: {error}', 'error' => $e->getMessage()],
+                400,
+                $e
+            );
         }
-
-        usort($tokens, fn (ApiToken $a, ApiToken $b) => $b->createdAt <=> $a->createdAt);
-
-        return $tokens;
     }
 
     /**
@@ -162,7 +177,8 @@ class KeycloakAccountClient
      */
     private function isOfThisClient(array $session): bool
     {
-        foreach ($session['clients'] ?? [] as $client) {
+        $reader = new ArrayReader($session, 'session', 'Keycloak account API');
+        foreach ($this->records($reader->array('clients') ?? [], 'session.clients') as $client) {
             if (($client['clientId'] ?? null) === $this->config->getClientId()) {
                 return true;
             }
@@ -181,7 +197,9 @@ class KeycloakAccountClient
      */
     private function requireRole(string $accessToken, string $role): void
     {
-        $roles = TokenClaims::of($accessToken)['resource_access'][self::ACCOUNT_CLIENT]['roles'] ?? [];
+        $resources = TokenClaims::of($accessToken)['resource_access'] ?? null;
+        $account = is_array($resources) ? ($resources[self::ACCOUNT_CLIENT] ?? null) : null;
+        $roles = is_array($account) ? ($account['roles'] ?? null) : null;
         if (is_array($roles) && in_array($role, $roles, true)) {
             return;
         }
@@ -220,14 +238,48 @@ class KeycloakAccountClient
 
         $answer = $this->request('GET', $accessToken, $path);
 
-        if ($answer['status'] !== 200 || !is_array($answer['body'])) {
+        if ($answer['status'] !== 200) {
             throw new AuthenticationException(
                 ['Keycloak did not let the sessions be read (HTTP status {status}).', 'status' => $answer['status']],
                 $answer['status'] === 401 || $answer['status'] === 403 ? 403 : 400
             );
         }
 
-        return array_values($answer['body']);
+        try {
+            $body = ArrayReader::from(['body' => $answer['body']], 'Keycloak account API')->requireArray('body');
+
+            return $this->records($body, $path);
+        } catch (TranslatableInvalidArgumentException $e) {
+            throw new AuthenticationException(
+                ['Invalid response from the Keycloak account API: {error}', 'error' => $e->getMessage()],
+                400,
+                $e
+            );
+        }
+    }
+
+    /**
+     * Validates a collection of records without requiring consecutive keys.
+     *
+     * @param array<array-key, mixed> $items
+     * @return list<array<string, mixed>>
+     * @throws TranslatableInvalidArgumentException If a record is not an array with string keys.
+     */
+    private function records(array $items, string $path): array
+    {
+        $records = [];
+        foreach ($items as $index => $item) {
+            $recordPath = ArrayType::path($path, $index);
+            $fields = ArrayType::array()->parse($item, $recordPath, 'Keycloak account API');
+            $record = [];
+            foreach ($fields as $key => $value) {
+                $key = ArrayType::string()->parse($key, $recordPath . '.key', 'Keycloak account API');
+                $record[$key] = $value;
+            }
+            $records[] = $record;
+        }
+
+        return $records;
     }
 
     /**

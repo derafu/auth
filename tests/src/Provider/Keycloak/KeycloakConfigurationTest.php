@@ -14,11 +14,14 @@ namespace Derafu\TestsAuth\Provider\Keycloak;
 
 use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use stdClass;
+use Stringable;
 
 /**
  * The configuration of Keycloak: where the realm is, what the tokens must say,
@@ -116,7 +119,9 @@ final class KeycloakConfigurationTest extends TestCase
     #[Test]
     public function theRequestsToKeycloakSayWhoMakesThem(): void
     {
-        $this->assertSame('Derafu Auth (app)', $this->config()->getHttpClientOptions()['headers']['User-Agent']);
+        $options = $this->config()->getHttpClientOptions();
+        $this->assertIsArray($options['headers']);
+        $this->assertSame('Derafu Auth (app)', $options['headers']['User-Agent']);
         $this->assertSame('Derafu Auth (app)', $this->config()->getUserAgent());
     }
 
@@ -276,5 +281,190 @@ final class KeycloakConfigurationTest extends TestCase
         $config = $this->config(['api_client_id' => 'billing-api', 'api_audience' => 'app']);
 
         $this->assertSame('app', $config->getApiAudience());
+    }
+
+    /** @return iterable<string, array{string, mixed}> */
+    public static function invalidConfigurationTypes(): iterable
+    {
+        $stringable = new class () implements Stringable {
+            public function __toString(): string
+            {
+                return 'openid';
+            }
+        };
+        $nonStrings = [
+            'boolean' => false,
+            'integer' => 0,
+            'float' => 1.5,
+            'array' => [],
+            'object' => new stdClass(),
+            'Stringable' => $stringable,
+        ];
+        foreach ([
+            'keycloak_url', 'realm', 'client_id', 'client_secret', 'redirect_uri',
+            'callback_path', 'issuer', 'post_logout_redirect_uri',
+            'api_audience', 'api_client_id', 'api_client_secret',
+        ] as $key) {
+            foreach ($nonStrings as $type => $value) {
+                yield $key . ' as ' . $type => [$key, $value];
+            }
+        }
+        foreach (['end_session', 'api_introspection'] as $key) {
+            foreach ([
+                'string' => 'false', 'integer' => 0, 'float' => 1.5,
+                'array' => [], 'object' => new stdClass(), 'Stringable' => $stringable,
+            ] as $type => $value) {
+                yield $key . ' as ' . $type => [$key, $value];
+            }
+        }
+        foreach (['scopes', 'http_client_options'] as $key) {
+            foreach ([
+                'string' => 'openid', 'boolean' => false, 'integer' => 0,
+                'float' => 1.5, 'object' => new stdClass(), 'Stringable' => $stringable,
+            ] as $type => $value) {
+                yield $key . ' as ' . $type => [$key, $value];
+            }
+        }
+    }
+
+    #[DataProvider('invalidConfigurationTypes')]
+    public function testRejectsConfigurationValuesOfTheWrongType(string $key, mixed $value): void
+    {
+        $this->expectException(TranslatableInvalidArgumentException::class);
+        $this->expectExceptionMessage('"' . $key . '"');
+
+        new KeycloakConfiguration([$key => $value]);
+    }
+
+    /** @return iterable<string, array{mixed}> */
+    public static function invalidScopeValues(): iterable
+    {
+        yield 'null' => [null];
+        yield 'boolean' => [false];
+        yield 'integer' => [1];
+        yield 'float' => [1.5];
+        yield 'array' => [[]];
+        yield 'object' => [new stdClass()];
+        yield 'Stringable' => [new class () implements Stringable {
+            public function __toString(): string
+            {
+                return 'profile';
+            }
+        }];
+    }
+
+    #[DataProvider('invalidScopeValues')]
+    public function testRejectsNonStringScopeElements(mixed $value): void
+    {
+        $this->expectException(TranslatableInvalidArgumentException::class);
+        $this->expectExceptionMessage('"invalid" of Keycloak scopes');
+
+        new KeycloakConfiguration(['scopes' => ['openid', 'invalid' => $value]]);
+    }
+
+    /** @return iterable<string, array{array<array-key, string>}> */
+    public static function scopeArrays(): iterable
+    {
+        yield 'empty array' => [[]];
+        yield 'list' => [['openid', 'profile', 'email']];
+        yield 'named and numeric keys' => [['first' => 'profile', 7 => 'openid', 0 => 'email']];
+        yield 'empty and zero strings' => [['', '0']];
+        yield 'duplicate values' => [['openid', 'openid']];
+    }
+
+    /** @param array<array-key, string> $scopes */
+    #[DataProvider('scopeArrays')]
+    public function testScopesKeepTheirKeysOrderAndValues(array $scopes): void
+    {
+        $this->assertSame($scopes, (new KeycloakConfiguration(['scopes' => $scopes]))->getScopes());
+    }
+
+    public function testNullValuesKeepAllConfigurationDefaults(): void
+    {
+        $config = new KeycloakConfiguration(array_fill_keys([
+            'keycloak_url', 'realm', 'client_id', 'client_secret', 'redirect_uri',
+            'scopes', 'callback_path', 'http_client_options', 'issuer',
+            'end_session', 'post_logout_redirect_uri', 'api_audience',
+            'api_introspection', 'api_client_id', 'api_client_secret',
+        ], null));
+
+        $this->assertSame('', $config->getKeycloakUrl());
+        $this->assertSame('master', $config->getRealm());
+        $this->assertSame('', $config->getClientId());
+        $this->assertSame('', $config->getClientSecret());
+        $this->assertSame('', $config->getRedirectUri());
+        $this->assertSame(['openid', 'profile', 'email'], $config->getScopes());
+        $this->assertSame('/auth/callback', $config->getCallbackPath());
+        $this->assertSame((new KeycloakConfiguration([]))->getHttpClientOptions(), $config->getHttpClientOptions());
+        $this->assertSame($config->getRealmUrl(), $config->getIssuer());
+        $this->assertTrue($config->isEndSession());
+        $this->assertTrue($config->isApiIntrospection());
+        $this->assertSame('', $config->getApiAudience());
+        $this->assertSame('', $config->getApiClientId());
+        $this->assertSame('', $config->getApiClientSecret());
+        $this->assertSame(
+            'https://app.example.com:8443/bye',
+            $this->config(['post_logout_redirect_uri' => null])->getPostLogoutRedirectUri('/bye')
+        );
+    }
+
+    public function testExplicitBooleansArePreserved(): void
+    {
+        foreach ([false, true] as $value) {
+            $config = new KeycloakConfiguration(['end_session' => $value, 'api_introspection' => $value]);
+
+            $this->assertSame($value, $config->isEndSession());
+            $this->assertSame($value, $config->isApiIntrospection());
+        }
+    }
+
+    public function testApiIdentifiersAreTrimmedAndTheirSecretIsPreserved(): void
+    {
+        $config = $this->config([
+            'api_audience' => '  billing  ',
+            'api_client_id' => '  api-client  ',
+            'api_client_secret' => '  secret  ',
+        ]);
+
+        $this->assertSame('billing', $config->getApiAudience());
+        $this->assertSame('api-client', $config->getApiClientId());
+        $this->assertSame('  secret  ', $config->getApiClientSecret());
+    }
+
+    public function testEmptyApiOptionsKeepTheApplicationClientFallback(): void
+    {
+        $config = $this->config(['api_audience' => '', 'api_client_id' => '', 'api_client_secret' => '']);
+
+        $this->assertSame('app', $config->getApiAudience());
+        $this->assertSame('app', $config->getApiClientId());
+        $this->assertSame('secret', $config->getApiClientSecret());
+    }
+
+    public function testHttpOptionsKeepTheirSupportedValueTypesAndDefaults(): void
+    {
+        $options = $this->config(['http_client_options' => [
+            'timeout' => 0.5,
+            'connect_timeout' => null,
+            'verify' => '/etc/ssl/custom.pem',
+            'allow_redirects' => false,
+            'proxy' => ['https' => 'http://proxy.example.com'],
+            'headers' => ['User-Agent' => 'My app', 'X-Values' => ['a', 'b']],
+        ]])->getHttpClientOptions();
+
+        $this->assertSame([
+            'timeout' => 0.5,
+            'verify' => '/etc/ssl/custom.pem',
+            'allow_redirects' => false,
+            'proxy' => ['https' => 'http://proxy.example.com'],
+            'headers' => ['User-Agent' => 'My app', 'X-Values' => ['a', 'b']],
+            'connect_timeout' => 30,
+        ], $options);
+    }
+
+    public function testAccountUrlUsesTheConfiguredRealmWithoutADuplicateSlash(): void
+    {
+        $config = $this->config(['keycloak_url' => 'https://auth.example.com/']);
+
+        $this->assertSame('https://auth.example.com/realms/derafu/account', $config->getAccountUrl());
     }
 }

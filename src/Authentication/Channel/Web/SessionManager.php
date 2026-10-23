@@ -14,6 +14,8 @@ namespace Derafu\Auth\Authentication\Channel\Web;
 
 use Derafu\Auth\Contract\SessionManagerInterface;
 use Derafu\Auth\Exception\AuthenticationException;
+use Derafu\Support\ArrayReader;
+use Derafu\Support\ArrayType;
 use Mezzio\Session\SessionInterface;
 
 /**
@@ -54,7 +56,14 @@ class SessionManager implements SessionManagerInterface
             return true;
         }
 
-        return $interval !== null && (int) $checkedAt + $interval <= time();
+        if ($interval === null) {
+            return false;
+        }
+
+        $checkedAt = ArrayReader::from(['auth_checked_at' => $checkedAt])
+            ->require('auth_checked_at', ArrayType::int());
+
+        return $checkedAt + $interval <= time();
     }
 
     /**
@@ -101,7 +110,19 @@ class SessionManager implements SessionManagerInterface
      */
     public function getUserInfo(SessionInterface $session): ?array
     {
-        return $session->get('user');
+        $userInfo = ArrayReader::from(['user' => $session->get('user')])->array('user');
+        if ($userInfo === null) {
+            return null;
+        }
+
+        $validated = [];
+        foreach ($userInfo as $key => $value) {
+            $key = ArrayReader::from(['key' => $key], 'session user')
+                ->require('key', ArrayType::string());
+            $validated[$key] = $value;
+        }
+
+        return $validated;
     }
 
     /**
@@ -126,7 +147,8 @@ class SessionManager implements SessionManagerInterface
      */
     public function getRedirectUrl(SessionInterface $session): ?string
     {
-        return $session->get('auth_redirect');
+        return ArrayReader::from(['auth_redirect' => $session->get('auth_redirect')])
+            ->string('auth_redirect');
     }
 
     /**

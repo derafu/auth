@@ -14,6 +14,7 @@ namespace Derafu\TestsAuth\Provider\Htpasswd;
 
 use Derafu\Auth\Authentication\Channel\Web\FormManager;
 use Derafu\Auth\Authentication\Channel\Web\SessionManager;
+use Derafu\Auth\Authentication\Channel\Web\WebConfiguration;
 use Derafu\Auth\Authentication\LoginThrottle;
 use Derafu\Auth\Contract\AuthenticationInterface;
 use Derafu\Auth\Contract\UserInterface;
@@ -29,10 +30,14 @@ use Derafu\TestsAuth\Fixture\CustomUserFactory;
 use Derafu\TestsAuth\Fixture\HtpasswdFile;
 use Derafu\TestsAuth\Fixture\SessionApp;
 use Derafu\TestsAuth\Fixture\Stack;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 use Laminas\Diactoros\Response\RedirectResponse;
 use Mezzio\Flash\FlashMessageMiddleware;
 use Mezzio\Flash\FlashMessagesInterface;
+use Mezzio\Session\Session;
+use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
@@ -46,9 +51,11 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
  * is read again every `refresh_interval` seconds.
  */
 #[CoversClass(HtpasswdWebFlow::class)]
+#[UsesClass(\Derafu\Auth\Authentication\AuthenticationMiddleware::class)]
+#[UsesClass(\Derafu\Auth\Authentication\SameOrigin::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationManager::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Identification::class)]
-#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
+#[CoversClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebConfiguration::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\Flash::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
@@ -113,6 +120,7 @@ final class HtpasswdAuthenticationTest extends TestCase
      * identifier of the session.
      *
      * @return array{user: UserInterface|null, flashes: array<string, mixed>, sid: string}
+     * @param array<non-empty-string, string> $headers
      */
     private function logIn(
         AuthenticationInterface $authentication,
@@ -136,7 +144,13 @@ final class HtpasswdAuthenticationTest extends TestCase
                 $result['user'] = $authentication->authenticate($request);
                 $flash = $request->getAttribute(FlashMessageMiddleware::FLASH_ATTRIBUTE);
                 $this->assertInstanceOf(FlashMessagesInterface::class, $flash);
-                $result['flashes'] = json_decode((string) json_encode($flash->getFlashes()), true);
+                $flashes = json_decode((string) json_encode($flash->getFlashes()), true);
+                $this->assertIsArray($flashes);
+                $result['flashes'] = [];
+                foreach ($flashes as $key => $value) {
+                    $this->assertIsString($key);
+                    $result['flashes'][$key] = $value;
+                }
 
                 return null;
             }
@@ -187,6 +201,7 @@ final class HtpasswdAuthenticationTest extends TestCase
             $result = $this->logIn($authentication, $identity, $password);
 
             $this->assertTrue($result['user']?->isAnonymous());
+            Assert::assertIsArray($result['flashes']['error']);
             $this->assertSame('Invalid identity or password.', $result['flashes']['error']['message']);
         }
         $this->assertArrayNotHasKey('user', $this->app->persistence->store[SessionApp::KNOWN]);
@@ -207,6 +222,7 @@ final class HtpasswdAuthenticationTest extends TestCase
 
         $blank = $this->logIn($authentication, '', 'secret');
         $this->assertTrue($blank['user']?->isAnonymous());
+        Assert::assertIsArray($blank['flashes']['error']);
         $this->assertSame('Invalid form data.', $blank['flashes']['error']['message']);
 
         $noBody = null;
@@ -232,6 +248,8 @@ final class HtpasswdAuthenticationTest extends TestCase
         // Blocked: not even the right password is checked.
         $result = $this->logIn($authentication, 'ana', 'secret');
         $this->assertTrue($result['user']?->isAnonymous());
+        Assert::assertIsArray($result['flashes']['error']);
+        Assert::assertIsString($result['flashes']['error']['message']);
         $this->assertStringContainsString('Too many failed login attempts', $result['flashes']['error']['message']);
 
         // Another address is not blocked.
@@ -279,6 +297,8 @@ final class HtpasswdAuthenticationTest extends TestCase
 
         $blocked = $this->logIn($authentication, 'ana', 'secret', headers: ['X-Forwarded-For' => '198.51.100.99']);
         $this->assertTrue($blocked['user']?->isAnonymous());
+        Assert::assertIsArray($blocked['flashes']['error']);
+        Assert::assertIsString($blocked['flashes']['error']['message']);
         $this->assertStringContainsString('Too many failed login attempts', $blocked['flashes']['error']['message']);
     }
 
@@ -346,6 +366,8 @@ final class HtpasswdAuthenticationTest extends TestCase
                     }
                 }
             );
+
+            $this->assertNotNull($result);
 
             return $result;
         };
@@ -436,5 +458,98 @@ final class HtpasswdAuthenticationTest extends TestCase
 
         $this->assertSame('ana', $user?->getIdentity());
         $this->assertEqualsWithDelta(time(), $this->app->persistence->store[$sid]['auth_checked_at'], 2);
+    }
+
+    private function sessionFlow(): HtpasswdWebFlow
+    {
+        $config = $this->file->config();
+
+        return new HtpasswdWebFlow(
+            new HtpasswdUserRepository($config),
+            $config,
+            new WebConfiguration(['refresh_interval' => 300]),
+            new SessionManager(),
+            new FormManager(
+                new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
+                $this->app->processor(),
+                $config
+            )
+        );
+    }
+
+    /** @return iterable<string, array{array<string, mixed>}> */
+    public static function invalidSessionIdentities(): iterable
+    {
+        yield 'absent' => [['other' => 'value']];
+        foreach (['null' => null, 'integer' => 1, 'boolean' => false, 'float' => 1.5, 'array' => []] as $type => $value) {
+            yield $type => [['identity' => $value]];
+        }
+    }
+
+    /** @param array<string, mixed> $userInfo */
+    #[DataProvider('invalidSessionIdentities')]
+    public function testRejectsInvalidSessionIdentitiesBeforeReuseOrRefresh(array $userInfo): void
+    {
+        $flow = $this->sessionFlow();
+        foreach ([time(), time() - 301] as $checkedAt) {
+            try {
+                $flow->userFromSession(new Session(['user' => $userInfo, 'auth_checked_at' => $checkedAt]));
+                $this->fail('The identity must be a required string.');
+            } catch (TranslatableInvalidArgumentException $e) {
+                $this->assertStringContainsString('"identity"', $e->getMessage());
+            }
+        }
+    }
+
+    public function testSessionIdentityIsReusedWithoutLookingUpTheFile(): void
+    {
+        $user = $this->sessionFlow()->userFromSession(new Session([
+            'user' => ['identity' => '0'],
+            'auth_checked_at' => time(),
+        ]));
+
+        $this->assertNotNull($user);
+        $this->assertSame('0', $user->getIdentity());
+    }
+
+    public function testAStringZeroPasswordPassesThroughTheTypedReaderAndAuthenticates(): void
+    {
+        $this->file->write(['ana' => '0']);
+        $result = $this->logIn($this->authentication(), 'ana', '0');
+
+        $this->assertNotNull($result['user']);
+        $this->assertSame('ana', $result['user']->getIdentity());
+        $this->assertFalse($result['user']->isAnonymous());
+    }
+
+    public function testAbsentNullAndEmptySessionUsersAreNotReconstructed(): void
+    {
+        $flow = $this->sessionFlow();
+        foreach ([[], ['user' => null], ['user' => []]] as $data) {
+            $this->assertNull($flow->userFromSession(new Session($data)));
+        }
+    }
+
+    #[Test]
+    public function logoutDestroysTheAuthenticatedSessionAndUsesTheLocalRedirect(): void
+    {
+        $authentication = $this->authentication();
+        $login = $this->logIn($authentication, 'ana', 'secret');
+        $this->assertNotNull($login['user']);
+        $sid = $login['sid'];
+
+        $response = $this->app->handleAuthenticated(
+            $this->app->request('/auth/logout', body: [], sid: $sid, headers: ['Sec-Fetch-Site' => 'same-origin']),
+            $authentication,
+            function (): void {
+                $this->fail('The logout must be handled by the authentication.');
+            }
+        );
+
+        $this->assertSame('/', $response->getHeaderLine('Location'));
+        $newSid = $this->app->sessionId($response);
+        $this->assertNotSame($sid, $newSid);
+        $this->assertArrayNotHasKey($sid, $this->app->persistence->store);
+        $this->assertArrayNotHasKey('user', $this->app->persistence->store[$newSid]);
     }
 }

@@ -13,6 +13,8 @@ declare(strict_types=1);
 namespace Derafu\Auth\Authentication\Channel\Web;
 
 use Derafu\Auth\Exception\ConfigurationException;
+use Derafu\Support\ArrayReader;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 
 /**
  * The configuration of the web channel: the session of a user, and where it is
@@ -68,14 +70,22 @@ class WebConfiguration
      * that `$config` does not give (`AuthProviderInterface::webDefaults()`): a
      * provider with a login page of the site sends the user there.
      * @throws ConfigurationException If the refresh interval is not valid.
+     * @throws TranslatableInvalidArgumentException If an effective path is not a string.
      */
     public function __construct(array $config = [], array $defaults = [])
     {
-        $this->loginPath = $config['login_path'] ?? $defaults['login_path'] ?? $this->loginPath;
-        $this->logoutPath = $config['logout_path'] ?? $defaults['logout_path'] ?? $this->logoutPath;
-        $this->loginRedirectPath = $config['login_redirect_path'] ?? $defaults['login_redirect_path'] ?? $this->loginRedirectPath;
-        $this->logoutRedirectPath = $config['logout_redirect_path'] ?? $defaults['logout_redirect_path'] ?? $this->logoutRedirectPath;
-        $this->unauthorizedRedirectPath = $config['unauthorized_redirect_path'] ?? $defaults['unauthorized_redirect_path'] ?? $this->unauthorizedRedirectPath;
+        $paths = ArrayReader::from([
+            'login_path' => $config['login_path'] ?? $defaults['login_path'] ?? $this->loginPath,
+            'logout_path' => $config['logout_path'] ?? $defaults['logout_path'] ?? $this->logoutPath,
+            'login_redirect_path' => $config['login_redirect_path'] ?? $defaults['login_redirect_path'] ?? $this->loginRedirectPath,
+            'logout_redirect_path' => $config['logout_redirect_path'] ?? $defaults['logout_redirect_path'] ?? $this->logoutRedirectPath,
+            'unauthorized_redirect_path' => $config['unauthorized_redirect_path'] ?? $defaults['unauthorized_redirect_path'] ?? $this->unauthorizedRedirectPath,
+        ]);
+        $this->loginPath = $paths->string('login_path', $this->loginPath);
+        $this->logoutPath = $paths->string('logout_path', $this->logoutPath);
+        $this->loginRedirectPath = $paths->string('login_redirect_path', $this->loginRedirectPath);
+        $this->logoutRedirectPath = $paths->string('logout_redirect_path', $this->logoutRedirectPath);
+        $this->unauthorizedRedirectPath = $paths->string('unauthorized_redirect_path', $this->unauthorizedRedirectPath);
 
         // Every how many seconds the user of a session is asked to the provider
         // again (its roles, that it still exists). 0 or not given: the provider

@@ -34,6 +34,7 @@ use Firebase\JWT\JWT;
 use GuzzleHttp\Psr7\HttpFactory;
 use Laminas\Diactoros\Response\RedirectResponse;
 use Mezzio\Authentication\UserInterface as MezzioUserInterface;
+use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
@@ -231,8 +232,12 @@ final class KeycloakFlowTest extends TestCase
         $this->assertNotSame(SessionApp::KNOWN, $this->app->sessionId($response));
         $this->assertArrayNotHasKey(SessionApp::KNOWN, $this->app->persistence->store);
         $session = $this->session($response);
+        Assert::assertIsArray($session['user']);
         $this->assertSame('ana@example.com', $session['user']['email']);
+        Assert::assertIsArray($session['user']);
         $this->assertSame('ana', $session['user']['preferred_username']);
+        Assert::assertIsArray($session['user']);
+        Assert::assertIsArray($session['user']['realm_access']);
         $this->assertSame(['admin'], $session['user']['realm_access']['roles'] ?? []);
         $this->assertNotEmpty($session['oauth2_token']);
         $this->assertNotEmpty($session['oauth2_refresh_token']);
@@ -241,6 +246,9 @@ final class KeycloakFlowTest extends TestCase
         foreach (['oauth2_state', 'oauth2_nonce', 'oauth2_pkce', 'auth_redirect'] as $key) {
             $this->assertArrayNotHasKey($key, $session);
         }
+        Assert::assertIsArray($session[self::NEXT]);
+        Assert::assertIsArray($session[self::NEXT]['success']);
+        Assert::assertIsArray($session[self::NEXT]['success']['value']);
         $this->assertSame('Successfully logged in.', $session[self::NEXT]['success']['value']['message']);
     }
 
@@ -280,7 +288,9 @@ final class KeycloakFlowTest extends TestCase
         $response = $this->logIn($authentication, $controller);
 
         $this->assertSame('/private/page?tab=2', $response->getHeaderLine('Location'));
-        $this->assertSame('ana@example.com', $this->session($response)['user']['email']);
+        $session = $this->session($response);
+        $this->assertIsArray($session['user']);
+        $this->assertSame('ana@example.com', $session['user']['email']);
     }
 
     #[Test]
@@ -368,6 +378,9 @@ final class KeycloakFlowTest extends TestCase
         // The same tokens, for an application that is another client of the realm.
         [, , $other] = $this->keycloak(config: ['client_id' => 'another-client']);
 
+        $this->assertIsString($session['oauth2_token']);
+        $this->assertIsString($session['oauth2_id_token']);
+        $this->assertIsString($nonce);
         foreach ([
             fn () => $other->getUserInfoFromToken($session['oauth2_token']),
             fn () => $other->verifyIdToken($session['oauth2_id_token'], $nonce),
@@ -476,6 +489,7 @@ final class KeycloakFlowTest extends TestCase
             $this->handleCallback($authentication, $controller, $query);
             $this->fail('It should have failed.');
         } catch (AuthenticationException $e) {
+            $this->assertTrue($message !== '');
             $this->assertStringStartsWith($message, $e->getMessage());
         }
 
@@ -566,6 +580,9 @@ final class KeycloakFlowTest extends TestCase
         foreach (['user', 'oauth2_token', 'oauth2_refresh_token', 'oauth2_id_token', 'auth_redirect'] as $key) {
             $this->assertArrayNotHasKey($key, $session);
         }
+        Assert::assertIsArray($session[self::NEXT]);
+        Assert::assertIsArray($session[self::NEXT]['success']);
+        Assert::assertIsArray($session[self::NEXT]['success']['value']);
         $this->assertSame('The session has been closed successfully.', $session[self::NEXT]['success']['value']['message']);
 
         // Keycloak ends the session and sends the user back to the application.
@@ -576,6 +593,7 @@ final class KeycloakFlowTest extends TestCase
         // And it is really over: the refresh token does not work, and the login
         // asks for the password again.
         try {
+            $this->assertIsString($before['oauth2_refresh_token']);
             $repository->refreshToken($before['oauth2_refresh_token']);
             $this->fail('The session of Keycloak should have ended.');
         } catch (AuthenticationException $e) {
@@ -662,6 +680,7 @@ final class KeycloakFlowTest extends TestCase
         $this->assertNotSame($before['oauth2_token'], $session['oauth2_token']);
         $this->assertNotEmpty($session['oauth2_id_token']);
         $this->assertGreaterThan(time(), $session['oauth2_expiry']);
+        Assert::assertIsArray($session['user']);
         $this->assertSame('ana@example.com', $session['user']['email']);
     }
 
@@ -695,7 +714,9 @@ final class KeycloakFlowTest extends TestCase
         );
 
         // The user goes to Keycloak, and the session has no user.
-        $this->assertStringStartsWith(self::$keycloak->url(), $response->getHeaderLine('Location'));
+        $url = self::$keycloak->url();
+        $this->assertTrue($url !== '');
+        $this->assertStringStartsWith($url, $response->getHeaderLine('Location'));
         $this->assertArrayNotHasKey('user', $this->app->persistence->store['old']);
     }
 
@@ -715,7 +736,6 @@ final class KeycloakFlowTest extends TestCase
 
         $this->expectException(AuthenticationException::class);
         $this->expectExceptionMessageMatches('/^Failed to validate the token: /');
-
         $repository->getUserInfoFromToken($token);
     }
 
@@ -728,6 +748,7 @@ final class KeycloakFlowTest extends TestCase
     {
         [$authentication, $controller] = $this->keycloak();
         $sid = $this->app->sessionId($this->logIn($authentication, $controller));
+        $this->assertIsString($this->app->persistence->store[$sid]['oauth2_token']);
 
         return [
             $this->app->persistence->store[$sid]['oauth2_token'],
@@ -866,6 +887,7 @@ final class KeycloakFlowTest extends TestCase
         // The same token, an hour later (and more than the leeway of the clocks).
         JWT::$timestamp = time() + 3600;
         try {
+            $this->assertIsString($token);
             $repository->getUserInfoFromToken($token);
             $this->fail('It should have failed.');
         } catch (AuthenticationException $e) {

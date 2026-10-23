@@ -18,6 +18,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
+use SplFileInfo;
 
 /**
  * The messages tell the user which environment variable to set, so every name
@@ -36,6 +37,7 @@ final class EnvironmentNamesTest extends TestCase
         $names = [];
         $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS));
         foreach ($files as $file) {
+            $this->assertInstanceOf(SplFileInfo::class, $file);
             if ($file->getExtension() !== $extension) {
                 continue;
             }

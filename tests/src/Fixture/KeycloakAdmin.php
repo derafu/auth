@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Derafu\TestsAuth\Fixture;
 
 use GuzzleHttp\Client;
+use PHPUnit\Framework\Assert;
 use RuntimeException;
 
 /**
@@ -90,6 +91,8 @@ final class KeycloakAdmin
     {
         $users = $this->request('GET', '/users?username=' . rawurlencode($username) . '&exact=true');
         if ($users !== []) {
+            Assert::assertIsArray($users[0]);
+            Assert::assertIsString($users[0]['id']);
             $this->request('DELETE', '/users/' . $users[0]['id']);
         }
     }
@@ -222,14 +225,22 @@ final class KeycloakAdmin
     {
         $clients = $this->request('GET', '/clients?clientId=' . rawurlencode($client));
 
-        return $clients[0]['id'] ?? throw new RuntimeException('The client "' . $client . '" is not in the realm.');
+        Assert::assertIsArray($clients[0]);
+        $id = $clients[0]['id'] ?? throw new RuntimeException('The client "' . $client . '" is not in the realm.');
+        Assert::assertIsString($id);
+
+        return $id;
     }
 
     private function userId(string $username): string
     {
         $users = $this->request('GET', '/users?username=' . rawurlencode($username) . '&exact=true');
 
-        return $users[0]['id'] ?? throw new RuntimeException('The user "' . $username . '" is not in the realm.');
+        Assert::assertIsArray($users[0]);
+        $id = $users[0]['id'] ?? throw new RuntimeException('The user "' . $username . '" is not in the realm.');
+        Assert::assertIsString($id);
+
+        return $id;
     }
 
     /**
@@ -285,7 +296,9 @@ final class KeycloakAdmin
                 'password' => 'admin',
             ],
         ]);
-        $token = json_decode((string) $response->getBody(), true)['access_token'] ?? null;
+        $answer = json_decode((string) $response->getBody(), true);
+        Assert::assertIsArray($answer);
+        $token = $answer['access_token'] ?? null;
 
         return is_string($token) ? $token : throw new RuntimeException('Keycloak did not give a token to the administrator.');
     }

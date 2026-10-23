@@ -12,9 +12,11 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Authentication\Channel\Web;
 
+use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Translation\Contract\TranslatableMessageInterface;
 use Derafu\Translation\TranslatableMessage;
 use Mezzio\Flash\FlashMessageMiddleware;
+use Mezzio\Flash\FlashMessagesInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
@@ -30,11 +32,17 @@ final class Flash
     /**
      * Gets the flash messages of the request.
      *
-     * @return mixed The flash messages or null if not available.
+     * @return FlashMessagesInterface|null The flash messages or null if not available.
+     * @throws ConfigurationException If the request contains an invalid flash service.
      */
-    public static function of(ServerRequestInterface $request): mixed
+    public static function of(ServerRequestInterface $request): ?FlashMessagesInterface
     {
-        return $request->getAttribute(FlashMessageMiddleware::FLASH_ATTRIBUTE);
+        $flash = $request->getAttribute(FlashMessageMiddleware::FLASH_ATTRIBUTE);
+        if ($flash !== null && !$flash instanceof FlashMessagesInterface) {
+            throw new ConfigurationException('The flash request attribute must implement Mezzio\\Flash\\FlashMessagesInterface.');
+        }
+
+        return $flash;
     }
 
     /**
@@ -54,17 +62,15 @@ final class Flash
         bool $now = false
     ): void {
         $flash = self::of($request);
-        if (!$flash) {
+        if ($flash === null) {
             return;
         }
 
         $message = self::message($message, $parameters);
 
         if ($now) {
-            if (method_exists($flash, 'flashNow')) {
-                $flash->flashNow('error', $message, 0);
-            }
-        } elseif (method_exists($flash, 'flash')) {
+            $flash->flashNow('error', $message, 0);
+        } else {
             $flash->flash('error', $message);
         }
     }
@@ -86,17 +92,15 @@ final class Flash
         bool $now = false
     ): void {
         $flash = self::of($request);
-        if (!$flash) {
+        if ($flash === null) {
             return;
         }
 
         $message = self::message($message, $parameters);
 
         if ($now) {
-            if (method_exists($flash, 'addFlashNow')) {
-                $flash->addFlashNow('success', $message, 0);
-            }
-        } elseif (method_exists($flash, 'flash')) {
+            $flash->flashNow('success', $message, 0);
+        } else {
             $flash->flash('success', $message);
         }
     }

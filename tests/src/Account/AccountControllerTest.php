@@ -84,7 +84,7 @@ use Twig\TwigFunction;
 #[UsesClass(ApiTokenForm::class)]
 #[UsesClass(FormManager::class)]
 #[UsesClass(NewApiToken::class)]
-#[UsesClass(\Derafu\Auth\Account\Form\ApiTokenValueForm::class)]
+#[CoversClass(\Derafu\Auth\Account\Form\ApiTokenValueForm::class)]
 final class AccountControllerTest extends TestCase
 {
     private const ROOT = __DIR__ . '/../../..';
@@ -143,6 +143,7 @@ final class AccountControllerTest extends TestCase
 
     /**
      * @param array<string, mixed> $query
+     * @param array<non-empty-string, string|list<string>> $headers
      */
     private function request(
         string $method = 'GET',
@@ -470,5 +471,26 @@ final class AccountControllerTest extends TestCase
                 return [['label' => new TranslatableMessage('Language', [], 'auth'), 'value' => 'es']];
             }
         };
+    }
+
+    #[Test]
+    public function theProfileRequiresASessionEvenWhenTheUserIsAuthenticated(): void
+    {
+        $request = $this->request()->withoutAttribute(SessionMiddleware::SESSION_ATTRIBUTE);
+        $this->expectException(AuthenticationException::class);
+        $this->expectExceptionCode(400);
+        $this->expectExceptionMessage('The request has no session.');
+
+        $this->controller()->profile($request);
+    }
+
+    #[Test]
+    public function theProfileShowsOnlyTheStartOfTheSessionIdentifier(): void
+    {
+        $id = '0123456789abcdef0123456789abcdef';
+        $html = $this->controller()->profile($this->request(session: new Session([], $id)));
+
+        $this->assertStringContainsString('01234567', $html);
+        $this->assertStringNotContainsString($id, $html);
     }
 }

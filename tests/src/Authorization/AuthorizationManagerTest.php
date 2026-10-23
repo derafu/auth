@@ -45,7 +45,7 @@ final class AuthorizationManagerTest extends TestCase
     }
 
     /**
-     * @param array<string> $roles
+     * @param list<string> $roles
      */
     private function route(array $roles): RouteMatch
     {
@@ -128,6 +128,7 @@ final class AuthorizationManagerTest extends TestCase
     public function aValueThatIsNotARouteMatchIsNotARoute(): void
     {
         $route = new class () {
+            /** @return list<string> */
             public function getRoles(): array
             {
                 return ['admin'];

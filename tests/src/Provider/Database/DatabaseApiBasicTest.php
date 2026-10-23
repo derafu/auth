@@ -38,17 +38,18 @@ use PHPUnit\Framework\TestCase;
  * provider: what every provider does with it, and what is of the database (the
  * roles, the users that are not active).
  */
+#[CoversClass(\Derafu\Auth\Exception\TooManyAttemptsException::class)]
 #[CoversClass(DatabaseWebFlow::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationManager::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Identification::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebConfiguration::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\Flash::class)]
-#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
+#[CoversClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiConfiguration::class)]
 #[UsesClass(\Derafu\Auth\Authorization\AccessRules::class)]
-#[UsesClass(\Derafu\Auth\Authentication\Channel\Api\Scheme\BasicScheme::class)]
-#[UsesClass(\Derafu\Auth\Provider\Database\Api\DatabaseBasicScheme::class)]
+#[CoversClass(\Derafu\Auth\Authentication\Channel\Api\Scheme\BasicScheme::class)]
+#[CoversClass(\Derafu\Auth\Provider\Database\Api\DatabaseBasicScheme::class)]
 #[UsesClass(\Derafu\Auth\AnonymousUser::class)]
 #[UsesClass(\Derafu\Auth\Authorization\AuthorizationManager::class)]
 #[UsesClass(FormManager::class)]
@@ -61,7 +62,6 @@ use PHPUnit\Framework\TestCase;
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationMiddleware::class)]
 #[UsesClass(\Derafu\Auth\Exception\AuthenticationException::class)]
-#[UsesClass(\Derafu\Auth\Exception\TooManyAttemptsException::class)]
 final class DatabaseApiBasicTest extends TestCase
 {
     use ApiBasicTests;
@@ -158,7 +158,10 @@ final class DatabaseApiBasicTest extends TestCase
         $authorization = new AuthorizationManager($rules);
         $request = $this->app->request('/api/admin/users');
 
-        $this->assertTrue($authorization->isGranted((string) $user?->getRoles()[0], $request));
+        $this->assertNotNull($user);
+        $roles = $user->getRoles();
+        $this->assertIsArray($roles);
+        $this->assertTrue($authorization->isGranted($roles[0], $request));
         $this->assertFalse($authorization->isGranted('editor', $request));
         $this->assertFalse($authorization->isGranted('admin', $this->app->request('/api/billing/x')));
     }

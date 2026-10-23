@@ -20,10 +20,6 @@ use Mezzio\Authentication\UserInterface as MezzioUserInterface;
  * Provides a clear contract for user entities while maintaining full
  * compatibility with Mezzio's authentication system.
  *
- * @method string getIdentity()
- * @method iterable getRoles()
- * @method mixed getDetail(string $name, mixed $default = null)
- * @method array getDetails()
  */
 interface UserInterface extends MezzioUserInterface
 {

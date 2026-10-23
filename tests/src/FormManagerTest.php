@@ -65,7 +65,15 @@ final class FormManagerTest extends TestCase
     private function solved(string $formId = 'login'): string
     {
         preg_match('/ challenge="([^"]*)"/', $this->captcha->getWidget($formId), $matches);
-        $challenge = Challenge::fromArray(json_decode(html_entity_decode($matches[1], ENT_QUOTES), true));
+        $this->assertTrue(isset($matches[1]));
+        $data = json_decode(html_entity_decode($matches[1], ENT_QUOTES), true);
+        $this->assertIsArray($data);
+        $decoded = [];
+        foreach ($data as $key => $value) {
+            $this->assertIsString($key);
+            $decoded[$key] = $value;
+        }
+        $challenge = Challenge::fromArray($decoded);
         $solution = (new Altcha(hmacSignatureSecret: 'a-secret-key'))->solveChallenge(new SolveChallengeOptions(
             algorithm: new Pbkdf2(),
             challenge: $challenge,
@@ -227,5 +235,15 @@ final class FormManagerTest extends TestCase
         $this->expectException(FormException::class);
 
         $this->manager()->processForm(LoginForm::class, []);
+    }
+
+    #[Test]
+    public function anObjectFormDefinitionReceivesItsInitialData(): void
+    {
+        $definition = new LoginForm(Stack::databaseConfiguration(['database_url' => 'sqlite::memory:']));
+        $form = $this->manager()->createForm($definition, ['email' => 'ana@example.com']);
+
+        $this->assertSame(['email', 'password'], array_keys($form->getFields()));
+        $this->assertSame(['email' => 'ana@example.com'], $form->getData()?->toArray());
     }
 }

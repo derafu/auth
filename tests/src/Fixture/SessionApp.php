@@ -34,6 +34,7 @@ use Laminas\Diactoros\ServerRequest;
 use Laminas\Diactoros\Uri;
 use Mezzio\Flash\FlashMessageMiddleware;
 use Mezzio\Session\SessionMiddleware;
+use PHPUnit\Framework\Assert;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
@@ -153,11 +154,21 @@ final class SessionApp
     public function solvedCaptcha(string $formId = 'login'): string
     {
         preg_match('/ challenge="([^"]*)"/', $this->captcha->getWidget($formId), $matches);
-        $challenge = Challenge::fromArray(json_decode(html_entity_decode($matches[1], ENT_QUOTES), true));
+        Assert::assertTrue(isset($matches[1]));
+        $data = json_decode(html_entity_decode($matches[1], ENT_QUOTES), true);
+        Assert::assertIsArray($data);
+        $decoded = [];
+        foreach ($data as $key => $value) {
+            Assert::assertIsString($key);
+            $decoded[$key] = $value;
+        }
+        $challenge = Challenge::fromArray($decoded);
         $solution = (new Altcha(hmacSignatureSecret: self::CAPTCHA_SECRET))->solveChallenge(new SolveChallengeOptions(
             algorithm: new Pbkdf2(),
             challenge: $challenge,
         ));
+
+        Assert::assertNotNull($solution);
 
         return (new Payload($challenge, $solution))->toBase64();
     }

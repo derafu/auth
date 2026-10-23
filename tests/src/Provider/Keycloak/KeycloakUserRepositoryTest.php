@@ -16,10 +16,15 @@ use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\ProviderUnavailableException;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
+use Derafu\Auth\User;
+use Derafu\Auth\UserFactory;
 use Derafu\TestsAuth\Fixture\Stack;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
+use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Middleware;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use League\OAuth2\Client\Provider\GenericProvider;
@@ -28,6 +33,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
+use Psr\Http\Message\RequestInterface;
 use ReflectionClass;
 use Throwable;
 
@@ -38,6 +44,8 @@ use Throwable;
 #[UsesClass(\Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier::class)]
 #[CoversClass(KeycloakConfiguration::class)]
 #[CoversClass(AuthenticationException::class)]
+#[UsesClass(User::class)]
+#[UsesClass(UserFactory::class)]
 class KeycloakUserRepositoryTest extends TestCase
 {
     private KeycloakConfiguration $config;
@@ -206,7 +214,7 @@ class KeycloakUserRepositoryTest extends TestCase
             'client_id' => 'test-client',
             'client_secret' => 'test-secret',
             'redirect_uri' => 'https://app.example.com/auth/callback',
-            'http_client_options' => ['handler' => HandlerStack::create(new MockHandler($answers))],
+            'http_client_options' => ['handler' => HandlerStack::create(new MockHandler(array_values($answers)))],
         ]));
     }
 
@@ -216,7 +224,7 @@ class KeycloakUserRepositoryTest extends TestCase
         $repository = $this->repositoryAnswering(new Response(400, [], json_encode([
             'error' => 'invalid_grant',
             'error_description' => 'Token is not active',
-        ])));
+        ], JSON_THROW_ON_ERROR)));
 
         try {
             $repository->refreshToken('a-refresh-token');
@@ -235,12 +243,12 @@ class KeycloakUserRepositoryTest extends TestCase
         return [
             'the server does not answer' => [new ConnectException('Operation timed out', new Request('POST', '/'))],
             'the server is down' => [new Response(503, ['Content-Type' => 'text/html'], '<html>Service Unavailable</html>')],
-            'the server fails' => [new Response(500, [], json_encode(['error' => 'unknown_error']))],
+            'the server fails' => [new Response(500, [], json_encode(['error' => 'unknown_error'], JSON_THROW_ON_ERROR))],
             'the client is not known' => [new Response(401, [], json_encode([
                 'error' => 'unauthorized_client',
                 'error_description' => 'Invalid client or Invalid client credentials',
-            ]))],
-            'the answer is not a token' => [new Response(200, [], json_encode(['hello' => 'world']))],
+            ], JSON_THROW_ON_ERROR))],
+            'the answer is not a token' => [new Response(200, [], json_encode(['hello' => 'world'], JSON_THROW_ON_ERROR))],
         ];
     }
 
@@ -257,5 +265,148 @@ class KeycloakUserRepositoryTest extends TestCase
             // The session may be as good as it was: it can not be known now.
             $this->assertStringStartsWith('Failed to refresh token: ', $e->getMessage());
         }
+    }
+
+    #[DataProvider('invalidKeycloakDescriptions')]
+    public function testMalformedErrorDescriptionsAreNotReportedAsWrongCredentials(mixed $description): void
+    {
+        $repository = $this->repositoryAnswering(new Response(400, [], json_encode([
+            'error' => 'invalid_grant', 'error_description' => $description,
+        ], JSON_THROW_ON_ERROR)));
+
+        try {
+            $repository->requestOfflineToken('otto', 'secret');
+            $this->fail('A malformed error description must be reported as an invalid response.');
+        } catch (AuthenticationException $e) {
+            $this->assertSame(400, $e->getCode());
+            $this->assertInstanceOf(TranslatableInvalidArgumentException::class, $e->getPrevious());
+            $this->assertStringContainsString('error_description', $e->getPrevious()->getMessage());
+        }
+    }
+
+    /** @return iterable<string, array{mixed}> */
+    public static function invalidKeycloakDescriptions(): iterable
+    {
+        yield 'integer' => [123];
+        yield 'boolean' => [false];
+        yield 'float' => [1.5];
+        yield 'array' => [['Account disabled']];
+    }
+
+    /** @param array<string, mixed> $answer */
+    #[DataProvider('optionalErrorDescriptions')]
+    public function testMissingOrNullErrorDescriptionsKeepTheCredentialsError(array $answer): void
+    {
+        $repository = $this->repositoryAnswering(new Response(400, [], json_encode(
+            $answer + ['error' => 'invalid_grant'],
+            JSON_THROW_ON_ERROR
+        )));
+        $this->expectException(AuthenticationException::class);
+        $this->expectExceptionCode(401);
+        $this->expectExceptionMessage('The password is not valid.');
+
+        $repository->requestOfflineToken('otto', 'secret');
+    }
+
+    /** @return iterable<string, array{array<string, mixed>}> */
+    public static function optionalErrorDescriptions(): iterable
+    {
+        yield 'missing' => [[]];
+        yield 'null' => [['error_description' => null]];
+    }
+
+    #[DataProvider('invalidSubjects')]
+    public function testUserSubjectsAreNotCoercedToStrings(mixed $subject): void
+    {
+        try {
+            $this->repository->createUser(['sub' => $subject]);
+            $this->fail('A subject must be a string.');
+        } catch (AuthenticationException $e) {
+            $this->assertSame(400, $e->getCode());
+            $this->assertInstanceOf(TranslatableInvalidArgumentException::class, $e->getPrevious());
+            $this->assertStringContainsString('sub', $e->getPrevious()->getMessage());
+        }
+    }
+
+    /** @return iterable<string, array{mixed}> */
+    public static function invalidSubjects(): iterable
+    {
+        yield 'integer' => [123];
+        yield 'boolean' => [true];
+        yield 'float' => [123.0];
+        yield 'array' => [['123']];
+    }
+
+    public function testNumericSubjectsAreAcceptedWhenTheyAreStrings(): void
+    {
+        $user = $this->repository->createUser(['sub' => '00123']);
+
+        $this->assertSame('00123', $user->getIdentity());
+    }
+
+    /** @param array<string, mixed> $info */
+    #[DataProvider('missingSubjects')]
+    public function testMissingSubjectsKeepTheExistingAuthenticationError(array $info): void
+    {
+        $this->expectException(AuthenticationException::class);
+        $this->expectExceptionMessage('User identity not found in keycloak user info.');
+
+        $this->repository->createUser($info);
+    }
+
+    /** @return iterable<string, array{array<string, mixed>}> */
+    public static function missingSubjects(): iterable
+    {
+        yield 'absent' => [[]];
+        yield 'null' => [['sub' => null]];
+    }
+
+    #[DataProvider('absentPkceVerifiers')]
+    public function testAnExchangeWithoutPkceClearsPreviousVerifiersAndKeepsThePublicNull(
+        ?string $absentVerifier,
+        bool $omitArgument
+    ): void {
+        /** @var list<RequestInterface> $requests */
+        $requests = [];
+        $response = new Response(200, [], json_encode([
+            'access_token' => 'access-token', 'refresh_token' => 'refresh-token', 'expires_in' => 300,
+        ], JSON_THROW_ON_ERROR));
+        $stack = HandlerStack::create(new MockHandler([$response, $response, $response]));
+        $stack->push(Middleware::mapRequest(static function (RequestInterface $request) use (&$requests): RequestInterface {
+            $requests[] = $request;
+            return $request;
+        }));
+        $repository = new KeycloakUserRepository($this->config, httpClient: new Client(['handler' => $stack]));
+        $repository->createAuthorizationUrl();
+        $this->assertNotNull($repository->getPkceCode());
+
+        $first = $repository->exchangeCodeForToken('first-code', 'first-verifier');
+        $this->assertSame('access-token', $first['access_token']);
+        $this->assertSame('first-verifier', $repository->getPkceCode());
+
+        $second = $omitArgument
+            ? $repository->exchangeCodeForToken('second-code')
+            : $repository->exchangeCodeForToken('second-code', $absentVerifier);
+        $this->assertSame('access-token', $second['access_token']);
+        $this->assertNull($repository->getPkceCode());
+
+        $repository->exchangeCodeForToken('third-code', 'third-verifier');
+        $this->assertSame('third-verifier', $repository->getPkceCode());
+        $this->assertCount(3, $requests);
+        parse_str((string) $requests[0]->getBody(), $firstRequest);
+        parse_str((string) $requests[1]->getBody(), $secondRequest);
+        parse_str((string) $requests[2]->getBody(), $thirdRequest);
+        $this->assertSame('first-verifier', $firstRequest['code_verifier']);
+        $this->assertArrayNotHasKey('code_verifier', $secondRequest);
+        $this->assertSame('second-code', $secondRequest['code']);
+        $this->assertSame('third-verifier', $thirdRequest['code_verifier']);
+    }
+
+    /** @return iterable<string, array{string|null, bool}> */
+    public static function absentPkceVerifiers(): iterable
+    {
+        yield 'omitted argument' => [null, true];
+        yield 'explicit null' => [null, false];
+        yield 'empty string' => ['', false];
     }
 }

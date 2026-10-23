@@ -13,6 +13,8 @@ declare(strict_types=1);
 namespace Derafu\Auth\Provider\Database;
 
 use Derafu\Auth\Exception\ConfigurationException;
+use Derafu\Support\ArrayReader;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 
 /**
  * Configuration class for Database authentication settings.
@@ -27,28 +29,37 @@ class DatabaseConfiguration
      * This defines the configuration for the user repository. Mapping the
      * table and fields to use for the user repository.
      *
-     * @var array
+     * @var array{
+     *     table: string,
+     *     field: array{identity: string, password: string, active: string},
+     *     sql_get_roles: string,
+     *     sql_get_details: string,
+     *     sql_is_active: string|null
+     * }
      */
-    private array $userRepository = [];
+    private array $userRepository;
 
     /**
      * Creates a new database configuration.
      *
      * @param array<string, mixed> $config The configuration array.
+     * @throws TranslatableInvalidArgumentException If a configuration value has an invalid type.
      */
     public function __construct(array $config)
     {
-        $this->databaseUrl = $config['database_url'] ?? $this->databaseUrl;
-        if (!empty($config['project_dir'])) {
+        $reader = ArrayReader::from($config);
+        $this->databaseUrl = $reader->string('database_url', $this->databaseUrl);
+        $projectDir = $reader->string('project_dir', '');
+        if (!empty($projectDir)) {
             $this->databaseUrl = str_replace(
                 '%kernel.project_dir%',
-                $config['project_dir'],
+                $projectDir,
                 $this->databaseUrl
             );
         }
 
         $this->userRepository = $this->createUserRepositoryConfig(
-            $config['user_repository'] ?? []
+            $reader->array('user_repository') ?? []
         );
     }
 
@@ -75,7 +86,13 @@ class DatabaseConfiguration
     /**
      * Gets the user repository configuration.
      *
-     * @return array The user repository configuration.
+     * @return array{
+     *     table: string,
+     *     field: array{identity: string, password: string, active: string},
+     *     sql_get_roles: string,
+     *     sql_get_details: string,
+     *     sql_is_active: string|null
+     * } The user repository configuration.
      */
     public function getUserRepository(): array
     {
@@ -105,16 +122,25 @@ class DatabaseConfiguration
     /**
      * Creates the user repository configuration.
      *
-     * @return array The user repository configuration.
+     * @param array<array-key, mixed> $config The repository configuration.
+     * @return array{
+     *     table: string,
+     *     field: array{identity: string, password: string, active: string},
+     *     sql_get_roles: string,
+     *     sql_get_details: string,
+     *     sql_is_active: string|null
+     * } The user repository configuration.
      */
     private function createUserRepositoryConfig(array $config): array
     {
+        $reader = ArrayReader::from($config);
+        $fields = ArrayReader::from($reader->array('field') ?? []);
         $userRepositoryConfig = [
-            'table' => $config['table'] ?? 'user',
+            'table' => $reader->string('table', 'user'),
             'field' => [
-                'identity' => $config['field']['identity'] ?? 'email',
-                'password' => $config['field']['password'] ?? 'password',
-                'active' => $config['field']['active'] ?? 'active',
+                'identity' => $fields->string('identity', 'email'),
+                'password' => $fields->string('password', 'password'),
+                'active' => $fields->string('active', 'active'),
             ],
         ];
 
@@ -126,10 +152,10 @@ class DatabaseConfiguration
             $userRepositoryConfig['field']['password'],
             $userRepositoryConfig['field']['active'],
         ] as $name) {
-            if (!is_string($name) || !preg_match('/^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$/', $name)) {
+            if (!preg_match('/^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$/', $name)) {
                 throw new ConfigurationException([
                     'The name "{name}" is not valid for a table or a column.',
-                    'name' => is_string($name) ? $name : get_debug_type($name),
+                    'name' => $name,
                 ]);
             }
         }
@@ -142,22 +168,24 @@ class DatabaseConfiguration
                 JOIN %s AS u ON ur.user_id = u.id
             WHERE u.%s = :identity
         ';
-        $userRepositoryConfig['sql_get_roles'] = $config['sql_get_roles']
-            ?? sprintf(
+        $userRepositoryConfig['sql_get_roles'] = $reader->string(
+            'sql_get_roles',
+            sprintf(
                 $sqlGetRoles,
                 $userRepositoryConfig['table'],
                 $userRepositoryConfig['table'],
                 $userRepositoryConfig['field']['identity']
             )
-        ;
+        );
 
-        $userRepositoryConfig['sql_get_details'] = $config['sql_get_details']
-            ?? sprintf(
+        $userRepositoryConfig['sql_get_details'] = $reader->string(
+            'sql_get_details',
+            sprintf(
                 'SELECT * FROM %s WHERE %s = :identity',
                 $userRepositoryConfig['table'],
                 $userRepositoryConfig['field']['identity']
             )
-        ;
+        );
 
         // The query that tells whether a user is active (a user can exist, with
         // its password and its roles, and not be let in): the first value that it
@@ -168,6 +196,7 @@ class DatabaseConfiguration
         if ($sqlIsActive === false || (is_string($sqlIsActive) && strtolower(trim($sqlIsActive)) === 'false')) {
             $userRepositoryConfig['sql_is_active'] = null;
         } else {
+            $sqlIsActive = $reader->string('sql_is_active');
             $userRepositoryConfig['sql_is_active'] = $sqlIsActive === null || $sqlIsActive === ''
                 ? sprintf(
                     'SELECT %s FROM %s WHERE %s = :identity',

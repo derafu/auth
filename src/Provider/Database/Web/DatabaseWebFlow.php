@@ -26,6 +26,7 @@ use Derafu\Auth\Provider\Database\DatabaseConfiguration;
 use Derafu\Auth\Provider\Database\DatabaseUserRepository;
 use Derafu\Auth\Provider\Database\Web\Form\LoginForm;
 use Derafu\Auth\UserFactory;
+use Derafu\Support\ArrayReader;
 use Mezzio\Session\SessionInterface;
 use PDOException;
 use Psr\Http\Message\ResponseInterface;
@@ -120,9 +121,9 @@ class DatabaseWebFlow implements WebFlowInterface
         }
 
         // Get the identity and password.
-        $data = $result->getProcessedData();
-        $identity = $data[$this->config->getUserIdentityField()];
-        $password = $data[$this->config->getUserPasswordField()];
+        $data = $result->getProcessedDataReader();
+        $identity = $data->requireString($this->config->getUserIdentityField());
+        $password = $data->requireString($this->config->getUserPasswordField());
         $address = LoginThrottle::clientOf($request);
 
         // Too many failed attempts: the credentials are not even checked, so a
@@ -186,9 +187,12 @@ class DatabaseWebFlow implements WebFlowInterface
             return null;
         }
 
+        $data = ArrayReader::from($userInfo);
+        $identity = $data->requireString('identity');
+
         if ($this->sessionManager->isRefreshDue($session, $this->web->getRefreshInterval() ?? WebConfiguration::DEFAULT_REFRESH_INTERVAL)) {
             try {
-                $user = $this->userRepository->find($userInfo['identity']);
+                $user = $this->userRepository->find($identity);
             } catch (PDOException) {
                 return null;
             }
@@ -209,11 +213,20 @@ class DatabaseWebFlow implements WebFlowInterface
         }
 
         // Create user from session data.
-        return $this->userFactory->create(
-            $userInfo['identity'],
-            $userInfo['roles'] ?? [],
-            $userInfo['details'] ?? []
-        );
+        $roles = $data->array('roles') ?? [];
+        $roleReader = ArrayReader::from($roles, 'session user roles');
+        $validatedRoles = [];
+        foreach (array_keys($roles) as $key) {
+            $validatedRoles[$key] = $roleReader->requireString((string) $key);
+        }
+
+        $details = [];
+        foreach ($data->array('details') ?? [] as $key => $value) {
+            $key = ArrayReader::from(['key' => $key], 'session user details')->requireString('key');
+            $details[$key] = $value;
+        }
+
+        return $this->userFactory->create($identity, $validatedRoles, $details);
     }
 
     /**

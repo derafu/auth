@@ -35,6 +35,7 @@ use Derafu\Translation\TranslatorFactory;
 use Derafu\Twig\Extension\TranslationExtension;
 use Derafu\Twig\Provider\DirectoryComponentProvider;
 use Laminas\Diactoros\Response\RedirectResponse;
+use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
@@ -51,7 +52,7 @@ use Twig\TwigFunction;
 #[CoversClass(AuthController::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationManager::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Identification::class)]
-#[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
+#[CoversClass(\Derafu\Auth\Authentication\Channel\Web\WebChannel::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\WebConfiguration::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\Flash::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Api\ApiChannel::class)]
@@ -61,7 +62,7 @@ use Twig\TwigFunction;
 #[UsesClass(\Derafu\Auth\Provider\Htpasswd\Api\HtpasswdBasicScheme::class)]
 #[UsesClass(\Derafu\Auth\AnonymousUser::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\FormManager::class)]
-#[UsesClass(\Derafu\Auth\Provider\Htpasswd\Web\HtpasswdWebFlow::class)]
+#[CoversClass(\Derafu\Auth\Provider\Htpasswd\Web\HtpasswdWebFlow::class)]
 #[UsesClass(\Derafu\Auth\Provider\Htpasswd\HtpasswdConfiguration::class)]
 #[UsesClass(\Derafu\Auth\Provider\Htpasswd\HtpasswdUserRepository::class)]
 #[UsesClass(\Derafu\Auth\Provider\Htpasswd\Web\Form\LoginForm::class)]
@@ -171,6 +172,8 @@ final class HtpasswdLoginPageTest extends TestCase
             $page = $this->controller->login($request);
         });
 
+        $this->assertIsString($page);
+
         return $page;
     }
 
@@ -196,6 +199,7 @@ final class HtpasswdLoginPageTest extends TestCase
 
         $valid = false;
         $this->app->handle($this->app->request('/'), function () use ($matches, &$valid): void {
+            $this->assertTrue(isset($matches[1]));
             $valid = $this->app->csrf->isValid('login', $matches[1]);
         });
         $this->assertTrue($valid);
@@ -208,7 +212,10 @@ final class HtpasswdLoginPageTest extends TestCase
 
         $this->assertStringContainsString('<altcha-widget', $page);
         $this->assertSame(1, preg_match('/ challenge="([^"]*)"/', $page, $matches));
+        $this->assertTrue(isset($matches[1]));
         $challenge = json_decode(html_entity_decode($matches[1], ENT_QUOTES), true);
+        Assert::assertIsArray($challenge);
+        Assert::assertIsArray($challenge['parameters']);
         $this->assertSame(['form' => 'login'], $challenge['parameters']['data']);
         $this->assertStringContainsString('name="altcha"', $page);
     }
@@ -299,6 +306,8 @@ final class HtpasswdLoginPageTest extends TestCase
                 $result = $this->controller->login($request->withParsedBody([]));
             }
         );
+
+        $this->assertNotNull($result);
 
         return $result;
     }

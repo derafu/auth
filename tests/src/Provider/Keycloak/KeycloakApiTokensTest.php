@@ -47,6 +47,7 @@ use Laminas\Diactoros\Response\JsonResponse;
 use Laminas\Diactoros\Response\RedirectResponse;
 use Mezzio\Authentication\UserInterface as MezzioUserInterface;
 use Mezzio\Session\Session;
+use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
@@ -88,7 +89,7 @@ use Twig\TwigFunction;
 #[UsesClass(\Derafu\Auth\Authentication\SameOrigin::class)]
 #[UsesClass(\Derafu\Auth\Authentication\Channel\Web\FormManager::class)]
 #[UsesClass(\Derafu\Auth\Exception\FormException::class)]
-#[UsesClass(\Derafu\Auth\Provider\Keycloak\Account\Form\ApiTokenForm::class)]
+#[CoversClass(\Derafu\Auth\Provider\Keycloak\Account\Form\ApiTokenForm::class)]
 #[UsesClass(\Derafu\Auth\Account\Form\ApiTokenValueForm::class)]
 #[UsesClass(\Derafu\Auth\Account\NewApiToken::class)]
 #[UsesClass(AuthenticationException::class)]
@@ -269,6 +270,8 @@ final class KeycloakApiTokensTest extends TestCase
         $this->assertInstanceOf(HtmlResponse::class, $response);
         $this->assertSame(1, preg_match('#<textarea[^>]*>([^<]+)</textarea>#', (string) $response->getBody(), $matches));
 
+        $this->assertTrue(isset($matches[1]));
+
         return html_entity_decode($matches[1]);
     }
 
@@ -357,6 +360,7 @@ final class KeycloakApiTokensTest extends TestCase
         $this->assertInstanceOf(HtmlResponse::class, $response);
         $this->assertSame('no-store', $response->getHeaderLine('Cache-Control'));
         preg_match('#<textarea[^>]*>([^<]+)</textarea>#', (string) $response->getBody(), $matches);
+        $this->assertTrue(isset($matches[1]));
         $token = html_entity_decode($matches[1]);
         $this->assertTrue(TokenClaims::isOffline($token));
 
@@ -452,6 +456,7 @@ final class KeycloakApiTokensTest extends TestCase
         $second = $this->makeToken($sid);
 
         $id = TokenClaims::of($first)['sid'];
+        Assert::assertIsString($id);
         $response = $this->handle(
             $this->app->request('/auth/profile/tokens/' . $id . '/revoke', body: [], sid: $sid, headers: ['Sec-Fetch-Site' => 'same-origin']),
             fn (ServerRequestInterface $request) => $this->account->tokenRevoke($request, $id)
@@ -477,6 +482,7 @@ final class KeycloakApiTokensTest extends TestCase
         $loginSession = TokenClaims::of($this->sessions->getAccessToken($session) ?? '')['sid'];
 
         foreach ([$loginSession, 'not-a-session'] as $id) {
+            Assert::assertIsString($id);
             $response = $this->handle(
                 $this->app->request('/auth/profile/tokens/x/revoke', body: [], sid: $sid, headers: ['Sec-Fetch-Site' => 'same-origin']),
                 fn (ServerRequestInterface $request) => $this->account->tokenRevoke($request, $id)
@@ -552,7 +558,14 @@ final class KeycloakApiTokensTest extends TestCase
                 fn (): null => null
             );
         } catch (AuthenticationException $e) {
-            return new JsonResponse(['status' => $e->getCode()], $e->getCode(), $e->getHeaders());
+            $headers = $e->getHeaders();
+            $validatedHeaders = [];
+            foreach ($headers as $name => $value) {
+                $this->assertTrue($name !== '');
+                $validatedHeaders[$name] = $value;
+            }
+            $headers = $validatedHeaders;
+            return new JsonResponse(['status' => $e->getCode()], $e->getCode(), $headers);
         }
     }
 
@@ -605,6 +618,7 @@ final class KeycloakApiTokensTest extends TestCase
         $sid = $this->logIn();
         $token = $this->makeToken($sid);
         $id = TokenClaims::of($token)['sid'];
+        Assert::assertIsString($id);
         $this->handle(
             $this->app->request('/auth/profile/tokens/' . $id . '/revoke', body: [], sid: $sid, headers: ['Sec-Fetch-Site' => 'same-origin']),
             fn (ServerRequestInterface $request) => $this->account->tokenRevoke($request, $id)
@@ -657,9 +671,12 @@ final class KeycloakApiTokensTest extends TestCase
         // Keycloak does not let the client of this application exchange it.
         $answer = (new \Derafu\TestsAuth\Fixture\KeycloakTokens(self::$keycloak->url()))
             ->person('derafu-cli', 'otto', 'secret', 'openid offline_access');
+        Assert::assertIsString($answer['refresh_token']);
         $this->assertTrue(TokenClaims::isOffline((string) $answer['refresh_token']));
 
+        Assert::assertIsString($answer['refresh_token']);
         $this->assertNull($this->callApi((string) $answer['refresh_token']));
+        Assert::assertIsString($answer['refresh_token']);
         $this->assertNull($this->callApi((string) $answer['refresh_token'], $this->withoutCache()));
     }
 

@@ -70,7 +70,16 @@ class ApiTokenForm implements FormInterface
     /**
      * The definition, without what only the user knows.
      *
-     * @return array<string, mixed>
+     * @return array{
+     *     options: array<string, mixed>,
+     *     schema: array{
+     *         name: string,
+     *         type: string,
+     *         properties: array<string, array<string, mixed>>,
+     *         required: list<string>
+     *     },
+     *     uischema: array<string, mixed>
+     * }
      */
     private function createDefinition(): array
     {

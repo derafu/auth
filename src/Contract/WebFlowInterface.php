@@ -37,7 +37,7 @@ interface WebFlowInterface
      * The type of the form that the login page shows, or null if the login is not
      * a form of the site: the provider takes the user to its own page.
      *
-     * @return class-string|null
+     * @return class-string<FormInterface>|null
      */
     public function loginForm(): ?string;
 

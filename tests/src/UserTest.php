@@ -254,4 +254,44 @@ final class UserTest extends TestCase
     {
         $this->assertSame($expected, (new User('s', [], ['email_verified' => $value]))->isEmailVerified());
     }
+
+    public function testRoleChecksAcceptGeneratorsAndKeepRolesWithRepeatedKeys(): void
+    {
+        $user = new class ('user-1') extends User {
+            /** @return iterable<string> */
+            public function getRoles(): iterable
+            {
+                yield 'role' => 'admin';
+                yield 'role' => 'editor';
+            }
+        };
+
+        $this->assertTrue($user->hasRole('admin'));
+        $this->assertTrue($user->hasRole('editor'));
+        $this->assertFalse($user->hasRole('guest'));
+        $this->assertFalse($user->hasRole('Admin'));
+        $this->assertTrue($user->hasAnyRole(['guest', 'admin']));
+        $this->assertFalse($user->hasAnyRole(['guest', 'Admin']));
+        $this->assertFalse($user->hasAnyRole([]));
+        $this->assertTrue($user->hasAllRoles(['admin', 'editor']));
+        $this->assertTrue($user->hasAllRoles(['admin', 'admin']));
+        $this->assertFalse($user->hasAllRoles(['admin', 'guest']));
+        $this->assertTrue($user->hasAllRoles([]));
+    }
+
+    public function testRoleChecksAcceptAnEmptyIterator(): void
+    {
+        $user = new class ('user-1') extends User {
+            /** @return iterable<string> */
+            public function getRoles(): iterable
+            {
+                yield from [];
+            }
+        };
+
+        $this->assertFalse($user->hasRole('admin'));
+        $this->assertFalse($user->hasAnyRole(['admin', 'editor']));
+        $this->assertFalse($user->hasAllRoles(['admin']));
+        $this->assertTrue($user->hasAllRoles([]));
+    }
 }
