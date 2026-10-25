@@ -12,8 +12,8 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Provider\Htpasswd;
 
+use Derafu\Array\ArrayReader;
 use Derafu\Auth\Exception\ConfigurationException;
-use Derafu\Support\ArrayReader;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 
 /**
@@ -33,10 +33,10 @@ class HtpasswdConfiguration
      */
     public function __construct(array $config)
     {
-        $reader = ArrayReader::from($config);
-        $this->htpasswdPath = $reader->string('htpasswd_path', $this->htpasswdPath);
-        $this->groupPath = $reader->string('group_path', $this->groupPath);
-        $projectDir = $reader->string('project_dir', '');
+        $reader = ArrayReader::fromArray($config);
+        $this->htpasswdPath = $reader->getString('htpasswd_path', $this->htpasswdPath);
+        $this->groupPath = $reader->getString('group_path', $this->groupPath);
+        $projectDir = $reader->getString('project_dir', '');
         if (!empty($projectDir)) {
             $this->htpasswdPath = str_replace(
                 '%kernel.project_dir%',

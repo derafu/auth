@@ -12,10 +12,10 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Provider\Keycloak\Web;
 
+use Derafu\Array\ArrayReader;
 use Derafu\Auth\Authentication\Channel\Web\SessionManager;
 use Derafu\Auth\Authentication\Channel\Web\WebConfiguration;
 use Derafu\Auth\Contract\SessionManagerInterface;
-use Derafu\Support\ArrayReader;
 use Mezzio\Session\SessionInterface;
 
 /**
@@ -110,8 +110,8 @@ class KeycloakSessionManager extends SessionManager implements SessionManagerInt
      */
     public function getRefreshToken(SessionInterface $session): ?string
     {
-        return ArrayReader::from(['oauth2_refresh_token' => $session->get('oauth2_refresh_token')])
-            ->string('oauth2_refresh_token');
+        return ArrayReader::fromArray(['oauth2_refresh_token' => $session->get('oauth2_refresh_token')])
+            ->getString('oauth2_refresh_token');
     }
 
     /**
@@ -133,8 +133,8 @@ class KeycloakSessionManager extends SessionManager implements SessionManagerInt
      */
     public function getState(SessionInterface $session): ?string
     {
-        return ArrayReader::from(['oauth2_state' => $session->get('oauth2_state')])
-            ->string('oauth2_state');
+        return ArrayReader::fromArray(['oauth2_state' => $session->get('oauth2_state')])
+            ->getString('oauth2_state');
     }
 
     /**
@@ -161,8 +161,8 @@ class KeycloakSessionManager extends SessionManager implements SessionManagerInt
      */
     public function getNonce(SessionInterface $session): ?string
     {
-        return ArrayReader::from(['oauth2_nonce' => $session->get('oauth2_nonce')])
-            ->string('oauth2_nonce');
+        return ArrayReader::fromArray(['oauth2_nonce' => $session->get('oauth2_nonce')])
+            ->getString('oauth2_nonce');
     }
 
     /**
@@ -173,8 +173,8 @@ class KeycloakSessionManager extends SessionManager implements SessionManagerInt
      */
     public function getPkceCode(SessionInterface $session): ?string
     {
-        return ArrayReader::from(['oauth2_pkce' => $session->get('oauth2_pkce')])
-            ->string('oauth2_pkce');
+        return ArrayReader::fromArray(['oauth2_pkce' => $session->get('oauth2_pkce')])
+            ->getString('oauth2_pkce');
     }
 
     /**
@@ -186,8 +186,8 @@ class KeycloakSessionManager extends SessionManager implements SessionManagerInt
      */
     public function getIdToken(SessionInterface $session): ?string
     {
-        return ArrayReader::from(['oauth2_id_token' => $session->get('oauth2_id_token')])
-            ->string('oauth2_id_token');
+        return ArrayReader::fromArray(['oauth2_id_token' => $session->get('oauth2_id_token')])
+            ->getString('oauth2_id_token');
     }
 
     /**

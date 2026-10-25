@@ -13,10 +13,10 @@ declare(strict_types=1);
 namespace Derafu\Auth\Provider\Keycloak;
 
 use ArrayAccess;
+use Derafu\Array\ArrayReader;
 use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\ConfigurationException;
-use Derafu\Support\ArrayReader;
-use Derafu\Support\ArrayType;
+use Derafu\Value\ValueType;
 use Exception;
 use Firebase\JWT\CachedKeySet;
 use Firebase\JWT\JWK;
@@ -199,10 +199,10 @@ class KeycloakTokenVerifier
 
             $claims = (array) JWT::decode($jwt, $this->keys());
             $decoded = json_decode(json_encode($claims, JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR);
-            $fields = ArrayType::array()->parse($decoded, 'claims', 'Keycloak token');
+            $fields = ValueType::array()->parse($decoded, 'claims', 'Keycloak token');
             $claims = [];
             foreach ($fields as $key => $value) {
-                $name = ArrayType::string()->parse($key, 'claims.key', 'Keycloak token');
+                $name = ValueType::string()->parse($key, 'claims.key', 'Keycloak token');
                 $claims[$name] = $value;
             }
         } catch (Exception $e) {
@@ -261,11 +261,11 @@ class KeycloakTokenVerifier
             $response = $this->http->sendRequest($this->requestFactory->createRequest('GET', $uri));
             $jwks = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
 
-            $jwks = ArrayType::array()->parse($jwks, 'jwks', 'Keycloak');
+            $jwks = ValueType::array()->parse($jwks, 'jwks', 'Keycloak');
             $reader = new ArrayReader($jwks, 'jwks', 'Keycloak');
             $keys = [];
-            foreach ($reader->array('keys') ?? [] as $index => $key) {
-                $key = ArrayType::array()->parse($key, ArrayType::path('jwks.keys', $index), 'Keycloak');
+            foreach ($reader->getArray('keys') ?? [] as $index => $key) {
+                $key = ValueType::array()->parse($key, ValueType::path('jwks.keys', $index), 'Keycloak');
                 // The realm also publishes keys to encrypt: only the ones to sign.
                 if (($key['use'] ?? 'sig') === 'sig') {
                     $keys[] = $key;

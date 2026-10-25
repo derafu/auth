@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Provider\Keycloak;
 
+use Derafu\Array\ArrayReader;
 use Derafu\Auth\Contract\UserFactoryInterface;
 use Derafu\Auth\Contract\UserInterface as DerafuUserInterface;
 use Derafu\Auth\Contract\UserRepositoryInterface;
@@ -19,7 +20,6 @@ use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Auth\Exception\ProviderUnavailableException;
 use Derafu\Auth\UserFactory;
-use Derafu\Support\ArrayReader;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 use Exception;
 use GuzzleHttp\Client;
@@ -331,7 +331,7 @@ class KeycloakUserRepository implements UserRepositoryInterface
             // not valid, a code of the second factor that is not valid and one that is
             // missing it says the same, so the caller works out which is more likely.
             try {
-                $description = ArrayReader::from($answer, 'Keycloak token response')->string('error_description', '');
+                $description = ArrayReader::fromArray($answer, 'Keycloak token response')->getString('error_description', '');
             } catch (TranslatableInvalidArgumentException $e) {
                 throw new AuthenticationException(
                     ['Invalid response from Keycloak: {error}', 'error' => $e->getMessage()],
@@ -489,7 +489,7 @@ class KeycloakUserRepository implements UserRepositoryInterface
         }
 
         try {
-            $identity = ArrayReader::from($userInfo, 'Keycloak user info')->requireString('sub');
+            $identity = ArrayReader::fromArray($userInfo, 'Keycloak user info')->requireString('sub');
         } catch (TranslatableInvalidArgumentException $e) {
             throw new AuthenticationException(
                 ['Invalid response from Keycloak: {error}', 'error' => $e->getMessage()],

@@ -12,10 +12,10 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Authentication\Channel\Web;
 
+use Derafu\Array\ArrayReader;
 use Derafu\Auth\Contract\SessionManagerInterface;
 use Derafu\Auth\Exception\AuthenticationException;
-use Derafu\Support\ArrayReader;
-use Derafu\Support\ArrayType;
+use Derafu\Value\ValueType;
 use Mezzio\Session\SessionInterface;
 
 /**
@@ -60,8 +60,8 @@ class SessionManager implements SessionManagerInterface
             return false;
         }
 
-        $checkedAt = ArrayReader::from(['auth_checked_at' => $checkedAt])
-            ->require('auth_checked_at', ArrayType::int());
+        $checkedAt = ArrayReader::fromArray(['auth_checked_at' => $checkedAt])
+            ->require('auth_checked_at', ValueType::int());
 
         return $checkedAt + $interval <= time();
     }
@@ -110,15 +110,15 @@ class SessionManager implements SessionManagerInterface
      */
     public function getUserInfo(SessionInterface $session): ?array
     {
-        $userInfo = ArrayReader::from(['user' => $session->get('user')])->array('user');
+        $userInfo = ArrayReader::fromArray(['user' => $session->get('user')])->getArray('user');
         if ($userInfo === null) {
             return null;
         }
 
         $validated = [];
         foreach ($userInfo as $key => $value) {
-            $key = ArrayReader::from(['key' => $key], 'session user')
-                ->require('key', ArrayType::string());
+            $key = ArrayReader::fromArray(['key' => $key], 'session user')
+                ->require('key', ValueType::string());
             $validated[$key] = $value;
         }
 
@@ -147,8 +147,8 @@ class SessionManager implements SessionManagerInterface
      */
     public function getRedirectUrl(SessionInterface $session): ?string
     {
-        return ArrayReader::from(['auth_redirect' => $session->get('auth_redirect')])
-            ->string('auth_redirect');
+        return ArrayReader::fromArray(['auth_redirect' => $session->get('auth_redirect')])
+            ->getString('auth_redirect');
     }
 
     /**

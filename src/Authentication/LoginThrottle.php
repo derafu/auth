@@ -12,9 +12,9 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Authentication;
 
+use Derafu\Array\ArrayReader;
 use Derafu\Auth\Exception\ConfigurationException;
-use Derafu\Support\ArrayReader;
-use Derafu\Support\ArrayType;
+use Derafu\Value\ValueType;
 use Psr\Cache\CacheItemPoolInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
@@ -155,16 +155,16 @@ class LoginThrottle
             return null;
         }
 
-        $window = ArrayReader::from(['window' => $item->get()])
-            ->require('window', ArrayType::array());
-        $reader = ArrayReader::from($window, 'login throttle window');
-        $until = $reader->require('until', ArrayType::int());
+        $window = ArrayReader::fromArray(['window' => $item->get()])
+            ->require('window', ValueType::array());
+        $reader = ArrayReader::fromArray($window, 'login throttle window');
+        $until = $reader->require('until', ValueType::int());
         if ($until <= time()) {
             return null;
         }
 
         return [
-            'count' => $reader->require('count', ArrayType::int()),
+            'count' => $reader->require('count', ValueType::int()),
             'until' => $until,
         ];
     }

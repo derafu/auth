@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Provider\Htpasswd\Web;
 
+use Derafu\Array\ArrayReader;
 use Derafu\Auth\AnonymousUser;
 use Derafu\Auth\Authentication\Channel\Web\Flash;
 use Derafu\Auth\Authentication\Channel\Web\WebConfiguration;
@@ -26,7 +27,6 @@ use Derafu\Auth\Provider\Htpasswd\HtpasswdConfiguration;
 use Derafu\Auth\Provider\Htpasswd\HtpasswdUserRepository;
 use Derafu\Auth\Provider\Htpasswd\Web\Form\LoginForm;
 use Derafu\Auth\UserFactory;
-use Derafu\Support\ArrayReader;
 use Mezzio\Session\SessionInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -120,7 +120,7 @@ class HtpasswdWebFlow implements WebFlowInterface
         }
 
         // Get the identity and password.
-        $data = $result->getProcessedDataReader();
+        $data = $result->getReader();
         $identity = $data->requireString(LoginForm::IDENTITY);
         $password = $data->requireString(LoginForm::PASSWORD);
         $address = LoginThrottle::clientOf($request);
@@ -181,7 +181,7 @@ class HtpasswdWebFlow implements WebFlowInterface
             return null;
         }
 
-        $data = ArrayReader::from($userInfo);
+        $data = ArrayReader::fromArray($userInfo);
         $identity = $data->requireString('identity');
 
         if ($this->sessionManager->isRefreshDue($session, $this->web->getRefreshInterval() ?? WebConfiguration::DEFAULT_REFRESH_INTERVAL)) {

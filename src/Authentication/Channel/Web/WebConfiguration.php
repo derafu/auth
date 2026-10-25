@@ -12,8 +12,8 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Authentication\Channel\Web;
 
+use Derafu\Array\ArrayReader;
 use Derafu\Auth\Exception\ConfigurationException;
-use Derafu\Support\ArrayReader;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 
 /**
@@ -74,18 +74,18 @@ class WebConfiguration
      */
     public function __construct(array $config = [], array $defaults = [])
     {
-        $paths = ArrayReader::from([
+        $paths = ArrayReader::fromArray([
             'login_path' => $config['login_path'] ?? $defaults['login_path'] ?? $this->loginPath,
             'logout_path' => $config['logout_path'] ?? $defaults['logout_path'] ?? $this->logoutPath,
             'login_redirect_path' => $config['login_redirect_path'] ?? $defaults['login_redirect_path'] ?? $this->loginRedirectPath,
             'logout_redirect_path' => $config['logout_redirect_path'] ?? $defaults['logout_redirect_path'] ?? $this->logoutRedirectPath,
             'unauthorized_redirect_path' => $config['unauthorized_redirect_path'] ?? $defaults['unauthorized_redirect_path'] ?? $this->unauthorizedRedirectPath,
         ]);
-        $this->loginPath = $paths->string('login_path', $this->loginPath);
-        $this->logoutPath = $paths->string('logout_path', $this->logoutPath);
-        $this->loginRedirectPath = $paths->string('login_redirect_path', $this->loginRedirectPath);
-        $this->logoutRedirectPath = $paths->string('logout_redirect_path', $this->logoutRedirectPath);
-        $this->unauthorizedRedirectPath = $paths->string('unauthorized_redirect_path', $this->unauthorizedRedirectPath);
+        $this->loginPath = $paths->getString('login_path', $this->loginPath);
+        $this->logoutPath = $paths->getString('logout_path', $this->logoutPath);
+        $this->loginRedirectPath = $paths->getString('login_redirect_path', $this->loginRedirectPath);
+        $this->logoutRedirectPath = $paths->getString('logout_redirect_path', $this->logoutRedirectPath);
+        $this->unauthorizedRedirectPath = $paths->getString('unauthorized_redirect_path', $this->unauthorizedRedirectPath);
 
         // Every how many seconds the user of a session is asked to the provider
         // again (its roles, that it still exists). 0 or not given: the provider

@@ -12,10 +12,10 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Provider\Keycloak;
 
+use Derafu\Array\ArrayReader;
 use Derafu\Auth\Exception\ConfigurationException;
-use Derafu\Support\ArrayReader;
-use Derafu\Support\ArrayType;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
+use Derafu\Value\ValueType;
 
 /**
  * Configuration class for Keycloak authentication settings.
@@ -140,33 +140,33 @@ class KeycloakConfiguration
      */
     public function __construct(array $config)
     {
-        $reader = ArrayReader::from($config);
-        $this->keycloakUrl = $reader->string('keycloak_url', $this->keycloakUrl);
-        $this->realm = $reader->string('realm', $this->realm);
-        $this->clientId = $reader->string('client_id', $this->clientId);
-        $this->clientSecret = $reader->string('client_secret', $this->clientSecret);
-        $this->redirectUri = $reader->string('redirect_uri', $this->redirectUri);
+        $reader = ArrayReader::fromArray($config);
+        $this->keycloakUrl = $reader->getString('keycloak_url', $this->keycloakUrl);
+        $this->realm = $reader->getString('realm', $this->realm);
+        $this->clientId = $reader->getString('client_id', $this->clientId);
+        $this->clientSecret = $reader->getString('client_secret', $this->clientSecret);
+        $this->redirectUri = $reader->getString('redirect_uri', $this->redirectUri);
 
-        $scopes = $reader->array('scopes') ?? $this->scopes;
-        $scopeReader = ArrayReader::from($scopes, 'Keycloak scopes');
+        $scopes = $reader->getArray('scopes') ?? $this->scopes;
+        $scopeReader = ArrayReader::fromArray($scopes, 'Keycloak scopes');
         $this->scopes = [];
         foreach (array_keys($scopes) as $key) {
-            $this->scopes[$key] = $scopeReader->require((string) $key, ArrayType::string());
+            $this->scopes[$key] = $scopeReader->require((string) $key, ValueType::string());
         }
 
-        $this->callbackPath = $reader->string('callback_path', $this->callbackPath);
+        $this->callbackPath = $reader->getString('callback_path', $this->callbackPath);
         $this->httpClientOptions = array_filter(
-            $reader->array('http_client_options') ?? [],
+            $reader->getArray('http_client_options') ?? [],
             fn (mixed $value) => $value !== null
         ) + $this->httpClientOptions;
-        $this->issuer = $reader->string('issuer', $this->issuer);
-        $this->endSession = $reader->bool('end_session', $this->endSession);
-        $this->postLogoutRedirectUri = $reader->string('post_logout_redirect_uri', $this->postLogoutRedirectUri);
-        $this->apiAudience = trim($reader->string('api_audience', $this->apiAudience));
-        $this->apiIntrospection = $reader->bool('api_introspection', $this->apiIntrospection);
+        $this->issuer = $reader->getString('issuer', $this->issuer);
+        $this->endSession = $reader->getBool('end_session', $this->endSession);
+        $this->postLogoutRedirectUri = $reader->getString('post_logout_redirect_uri', $this->postLogoutRedirectUri);
+        $this->apiAudience = trim($reader->getString('api_audience', $this->apiAudience));
+        $this->apiIntrospection = $reader->getBool('api_introspection', $this->apiIntrospection);
 
-        $this->apiClientId = trim($reader->string('api_client_id', $this->apiClientId));
-        $this->apiClientSecret = $reader->string('api_client_secret', $this->apiClientSecret);
+        $this->apiClientId = trim($reader->getString('api_client_id', $this->apiClientId));
+        $this->apiClientSecret = $reader->getString('api_client_secret', $this->apiClientSecret);
     }
 
     /**

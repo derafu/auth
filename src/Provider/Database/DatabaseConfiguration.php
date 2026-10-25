@@ -12,8 +12,8 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Provider\Database;
 
+use Derafu\Array\ArrayReader;
 use Derafu\Auth\Exception\ConfigurationException;
-use Derafu\Support\ArrayReader;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 
 /**
@@ -47,9 +47,9 @@ class DatabaseConfiguration
      */
     public function __construct(array $config)
     {
-        $reader = ArrayReader::from($config);
-        $this->databaseUrl = $reader->string('database_url', $this->databaseUrl);
-        $projectDir = $reader->string('project_dir', '');
+        $reader = ArrayReader::fromArray($config);
+        $this->databaseUrl = $reader->getString('database_url', $this->databaseUrl);
+        $projectDir = $reader->getString('project_dir', '');
         if (!empty($projectDir)) {
             $this->databaseUrl = str_replace(
                 '%kernel.project_dir%',
@@ -59,7 +59,7 @@ class DatabaseConfiguration
         }
 
         $this->userRepository = $this->createUserRepositoryConfig(
-            $reader->array('user_repository') ?? []
+            $reader->getArray('user_repository') ?? []
         );
     }
 
@@ -133,14 +133,14 @@ class DatabaseConfiguration
      */
     private function createUserRepositoryConfig(array $config): array
     {
-        $reader = ArrayReader::from($config);
-        $fields = ArrayReader::from($reader->array('field') ?? []);
+        $reader = ArrayReader::fromArray($config);
+        $fields = ArrayReader::fromArray($reader->getArray('field') ?? []);
         $userRepositoryConfig = [
-            'table' => $reader->string('table', 'user'),
+            'table' => $reader->getString('table', 'user'),
             'field' => [
-                'identity' => $fields->string('identity', 'email'),
-                'password' => $fields->string('password', 'password'),
-                'active' => $fields->string('active', 'active'),
+                'identity' => $fields->getString('identity', 'email'),
+                'password' => $fields->getString('password', 'password'),
+                'active' => $fields->getString('active', 'active'),
             ],
         ];
 
@@ -168,7 +168,7 @@ class DatabaseConfiguration
                 JOIN %s AS u ON ur.user_id = u.id
             WHERE u.%s = :identity
         ';
-        $userRepositoryConfig['sql_get_roles'] = $reader->string(
+        $userRepositoryConfig['sql_get_roles'] = $reader->getString(
             'sql_get_roles',
             sprintf(
                 $sqlGetRoles,
@@ -178,7 +178,7 @@ class DatabaseConfiguration
             )
         );
 
-        $userRepositoryConfig['sql_get_details'] = $reader->string(
+        $userRepositoryConfig['sql_get_details'] = $reader->getString(
             'sql_get_details',
             sprintf(
                 'SELECT * FROM %s WHERE %s = :identity',
@@ -196,7 +196,7 @@ class DatabaseConfiguration
         if ($sqlIsActive === false || (is_string($sqlIsActive) && strtolower(trim($sqlIsActive)) === 'false')) {
             $userRepositoryConfig['sql_is_active'] = null;
         } else {
-            $sqlIsActive = $reader->string('sql_is_active');
+            $sqlIsActive = $reader->getString('sql_is_active');
             $userRepositoryConfig['sql_is_active'] = $sqlIsActive === null || $sqlIsActive === ''
                 ? sprintf(
                     'SELECT %s FROM %s WHERE %s = :identity',

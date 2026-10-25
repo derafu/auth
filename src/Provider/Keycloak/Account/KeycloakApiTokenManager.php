@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Provider\Keycloak\Account;
 
+use Derafu\Array\ArrayReader;
 use Derafu\Auth\Account\ApiToken;
 use Derafu\Auth\Account\NewApiToken;
 use Derafu\Auth\Contract\ApiTokenManagerInterface;
@@ -24,7 +25,6 @@ use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
 use Derafu\Auth\Provider\Keycloak\TokenClaims;
 use Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager;
 use Derafu\Form\Contract\FormInterface;
-use Derafu\Support\ArrayReader;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 use Derafu\Translation\TranslatableMessage;
 use Mezzio\Authentication\UserInterface as MezzioUserInterface;
@@ -90,9 +90,9 @@ class KeycloakApiTokenManager implements ApiTokenManagerInterface
 
         // The form checks what came (its CSRF token, the password that is there).
         $body = $request->getParsedBody();
-        $data = $this->formManager->processForm(ApiTokenForm::class, is_array($body) ? $body : [])->getProcessedDataReader();
+        $data = $this->formManager->processForm(ApiTokenForm::class, is_array($body) ? $body : [])->getReader();
         $password = $data->requireString(ApiTokenForm::PASSWORD);
-        $otp = $data->string(ApiTokenForm::TOTP);
+        $otp = $data->getString(ApiTokenForm::TOTP);
         $otp = $otp !== null ? trim($otp) : null;
 
         try {
@@ -114,9 +114,9 @@ class KeycloakApiTokenManager implements ApiTokenManagerInterface
         // When it was made and when it ends are what the token says (Keycloak gives an
         // end to the ones that it makes, and not every version does).
         try {
-            $reader = ArrayReader::from($claims, 'offline token claims');
+            $reader = ArrayReader::fromArray($claims, 'offline token claims');
 
-            return new NewApiToken($token, $reader->int('iat'), $reader->int('exp'));
+            return new NewApiToken($token, $reader->getInt('iat'), $reader->getInt('exp'));
         } catch (TranslatableInvalidArgumentException $e) {
             throw new AuthenticationException(
                 ['The API token has invalid claims: {error}', 'error' => $e->getMessage()],

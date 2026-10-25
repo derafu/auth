@@ -368,6 +368,7 @@ final class KeycloakConfigurationTest extends TestCase
         yield 'empty array' => [[]];
         yield 'list' => [['openid', 'profile', 'email']];
         yield 'named and numeric keys' => [['first' => 'profile', 7 => 'openid', 0 => 'email']];
+        yield 'literal dotted keys and sparse indexes' => [['oauth.profile' => 'profile', 'oauth' => 'openid', 7 => 'email']];
         yield 'empty and zero strings' => [['', '0']];
         yield 'duplicate values' => [['openid', 'openid']];
     }

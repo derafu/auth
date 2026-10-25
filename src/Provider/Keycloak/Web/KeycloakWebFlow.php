@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Provider\Keycloak\Web;
 
+use Derafu\Array\ArrayReader;
 use Derafu\Auth\AnonymousUser;
 use Derafu\Auth\Authentication\Channel\Web\Flash;
 use Derafu\Auth\Authentication\Channel\Web\WebConfiguration;
@@ -21,8 +22,7 @@ use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\ProviderUnavailableException;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
-use Derafu\Support\ArrayReader;
-use Derafu\Support\ArrayType;
+use Derafu\Value\ValueType;
 use Exception;
 use Laminas\Diactoros\Response\RedirectResponse;
 use Mezzio\Session\SessionInterface;
@@ -139,14 +139,14 @@ class KeycloakWebFlow implements WebFlowInterface
             }
 
             $idToken = $this->userRepository->verifyIdToken(
-                ArrayReader::from($tokenInfo)->require('id_token', ArrayType::string()),
+                ArrayReader::fromArray($tokenInfo)->require('id_token', ValueType::string()),
                 (string) $this->sessionManager->getNonce($session)
             );
 
             // Get the user (the access token is verified) and check that it is
             // the user of the ID token.
             $userInfo = $this->userRepository->getUserInfoFromToken(
-                ArrayReader::from($tokenInfo)->require('access_token', ArrayType::string())
+                ArrayReader::fromArray($tokenInfo)->require('access_token', ValueType::string())
             );
             if (($idToken['sub'] ?? null) !== ($userInfo['sub'] ?? null)) {
                 throw new AuthenticationException(
@@ -219,7 +219,7 @@ class KeycloakWebFlow implements WebFlowInterface
 
                     try {
                         $userInfo = $this->userRepository->getUserInfoFromToken(
-                            ArrayReader::from($tokenInfo)->require('access_token', ArrayType::string())
+                            ArrayReader::fromArray($tokenInfo)->require('access_token', ValueType::string())
                         );
                     } catch (ProviderUnavailableException) {
                         // The next request asks again, with the new tokens.

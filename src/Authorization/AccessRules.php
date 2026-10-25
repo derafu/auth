@@ -15,8 +15,8 @@ namespace Derafu\Auth\Authorization;
 use Derafu\Auth\Contract\AccessRulesInterface;
 use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Routing\Contract\RouteMatchInterface;
-use Derafu\Support\ArrayType;
 use Derafu\Support\Url;
+use Derafu\Value\ValueType;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
@@ -99,9 +99,9 @@ class AccessRules implements AccessRulesInterface
 
             $validatedRoles = [];
             foreach ($roles as $key => $role) {
-                $validatedRoles[$key] = ArrayType::string()->parse(
+                $validatedRoles[$key] = ValueType::string()->parse(
                     $role,
-                    ArrayType::path('protected_paths.' . $path, $key),
+                    ValueType::path('protected_paths.' . $path, $key),
                     'Access rules'
                 );
             }

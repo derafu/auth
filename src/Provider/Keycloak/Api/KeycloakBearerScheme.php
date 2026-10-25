@@ -13,14 +13,14 @@ declare(strict_types=1);
 namespace Derafu\Auth\Provider\Keycloak\Api;
 
 use DateTimeImmutable;
+use Derafu\Array\ArrayReader;
 use Derafu\Auth\Authentication\Channel\Api\Scheme\BearerScheme;
 use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
 use Derafu\Auth\Provider\Keycloak\TokenClaims;
-use Derafu\Support\ArrayReader;
-use Derafu\Support\ArrayType;
+use Derafu\Value\ValueType;
 use Firebase\JWT\BeforeValidException;
 use Firebase\JWT\ExpiredException;
 use Firebase\JWT\SignatureInvalidException;
@@ -173,10 +173,10 @@ class KeycloakBearerScheme extends BearerScheme
             throw new AuthenticationException('Keycloak did not accept the offline token.', 401, $e);
         }
         $user = $this->userOfAccessToken(
-            ArrayReader::from($tokens)->require('access_token', ArrayType::string())
+            ArrayReader::fromArray($tokens)->require('access_token', ValueType::string())
         );
 
-        $expires = ArrayReader::from($tokens)->int('expires');
+        $expires = ArrayReader::fromArray($tokens)->getInt('expires');
         if ($this->cache !== null && $expires !== null) {
             $this->cache->save(
                 $this->cache->getItem($key)

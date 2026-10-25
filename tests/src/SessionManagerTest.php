@@ -12,8 +12,10 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth;
 
+use Derafu\Array\Exception\TypeMismatchException as ArrayTypeMismatchException;
 use Derafu\Auth\Authentication\Channel\Web\SessionManager;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
+use Derafu\Value\Exception\TypeMismatchException as ValueTypeMismatchException;
 use Mezzio\Session\Session;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -128,6 +130,22 @@ final class SessionManagerTest extends TestCase
         $this->assertNull($manager->getRedirectUrl(new Session([])));
         foreach ([null, '', '0', '/private?tab=2', ' https://example.com/ '] as $value) {
             $this->assertSame($value, $manager->getRedirectUrl(new Session(['auth_redirect' => $value])));
+        }
+    }
+
+    public function testInvalidRedirectRetainsItsFieldAndValueCauseWithoutChangingTheSession(): void
+    {
+        $session = new Session(['auth_redirect' => ['/private']]);
+
+        try {
+            (new SessionManager())->getRedirectUrl($session);
+            $this->fail('An array must not be accepted as a redirect URL.');
+        } catch (ArrayTypeMismatchException $exception) {
+            $this->assertStringContainsString('"auth_redirect"', $exception->getMessage());
+            $cause = $exception->getPrevious();
+            $this->assertInstanceOf(ValueTypeMismatchException::class, $cause);
+            $this->assertSame('auth_redirect', $cause->getTranslatableMessage()->getParameters()['path']);
+            $this->assertSame(['/private'], $session->get('auth_redirect'));
         }
     }
 
