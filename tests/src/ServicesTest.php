@@ -12,6 +12,9 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth;
 
+use Derafu\Auth\Account\AccountController;
+use Derafu\Auth\Account\BasicAccount;
+use Derafu\Auth\Account\Form\ApiTokenValueForm;
 use Derafu\Auth\Authentication\AuthenticationManager;
 use Derafu\Auth\Authentication\AuthenticationMiddleware;
 use Derafu\Auth\Authentication\Channel\Api\ApiChannel;
@@ -25,10 +28,14 @@ use Derafu\Auth\Contract\AccessRulesInterface;
 use Derafu\Auth\Contract\AccountInterface;
 use Derafu\Auth\Contract\ApiSchemeInterface;
 use Derafu\Auth\Contract\AuthenticationInterface as DerafuAuthenticationInterface;
+use Derafu\Auth\Contract\AuthorizationInterface;
 use Derafu\Auth\Contract\ChannelInterface;
+use Derafu\Auth\Contract\FormManagerInterface;
+use Derafu\Auth\Contract\SessionManagerInterface;
 use Derafu\Auth\Contract\UserFactoryInterface;
 use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Contract\WebFlowInterface;
+use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Auth\Provider\Database\DatabaseConfiguration;
 use Derafu\Auth\Provider\Database\DatabaseUserRepository;
@@ -36,7 +43,10 @@ use Derafu\Auth\Provider\Htpasswd\HtpasswdConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
+use Derafu\Auth\Translation\AuthTranslationResourceProvider;
+use Derafu\Auth\Twig\AuthExtension;
 use Derafu\Auth\UserFactory;
+use Derafu\Auth\Web\AuthController;
 use Derafu\DataProcessor\ProcessorFactory;
 use Derafu\Form\Contract\Factory\FormFactoryInterface;
 use Derafu\Form\Contract\Processor\FormDataProcessorInterface;
@@ -49,8 +59,14 @@ use Derafu\Form\Type\TypeResolver;
 use Derafu\TestsAuth\Fixture\CustomAuthProvider;
 use Derafu\TestsAuth\Fixture\CustomUserFactory;
 use Derafu\TestsAuth\Fixture\GuestUser;
+use Derafu\TestsAuth\Fixture\HtpasswdFile;
 use Derafu\TestsAuth\Fixture\SessionApp;
+use Derafu\TestsAuth\Fixture\UsersDatabase;
+use Derafu\Translation\TranslatorFactory;
+use Laminas\Diactoros\ServerRequest;
+use Laminas\Diactoros\Uri;
 use Mezzio\Authentication\AuthenticationInterface;
+use Mezzio\Session\Session;
 use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
@@ -60,10 +76,14 @@ use Psr\Http\Server\MiddlewareInterface;
 use ReflectionProperty;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\Config\FileLocator;
+use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
+use Symfony\Component\Translation\Translator;
 use Symfony\Component\VarExporter\LazyObjectInterface;
+use Twig\Environment;
+use Twig\Loader\ArrayLoader;
 
 /**
  * The services of the package, as an application imports them: what the
@@ -847,5 +867,220 @@ final class ServicesTest extends TestCase
             $authentication,
             fn () => null
         );
+    }
+
+    /**
+     * Keep the selected provider and shared package services reachable without
+     * initializing inactive providers or changing their lazy definitions.
+     */
+    private function configuredContainer(string $provider): ContainerBuilder
+    {
+        if ($provider === 'keycloak') {
+            $this->environment('AUTH_KEYCLOAK_URL', 'https://auth.example.com');
+            $this->environment('AUTH_KEYCLOAK_REALM', 'derafu');
+            $this->environment('AUTH_KEYCLOAK_CLIENT_ID', 'app');
+            $this->environment('AUTH_KEYCLOAK_CLIENT_SECRET', 'secret');
+            $this->environment('AUTH_KEYCLOAK_WEB_REDIRECT_URI', 'https://app.example.com/auth/callback');
+        }
+
+        $container = $this->container($provider, true);
+        foreach ($container->getDefinitions() as $id => $definition) {
+            if (str_starts_with($id, 'Derafu\\Auth\\Provider\\')
+                && !str_starts_with($id, 'Derafu\\Auth\\Provider\\' . ucfirst($provider) . '\\')) {
+                continue;
+            }
+            if ((str_starts_with($id, 'auth.forms.') || str_starts_with($id, 'auth.throttle.'))
+                && !str_ends_with($id, '.' . $provider)) {
+                continue;
+            }
+            if ($provider === 'keycloak' && in_array($id, [
+                BasicAccount::class,
+                \Derafu\Auth\Authentication\Channel\Web\SessionManager::class,
+            ], true)) {
+                continue;
+            }
+            if (str_starts_with($id, 'Derafu\\Auth\\') || str_starts_with($id, 'auth.')) {
+                $definition->setPublic(true);
+            }
+        }
+        foreach ($container->getAliases() as $alias) {
+            $alias->setPublic(true);
+        }
+        $container->compile(true);
+
+        return $container;
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function serviceProviders(): array
+    {
+        return [
+            'keycloak' => ['keycloak'],
+            'database' => ['database'],
+            'htpasswd' => ['htpasswd'],
+        ];
+    }
+
+    #[Test]
+    #[DataProvider('serviceProviders')]
+    public function everySelectedServiceIsConstructedAndAliasesShareTheirTarget(string $provider): void
+    {
+        $container = $this->configuredContainer($provider);
+
+        foreach ($container->getDefinitions() as $id => $definition) {
+            if (!$definition->isPublic()
+                || (!str_starts_with($id, 'Derafu\\Auth\\') && !str_starts_with($id, 'auth.'))) {
+                continue;
+            }
+            $class = $definition->getClass();
+            self::assertNotNull($class, $id);
+            self::assertTrue(class_exists($class) || interface_exists($class), $id);
+            self::assertInstanceOf($class, $this->real($container->get($id)), $id);
+        }
+        foreach ([
+            AuthenticationInterface::class => DerafuAuthenticationInterface::class,
+            \Mezzio\Authorization\AuthorizationInterface::class => AuthorizationInterface::class,
+            UserFactoryInterface::class => UserFactory::class,
+        ] as $alias => $target) {
+            self::assertSame($container->get($target), $container->get($alias));
+        }
+
+        $registry = $this->service($container, AuthProviderRegistry::class);
+        self::assertSame($provider, $registry->provider()::name());
+        self::assertSame($provider === 'keycloak' ? 'Bearer' : 'Basic', $registry->apiScheme()->scheme());
+        self::assertSame($registry->apiScheme()->scheme(), $registry->account()->apiScheme());
+    }
+
+    #[Test]
+    #[DataProvider('serviceProviders')]
+    public function selectedSessionAndFormContractsPerformTheirOperations(string $provider): void
+    {
+        $container = $this->configuredContainer($provider);
+        $sessionManager = $this->service($container, SessionManagerInterface::class);
+        $session = new Session([]);
+        $sessionManager->storeUserInfo($session, ['identity' => 'ana']);
+        $sessionManager->storeRedirectUrl($session, '/reports');
+        self::assertSame(['identity' => 'ana'], $sessionManager->getUserInfo($session));
+        self::assertSame('/reports', $sessionManager->getRedirectUrl($session));
+        $sessionManager->clearSession($session);
+        self::assertNull($sessionManager->getUserInfo($session));
+        self::assertNull($sessionManager->getRedirectUrl($session));
+
+        $forms = $this->service($container, FormManagerInterface::class);
+        $form = $forms->createForm(new ApiTokenValueForm(), ['token' => 'example-token']);
+        self::assertSame('example-token', $form->getData()?->getReader()->requireString('token'));
+        $result = $forms->processForm(ApiTokenValueForm::class, ['token' => 'example-token']);
+        self::assertTrue($result->isValid());
+        self::assertSame('example-token', $result->getReader()->requireString('token'));
+    }
+
+    #[Test]
+    #[DataProvider('serviceProviders')]
+    public function configuredControllersUseApplicationPathsAndProtectTheProfile(string $provider): void
+    {
+        $this->environment('AUTH_WEB_LOGIN_REDIRECT_PATH', '/dashboard');
+        $this->environment('AUTH_WEB_LOGOUT_REDIRECT_PATH', '/goodbye');
+        $container = $this->configuredContainer($provider);
+        $controller = $this->service($container, AuthController::class);
+        $request = new ServerRequest();
+        self::assertSame('/goodbye', $controller->logout($request)->getHeaderLine('Location'));
+        $user = $this->service($container, UserFactoryInterface::class)->create('ana', ['admin']);
+        $response = $controller->login($request->withAttribute(\Mezzio\Authentication\UserInterface::class, $user));
+        self::assertInstanceOf(\Psr\Http\Message\ResponseInterface::class, $response);
+        self::assertSame(302, $response->getStatusCode());
+        self::assertSame('/dashboard', $response->getHeaderLine('Location'));
+
+        $this->expectException(AuthenticationException::class);
+        $this->expectExceptionCode(401);
+        $this->service($container, AccountController::class)->profile($request);
+    }
+
+    #[Test]
+    #[DataProvider('serviceProviders')]
+    public function configuredTwigFunctionsUseTheWebConfigurationAndUserRoles(string $provider): void
+    {
+        $this->environment('AUTH_WEB_LOGOUT_PATH', '/signout');
+        $container = $this->configuredContainer($provider);
+        $twig = new Environment(new ArrayLoader(), ['strict_variables' => true]);
+        $twig->addExtension($this->service($container, AuthExtension::class));
+        $user = $this->service($container, UserFactoryInterface::class)->create('ana', ['admin']);
+        $template = $twig->createTemplate("{{ login_path() }}|{{ logout_path() }}|{{ profile_path() }}|{{ is_granted('admin') ? 'yes' : 'no' }}|{{ is_granted('editor') ? 'yes' : 'no' }}");
+        self::assertSame(
+            '/auth/login|/signout|/auth/profile|yes|no',
+            $template->render(['app' => ['user' => $user]])
+        );
+        self::assertStringEndsWith('|no|no', $template->render(['app' => ['user' => new GuestUser()]]));
+
+        $authorization = $this->service($container, AuthorizationInterface::class);
+        $request = (new ServerRequest())->withAttribute(\Mezzio\Authentication\UserInterface::class, $user);
+        self::assertTrue($authorization->isGrantedAny(['admin'], $request));
+        self::assertFalse($authorization->isGrantedAny(['editor'], $request));
+    }
+
+    #[Test]
+    public function configuredAuthenticationReadsTheRealDatabase(): void
+    {
+        $database = new UsersDatabase();
+        try {
+            $this->environment('AUTH_DATABASE_URL', 'sqlite:' . $database->file());
+            $container = $this->configuredContainer('database');
+            $request = (new ServerRequest())
+                ->withUri(new Uri('https://app.example.com/api/reports'))
+                ->withHeader('Authorization', 'Basic ' . base64_encode('ana@example.com:secret'));
+            $user = $this->service($container, DerafuAuthenticationInterface::class)->authenticate($request);
+            self::assertInstanceOf(UserInterface::class, $user);
+            self::assertSame('ana@example.com', $user->getIdentity());
+            self::assertTrue($user->hasAnyRole(['admin']));
+        } finally {
+            $database->remove();
+        }
+    }
+
+    #[Test]
+    public function configuredAuthenticationReadsTheRealHtpasswdAndGroups(): void
+    {
+        $file = new HtpasswdFile();
+        try {
+            $file->groups(['admin' => ['ana']]);
+            $this->environment('AUTH_HTPASSWD_PATH', $file->path());
+            $this->environment('AUTH_HTPASSWD_GROUP_PATH', $file->groupPath());
+            $container = $this->configuredContainer('htpasswd');
+            $request = (new ServerRequest())
+                ->withUri(new Uri('https://app.example.com/api/reports'))
+                ->withHeader('Authorization', 'Basic ' . base64_encode('ana:secret'));
+            $user = $this->service($container, DerafuAuthenticationInterface::class)->authenticate($request);
+            self::assertInstanceOf(UserInterface::class, $user);
+            self::assertSame('ana', $user->getIdentity());
+            self::assertTrue($user->hasAnyRole(['admin']));
+        } finally {
+            $file->remove();
+        }
+    }
+
+    #[Test]
+    public function taggedResourcesTranslateBothInterfaceMessagesAndRealExceptions(): void
+    {
+        $container = $this->container('database', true);
+        self::assertArrayHasKey(
+            AuthTranslationResourceProvider::class,
+            $container->findTaggedServiceIds('derafu_translation.resource_provider')
+        );
+        $container->register(Translator::class)
+            ->setFactory([TranslatorFactory::class, 'create'])
+            ->setArguments(['es', ['en'], new TaggedIteratorArgument('derafu_translation.resource_provider')])
+            ->setPublic(true);
+        $container->getDefinition(AuthController::class)->setPublic(true);
+        $container->compile(true);
+        $translator = $this->service($container, Translator::class);
+        self::assertSame('Iniciar sesión', $translator->trans('Login', [], 'auth'));
+        try {
+            $this->service($container, AuthController::class)->callback(new ServerRequest());
+            self::fail('A form-based provider accepted a callback.');
+        } catch (AuthenticationException $exception) {
+            self::assertSame(404, $exception->getCode());
+            self::assertSame('Este proveedor no tiene callback.', $exception->trans($translator));
+        }
     }
 }
