@@ -24,6 +24,7 @@ use Derafu\Auth\Provider\Database\Web\Form\LoginForm;
 use Derafu\Captcha\Provider\AltchaProvider;
 use Derafu\Csrf\SessionCsrfTokenManager;
 use Derafu\DataProcessor\ProcessorFactory;
+use Derafu\Form\Contract\FormInterface;
 use Derafu\Form\Factory\FormFactory;
 use Derafu\Form\Processor\FormDataProcessor;
 use Derafu\Form\Processor\FormRulesResolver;
@@ -92,7 +93,7 @@ final class FormManagerTest extends TestCase
      */
     private function sent(array $data, bool $captcha = true): array
     {
-        $data += ['_token' => $this->csrf->getToken('login')];
+        $data += [FormInterface::CSRF_FIELD => $this->csrf->getToken('login')];
 
         return $captcha ? $data + ['altcha' => $this->solved()] : $data;
     }
@@ -225,7 +226,7 @@ final class FormManagerTest extends TestCase
 
         $this->manager()->processForm(
             LoginForm::class,
-            ['email' => 'ana@example.com', 'password' => 'secret', '_token' => $this->csrf->getToken('contact')]
+            ['email' => 'ana@example.com', 'password' => 'secret', FormInterface::CSRF_FIELD => $this->csrf->getToken('contact')]
         );
     }
 

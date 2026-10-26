@@ -20,6 +20,7 @@ use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Provider\Database\DatabaseUserRepository;
 use Derafu\Auth\Provider\Database\Web\DatabaseWebFlow;
 use Derafu\Auth\User;
+use Derafu\Form\Contract\FormInterface;
 use Derafu\Form\Factory\FormFactory;
 use Derafu\Form\Type\TypeProvider;
 use Derafu\Form\Type\TypeRegistry;
@@ -318,7 +319,7 @@ final class DatabaseAuthenticationTest extends TestCase
 
         $result = $this->authenticate($this->app->request(
             '/auth/login',
-            body: ['email' => 'ana@example.com', 'password' => 'secret', '_token' => $forged],
+            body: ['email' => 'ana@example.com', 'password' => 'secret', FormInterface::CSRF_FIELD => $forged],
             csrf: false
         ));
 
@@ -362,7 +363,7 @@ final class DatabaseAuthenticationTest extends TestCase
     {
         $result = $this->authenticate($this->app->request(
             '/auth/login',
-            body: ['email' => 'ana@example.com', 'password' => 'secret', '_token' => $this->app->token()],
+            body: ['email' => 'ana@example.com', 'password' => 'secret', FormInterface::CSRF_FIELD => $this->app->token()],
             csrf: false
         ));
 

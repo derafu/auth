@@ -20,6 +20,7 @@ use Derafu\Auth\Provider\Database\DatabaseUserRepository;
 use Derafu\Auth\Provider\Database\Web\DatabaseWebFlow;
 use Derafu\Auth\Translation\AuthTranslationResourceProvider;
 use Derafu\Auth\Web\AuthController;
+use Derafu\Form\Contract\FormInterface;
 use Derafu\Form\Factory\FormFactory;
 use Derafu\Form\Factory\TranslatingFormFactory;
 use Derafu\Form\Renderer\FormTwigExtension;
@@ -197,7 +198,7 @@ final class DatabaseLoginPageTest extends TestCase
     {
         $page = $this->page($this->app->request('/auth/login'));
 
-        $this->assertSame(1, preg_match('/name="_token" value="([^"]+)"/', $page, $matches));
+        $this->assertSame(1, preg_match('/name="' . preg_quote(FormInterface::CSRF_FIELD, '/') . '" value="([^"]+)"/', $page, $matches));
 
         $valid = false;
         $this->app->handle($this->app->request('/'), function () use ($matches, &$valid): void {
