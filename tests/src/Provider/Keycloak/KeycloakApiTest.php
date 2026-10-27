@@ -30,6 +30,7 @@ use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
+use PHPUnit\Framework\Attributes\UsesNamespace;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -65,6 +66,7 @@ use Psr\Http\Message\ServerRequestInterface;
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationMiddleware::class)]
 #[UsesClass(\Derafu\Auth\Provider\Keycloak\TokenClaims::class)]
+#[UsesNamespace('Derafu\\Auth')]
 final class KeycloakApiTest extends TestCase
 {
     private static RealKeycloak $keycloak;

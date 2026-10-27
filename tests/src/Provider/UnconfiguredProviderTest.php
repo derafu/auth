@@ -53,6 +53,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
+use PHPUnit\Framework\Attributes\UsesNamespace;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -97,6 +98,7 @@ use PHPUnit\Framework\TestCase;
 #[UsesClass(AuthenticationException::class)]
 #[UsesClass(ConfigurationException::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationMiddleware::class)]
+#[UsesNamespace('Derafu\\Auth')]
 final class UnconfiguredProviderTest extends TestCase
 {
     private const SETTINGS = ['enabled' => true, 'protected_paths' => ['/private', '/api']];

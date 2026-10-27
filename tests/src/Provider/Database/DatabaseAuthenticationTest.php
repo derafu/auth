@@ -37,6 +37,7 @@ use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
+use PHPUnit\Framework\Attributes\UsesNamespace;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\ServerRequestInterface;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
@@ -71,6 +72,7 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
 #[UsesClass(User::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationMiddleware::class)]
+#[UsesNamespace('Derafu\\Auth')]
 final class DatabaseAuthenticationTest extends TestCase
 {
     private const NEXT = 'Mezzio\Flash\FlashMessagesInterface::FLASH_NEXT';

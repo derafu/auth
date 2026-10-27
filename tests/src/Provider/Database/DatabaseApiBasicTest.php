@@ -31,6 +31,7 @@ use Derafu\TestsAuth\Provider\ApiBasicTests;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
+use PHPUnit\Framework\Attributes\UsesNamespace;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -62,6 +63,7 @@ use PHPUnit\Framework\TestCase;
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationMiddleware::class)]
 #[UsesClass(\Derafu\Auth\Exception\AuthenticationException::class)]
+#[UsesNamespace('Derafu\\Auth')]
 final class DatabaseApiBasicTest extends TestCase
 {
     use ApiBasicTests;

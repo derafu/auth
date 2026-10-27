@@ -15,8 +15,8 @@ namespace Derafu\Auth\Provider\Keycloak\Web;
 use Derafu\Array\ArrayReader;
 use Derafu\Auth\AnonymousUser;
 use Derafu\Auth\Authentication\Channel\Web\Flash;
-use Derafu\Auth\Authentication\Channel\Web\WebConfiguration;
 use Derafu\Auth\Contract\UserInterface;
+use Derafu\Auth\Contract\WebConfigurationInterface;
 use Derafu\Auth\Contract\WebFlowInterface;
 use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\ProviderUnavailableException;
@@ -44,14 +44,14 @@ class KeycloakWebFlow implements WebFlowInterface
      *
      * @param KeycloakUserRepository $userRepository The user repository.
      * @param KeycloakConfiguration $config The configuration of Keycloak.
-     * @param WebConfiguration $web The configuration of the web channel.
+     * @param WebConfigurationInterface $web The configuration of the web channel.
      * @param KeycloakSessionManager $sessionManager The session manager.
      * @param UserInterface $anonymousUser The anonymous user.
      */
     public function __construct(
         private readonly KeycloakUserRepository $userRepository,
         private readonly KeycloakConfiguration $config,
-        private readonly WebConfiguration $web,
+        private readonly WebConfigurationInterface $web,
         private readonly KeycloakSessionManager $sessionManager,
         private readonly UserInterface $anonymousUser = new AnonymousUser()
     ) {

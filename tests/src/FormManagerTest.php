@@ -23,7 +23,7 @@ use Derafu\Auth\Provider\Database\DatabaseConfiguration;
 use Derafu\Auth\Provider\Database\Web\Form\LoginForm;
 use Derafu\Captcha\Provider\AltchaProvider;
 use Derafu\Csrf\SessionCsrfTokenManager;
-use Derafu\DataProcessor\ProcessorFactory;
+use Derafu\DataProcessor\Contract\ProcessorInterface;
 use Derafu\Form\Contract\FormInterface;
 use Derafu\Form\Factory\FormFactory;
 use Derafu\Form\Processor\FormDataProcessor;
@@ -31,11 +31,13 @@ use Derafu\Form\Processor\FormRulesResolver;
 use Derafu\Form\Type\TypeProvider;
 use Derafu\Form\Type\TypeRegistry;
 use Derafu\Form\Type\TypeResolver;
+use Derafu\TestsAuth\Fixture\AuthApplication;
 use Derafu\TestsAuth\Fixture\Stack;
 use Mezzio\Session\Session;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
+use PHPUnit\Framework\Attributes\UsesNamespace;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -46,6 +48,7 @@ use PHPUnit\Framework\TestCase;
 #[UsesClass(LoginForm::class)]
 #[UsesClass(DatabaseConfiguration::class)]
 #[UsesClass(FormException::class)]
+#[UsesNamespace('Derafu\\Auth')]
 final class FormManagerTest extends TestCase
 {
     private SessionCsrfTokenManager $csrf;
@@ -105,7 +108,7 @@ final class FormManagerTest extends TestCase
     {
         return new FormManager(
             new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
-            new FormDataProcessor(new FormRulesResolver(), (new ProcessorFactory())->create(), csrfTokenManager: $this->csrf, captchaProvider: $this->captcha),
+            new FormDataProcessor(new FormRulesResolver(), AuthApplication::service(ProcessorInterface::class), csrfTokenManager: $this->csrf, captchaProvider: $this->captcha),
             Stack::databaseConfiguration($config + ['database_url' => 'sqlite::memory:'])
         );
     }

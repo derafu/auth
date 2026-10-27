@@ -1,0 +1,18 @@
+imports:
+    - { resource: '../../../resources/config/auth-services.yaml' }
+
+parameters:
+    derafu.twig.options: { extra: false }
+
+services:
+    Symfony\Contracts\Translation\TranslatorInterface:
+        class: Symfony\Component\Translation\Translator
+        factory: ['Derafu\Translation\TranslatorFactory', create]
+        arguments:
+            $defaultLocale: es
+            $fallbackLocales: [en]
+            $resourceProviders: !tagged_iterator derafu_translation.resource_provider
+
+    Derafu\TestsAuth\Fixture\ApplicationTemplatePathProvider:
+        tags:
+            - { name: derafu_twig.template_path_provider, priority: 100 }

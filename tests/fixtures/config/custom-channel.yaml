@@ -1,0 +1,21 @@
+services:
+    app.channel:
+        class: Derafu\Auth\Authentication\Channel\Api\ApiChannel
+        arguments:
+            - !service
+                class: Derafu\Auth\Authentication\Channel\Api\ApiConfiguration
+                arguments: [{ paths: ['/hooks'] }]
+            - !service
+                class: Derafu\Auth\Provider\Database\Api\DatabaseBasicScheme
+                arguments:
+                    - !service
+                        class: Derafu\Auth\Provider\Database\DatabaseUserRepository
+                        arguments:
+                            - !service
+                                class: Derafu\Auth\Provider\Database\DatabaseConfiguration
+                                arguments: [{}]
+                    - !service
+                        class: Derafu\Auth\Provider\Database\DatabaseConfiguration
+                        arguments: [{}]
+        tags:
+            - { name: derafu_auth.channel, priority: 50 }

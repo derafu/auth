@@ -26,8 +26,14 @@
 #     provider receive their own services (not the contracts), because the
 #     contracts are given by the provider.
 #
-# Every service is lazy: what is not used by a request is not made, so a
-# configuration that is wrong fails where it is used and not in every page.
+# Channels and backend services are lazy: provider configuration is validated
+# when it is used, allowing public pages to render without an auth provider.
+# Template paths and extensions join the shared Twig composition through tags.
+
+imports:
+    - { resource: ../../../data-processor/resources/config/data-processor-services.yaml }
+    - { resource: ../../../form/resources/config/form-services.yaml }
+    - { resource: ../../../twig-components/resources/config/twig-components-twig-services.yaml }
 
 parameters:
     # Keycloak is asked, in each request of a client of the API, whether its token
@@ -37,7 +43,7 @@ parameters:
 
     # The database of the provider is the one of the application (DATABASE_URL)
     # unless AUTH_DATABASE_URL says another.
-    auth.database.url.fallback: '%env(default::string:DATABASE_URL)%'
+    derafu.auth.database.url.fallback: '%env(default::string:DATABASE_URL)%'
     env(AUTH_DATABASE_LOGIN_MAX_ATTEMPTS): '5'
     env(AUTH_DATABASE_LOGIN_LOCK_SECONDS): '900'
 
@@ -61,9 +67,8 @@ services:
 
     # The users that the provider gives are made by this factory: an application
     # that has its own class of user registers its factory in its place.
-    Derafu\Auth\UserFactory: ~
     Derafu\Auth\Contract\UserFactoryInterface:
-        alias: Derafu\Auth\UserFactory
+        class: Derafu\Auth\UserFactory
 
     # Who may enter which path: the protected paths with their roles
     # (AUTH_PROTECTED_PATHS) and whether they are enforced (AUTH_ENABLED).
@@ -106,7 +111,7 @@ services:
     # The registry makes it, to add what the provider says about the paths when the
     # variables do not (a provider with a login page of the site sends the user
     # there).
-    Derafu\Auth\Authentication\Channel\Web\WebConfiguration:
+    Derafu\Auth\Contract\WebConfigurationInterface:
         class: Derafu\Auth\Authentication\Channel\Web\WebConfiguration
         factory: ['@Derafu\Auth\AuthProviderRegistry', webConfiguration]
         lazy: true
@@ -138,13 +143,15 @@ services:
     # The routes of the login and the logout, and the pages of the account of the
     # user (the profile and the tokens of the API): the same for every provider,
     # what changes is what the provider gives. The functions of Twig (`is_granted`,
-    # `logout_path`...) are an extension that the application adds to the ones of
-    # its renderer.
+    # `logout_path`...) are contributed to the shared Twig environment.
     Derafu\Auth\Web\AuthController:
         public: true
     Derafu\Auth\Account\AccountController:
         public: true
-    Derafu\Auth\Twig\AuthExtension: ~
+    Derafu\Auth\Provider\AuthTemplatePathProvider:
+        tags: [derafu_twig.template_path_provider]
+    Derafu\Auth\Provider\AuthExtensionProvider:
+        tags: [derafu_twig.extension_provider]
 
     # The provider of the application, chosen with AUTH_PROVIDER. It is read when
     # a piece of the provider is needed, so with it empty or wrong only what needs
@@ -302,7 +309,7 @@ services:
         lazy: true
         arguments:
             $config:
-                database_url: '%env(default:auth.database.url.fallback:string:AUTH_DATABASE_URL)%'
+                database_url: '%env(default:derafu.auth.database.url.fallback:string:AUTH_DATABASE_URL)%'
                 project_dir: '%kernel.project_dir%' # For replacing %kernel.project_dir% in the database URL (useful with SQLite).
                 user_repository:
                     table: '%env(default::string:AUTH_DATABASE_USER_TABLE)%'

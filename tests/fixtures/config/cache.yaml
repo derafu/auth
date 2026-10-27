@@ -1,0 +1,4 @@
+services:
+    Psr\Cache\CacheItemPoolInterface:
+        class: Symfony\Component\Cache\Adapter\ArrayAdapter
+        public: true

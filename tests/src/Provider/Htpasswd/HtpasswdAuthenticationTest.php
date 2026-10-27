@@ -40,6 +40,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
+use PHPUnit\Framework\Attributes\UsesNamespace;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -75,6 +76,7 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
 #[UsesClass(SessionManager::class)]
 #[UsesClass(\Derafu\Auth\User::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
+#[UsesNamespace('Derafu\\Auth')]
 final class HtpasswdAuthenticationTest extends TestCase
 {
     private SessionApp $app;

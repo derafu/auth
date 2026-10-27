@@ -20,7 +20,6 @@ use Derafu\Auth\Authentication\AuthenticationMiddleware;
 use Derafu\Auth\Authentication\Channel\Api\ApiChannel;
 use Derafu\Auth\Authentication\Channel\Api\ApiConfiguration;
 use Derafu\Auth\Authentication\Channel\Web\WebChannel;
-use Derafu\Auth\Authentication\Channel\Web\WebConfiguration;
 use Derafu\Auth\Authorization\AccessRules;
 use Derafu\Auth\Authorization\AuthorizationMiddleware;
 use Derafu\Auth\AuthProviderRegistry;
@@ -34,6 +33,7 @@ use Derafu\Auth\Contract\FormManagerInterface;
 use Derafu\Auth\Contract\SessionManagerInterface;
 use Derafu\Auth\Contract\UserFactoryInterface;
 use Derafu\Auth\Contract\UserInterface;
+use Derafu\Auth\Contract\WebConfigurationInterface;
 use Derafu\Auth\Contract\WebFlowInterface;
 use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\ConfigurationException;
@@ -47,43 +47,37 @@ use Derafu\Auth\Translation\AuthTranslationResourceProvider;
 use Derafu\Auth\Twig\AuthExtension;
 use Derafu\Auth\UserFactory;
 use Derafu\Auth\Web\AuthController;
-use Derafu\DataProcessor\ProcessorFactory;
 use Derafu\Form\Contract\Factory\FormFactoryInterface;
-use Derafu\Form\Contract\Processor\FormDataProcessorInterface;
-use Derafu\Form\Factory\FormFactory;
-use Derafu\Form\Processor\FormDataProcessor;
-use Derafu\Form\Processor\FormRulesResolver;
-use Derafu\Form\Type\TypeProvider;
-use Derafu\Form\Type\TypeRegistry;
-use Derafu\Form\Type\TypeResolver;
+use Derafu\Form\Contract\Renderer\FormRendererInterface;
+use Derafu\Form\Renderer\FormTwigExtension;
+use Derafu\Renderer\Contract\RendererInterface;
+use Derafu\Renderer\Engine\Html\TwigHtmlEngine;
+use Derafu\TestsAuth\Fixture\AuthApplication;
 use Derafu\TestsAuth\Fixture\CustomAuthProvider;
 use Derafu\TestsAuth\Fixture\CustomUserFactory;
 use Derafu\TestsAuth\Fixture\GuestUser;
 use Derafu\TestsAuth\Fixture\HtpasswdFile;
 use Derafu\TestsAuth\Fixture\SessionApp;
 use Derafu\TestsAuth\Fixture\UsersDatabase;
-use Derafu\Translation\TranslatorFactory;
+use Derafu\Twig\Contract\TwigServiceInterface;
 use Laminas\Diactoros\ServerRequest;
 use Laminas\Diactoros\Uri;
 use Mezzio\Authentication\AuthenticationInterface;
 use Mezzio\Session\Session;
+use Mezzio\Session\SessionMiddleware;
 use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psr\Cache\CacheItemPoolInterface;
+use Psr\Container\ContainerInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use ReflectionProperty;
-use Symfony\Component\Cache\Adapter\ArrayAdapter;
-use Symfony\Component\Config\FileLocator;
-use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
-use Symfony\Component\DependencyInjection\Definition;
-use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
-use Symfony\Component\Translation\Translator;
+use Symfony\Component\DependencyInjection\Dumper\PhpDumper;
 use Symfony\Component\VarExporter\LazyObjectInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 use Twig\Environment;
-use Twig\Loader\ArrayLoader;
 
 /**
  * The services of the package, as an application imports them: what the
@@ -119,29 +113,10 @@ final class ServicesTest extends TestCase
     {
         $this->environment('AUTH_PROVIDER', $provider);
 
-        $container = new ContainerBuilder();
-        $container->setParameter('kernel.project_dir', dirname(__DIR__, 2));
-
+        $container = AuthApplication::container();
         if ($withPool) {
-            $container->register(CacheItemPoolInterface::class, ArrayAdapter::class)->setPublic(true);
+            AuthApplication::load($container, 'cache.yaml');
         }
-
-        // What the forms need (the database provider uses them).
-        $container->register(FormFactoryInterface::class, FormFactory::class)->setArguments([
-            new Definition(TypeResolver::class, [new Definition(TypeRegistry::class, [new Definition(TypeProvider::class)])]),
-        ]);
-        $container->register(FormDataProcessorInterface::class, FormDataProcessor::class)->setArguments([
-            new Definition(FormRulesResolver::class),
-            (new Definition(\Derafu\DataProcessor\Contract\ProcessorInterface::class))
-                ->setFactory([ProcessorFactory::class, 'create']),
-        ]);
-
-        // The renderer that the login page of the database provider needs.
-        $container->register(\Derafu\Renderer\Contract\RendererInterface::class)
-            ->setFactory([\Derafu\Renderer\Factory\RendererFactory::class, 'create'])
-            ->setArguments([['engines' => ['twig'], 'extra' => false]]);
-
-        (new YamlFileLoader($container, new FileLocator(dirname(__DIR__, 2) . '/resources/config')))->load('auth-services.yaml');
 
         return $container;
     }
@@ -309,12 +284,7 @@ final class ServicesTest extends TestCase
     public function aChannelThatTheApplicationTagsIsAskedInItsPriority(): void
     {
         $container = $this->container('database', true);
-        $container->register('app.channel', ApiChannel::class)
-            ->setArguments([new Definition(ApiConfiguration::class, [['paths' => ['/hooks']]]), new Definition(\Derafu\Auth\Provider\Database\Api\DatabaseBasicScheme::class, [
-                new Definition(DatabaseUserRepository::class, [new Definition(DatabaseConfiguration::class, [[]])]),
-                new Definition(DatabaseConfiguration::class, [[]]),
-            ])])
-            ->addTag('derafu_auth.channel', ['priority' => 50]);
+        AuthApplication::load($container, 'custom-channel.yaml');
         $container->getDefinition(DerafuAuthenticationInterface::class)->setPublic(true);
         $container->compile(true);
 
@@ -361,16 +331,16 @@ final class ServicesTest extends TestCase
     {
         foreach (['keycloak', 'database', 'htpasswd'] as $services) {
             $container = $this->container($services, true);
-            $container->getDefinition(WebConfiguration::class)->setPublic(true);
+            $container->getDefinition(WebConfigurationInterface::class)->setPublic(true);
             $container->compile(true);
             // The provider decides (the expiration of a token, or five minutes).
-            $this->assertNull($this->service($container, WebConfiguration::class)->getRefreshInterval(), $services);
+            $this->assertNull($this->service($container, WebConfigurationInterface::class)->getRefreshInterval(), $services);
 
             $this->environment('AUTH_WEB_REFRESH_INTERVAL_SECONDS', '90');
             $container = $this->container($services, true);
-            $container->getDefinition(WebConfiguration::class)->setPublic(true);
+            $container->getDefinition(WebConfigurationInterface::class)->setPublic(true);
             $container->compile(true);
-            $this->assertSame(90, $this->service($container, WebConfiguration::class)->getRefreshInterval(), $services);
+            $this->assertSame(90, $this->service($container, WebConfigurationInterface::class)->getRefreshInterval(), $services);
             putenv('AUTH_WEB_REFRESH_INTERVAL_SECONDS');
         }
     }
@@ -406,7 +376,7 @@ final class ServicesTest extends TestCase
     {
         foreach (['database', 'keycloak'] as $services) {
             $container = $this->container($services, true);
-            $container->getAlias(UserFactoryInterface::class)->setPublic(true);
+            $container->getDefinition(UserFactoryInterface::class)->setPublic(true);
             $container->compile(true);
 
             $this->assertSame(UserFactory::class, $this->service($container, UserFactoryInterface::class)::class, $services);
@@ -417,7 +387,7 @@ final class ServicesTest extends TestCase
     public function aFactoryOfTheApplicationIsTheOneThatBothProvidersUse(): void
     {
         $database = $this->container('database', true);
-        $database->register(UserFactoryInterface::class, CustomUserFactory::class);
+        AuthApplication::load($database, 'custom-user.yaml');
         $database->getDefinition(DatabaseUserRepository::class)->setPublic(true);
         $database->getDefinition(DerafuAuthenticationInterface::class)->setPublic(true);
         $database->compile(true);
@@ -427,7 +397,7 @@ final class ServicesTest extends TestCase
         $this->assertInstanceOf(CustomUserFactory::class, $this->property($this->property($web, 'flow'), 'userFactory'));
 
         $keycloak = $this->container('keycloak', true);
-        $keycloak->register(UserFactoryInterface::class, CustomUserFactory::class);
+        AuthApplication::load($keycloak, 'custom-user.yaml');
         $keycloak->getDefinition(KeycloakUserRepository::class)->setPublic(true);
         $keycloak->compile(true);
 
@@ -469,7 +439,7 @@ final class ServicesTest extends TestCase
         $this->environment('AUTH_WEB_LOGIN_REDIRECT_PATH', '/dashboard');
         $container = $this->container('keycloak', true);
         $container->getDefinition(KeycloakConfiguration::class)->setPublic(true);
-        $container->getDefinition(WebConfiguration::class)->setPublic(true);
+        $container->getDefinition(WebConfigurationInterface::class)->setPublic(true);
         $container->compile(true);
         $config = $this->service($container, KeycloakConfiguration::class);
 
@@ -477,7 +447,7 @@ final class ServicesTest extends TestCase
         $this->assertSame(3, $config->getHttpClientOptions()['connect_timeout']);
         $this->assertSame('/login/keycloak', $config->getCallbackPath());
         $this->assertSame(['openid', 'email'], $config->getScopes());
-        $this->assertSame('/dashboard', $this->service($container, WebConfiguration::class)->getLoginRedirectPath());
+        $this->assertSame('/dashboard', $this->service($container, WebConfigurationInterface::class)->getLoginRedirectPath());
     }
 
     #[Test]
@@ -489,9 +459,9 @@ final class ServicesTest extends TestCase
 
         foreach (['keycloak', 'database', 'htpasswd'] as $services) {
             $container = $this->container($services, true);
-            $container->getDefinition(WebConfiguration::class)->setPublic(true);
+            $container->getDefinition(WebConfigurationInterface::class)->setPublic(true);
             $container->compile(true);
-            $web = $this->service($container, WebConfiguration::class);
+            $web = $this->service($container, WebConfigurationInterface::class);
 
             $this->assertSame('/signout', $web->getLogoutPath(), $services);
             $this->assertSame('/bye', $web->getLogoutRedirectPath(), $services);
@@ -510,9 +480,9 @@ final class ServicesTest extends TestCase
 
         foreach ($expected as $services => [$logoutRedirect, $unauthorizedRedirect]) {
             $container = $this->container($services, true);
-            $container->getDefinition(WebConfiguration::class)->setPublic(true);
+            $container->getDefinition(WebConfigurationInterface::class)->setPublic(true);
             $container->compile(true);
-            $web = $this->service($container, WebConfiguration::class);
+            $web = $this->service($container, WebConfigurationInterface::class);
 
             $this->assertSame('/', $web->getLoginRedirectPath(), $services);
             $this->assertSame($logoutRedirect, $web->getLogoutRedirectPath(), $services);
@@ -653,7 +623,7 @@ final class ServicesTest extends TestCase
     {
         foreach (['keycloak', 'database', 'htpasswd'] as $services) {
             $container = $this->container($services, true);
-            $container->register(UserInterface::class, GuestUser::class);
+            AuthApplication::load($container, 'guest-user.yaml');
             $container->getDefinition(DerafuAuthenticationInterface::class)->setPublic(true);
             $container->compile(true);
 
@@ -725,10 +695,10 @@ final class ServicesTest extends TestCase
     {
         foreach (['keycloak' => '/', 'database' => '/auth/login', 'htpasswd' => '/auth/login'] as $provider => $logout) {
             $container = $this->container($provider, true);
-            $container->getDefinition(WebConfiguration::class)->setPublic(true);
+            $container->getDefinition(WebConfigurationInterface::class)->setPublic(true);
             $container->compile(true);
 
-            $this->assertSame($logout, $this->service($container, WebConfiguration::class)->getLogoutRedirectPath(), $provider);
+            $this->assertSame($logout, $this->service($container, WebConfigurationInterface::class)->getLogoutRedirectPath(), $provider);
         }
     }
 
@@ -737,24 +707,24 @@ final class ServicesTest extends TestCase
     {
         $this->environment('AUTH_WEB_LOGOUT_REDIRECT_PATH', '/bye');
         $container = $this->container('database', true);
-        $container->getDefinition(WebConfiguration::class)->setPublic(true);
+        $container->getDefinition(WebConfigurationInterface::class)->setPublic(true);
         $container->compile(true);
 
-        $this->assertSame('/bye', $this->service($container, WebConfiguration::class)->getLogoutRedirectPath());
+        $this->assertSame('/bye', $this->service($container, WebConfigurationInterface::class)->getLogoutRedirectPath());
     }
 
     #[Test]
     public function withoutAProviderOnlyWhatNeedsItFails(): void
     {
         $container = $this->container('', true);
-        $container->getDefinition(WebConfiguration::class)->setPublic(true);
+        $container->getDefinition(WebConfigurationInterface::class)->setPublic(true);
         $container->getDefinition(DerafuAuthenticationInterface::class)->setPublic(true);
         $container->getDefinition(WebFlowInterface::class)->setPublic(true);
         $container->compile(true);
 
         // The paths of the web (the menu uses them) and the authentication are
         // there: a page that does not use the provider is not taken down.
-        $this->assertSame('/', $this->service($container, WebConfiguration::class)->getLoginRedirectPath());
+        $this->assertSame('/', $this->service($container, WebConfigurationInterface::class)->getLoginRedirectPath());
         $this->assertInstanceOf(DerafuAuthenticationInterface::class, $this->service($container, DerafuAuthenticationInterface::class));
 
         $this->expectException(ConfigurationException::class);
@@ -810,7 +780,7 @@ final class ServicesTest extends TestCase
     public function anApplicationAddsAProviderWithItsClassAndItsTag(): void
     {
         $container = $this->container('custom', true);
-        $container->register(CustomAuthProvider::class)->addTag('derafu_auth.provider');
+        AuthApplication::load($container, 'custom-provider.yaml');
         $container->getDefinition(AuthProviderRegistry::class)->setPublic(true);
         $container->compile(true);
 
@@ -884,8 +854,10 @@ final class ServicesTest extends TestCase
         }
 
         $container = $this->container($provider, true);
+        $container->getDefinition(TwigServiceInterface::class)->setPublic(true);
         foreach ($container->getDefinitions() as $id => $definition) {
             if (str_starts_with($id, 'Derafu\\Auth\\Provider\\')
+                && str_contains(substr($id, strlen('Derafu\\Auth\\Provider\\')), '\\')
                 && !str_starts_with($id, 'Derafu\\Auth\\Provider\\' . ucfirst($provider) . '\\')) {
                 continue;
             }
@@ -942,7 +914,6 @@ final class ServicesTest extends TestCase
         foreach ([
             AuthenticationInterface::class => DerafuAuthenticationInterface::class,
             \Mezzio\Authorization\AuthorizationInterface::class => AuthorizationInterface::class,
-            UserFactoryInterface::class => UserFactory::class,
         ] as $alias => $target) {
             self::assertSame($container->get($target), $container->get($alias));
         }
@@ -1003,8 +974,8 @@ final class ServicesTest extends TestCase
     {
         $this->environment('AUTH_WEB_LOGOUT_PATH', '/signout');
         $container = $this->configuredContainer($provider);
-        $twig = new Environment(new ArrayLoader(), ['strict_variables' => true]);
-        $twig->addExtension($this->service($container, AuthExtension::class));
+        $twig = $this->service($container, TwigServiceInterface::class)->getTwig();
+        $twig->enableStrictVariables();
         $user = $this->service($container, UserFactoryInterface::class)->create('ana', ['admin']);
         $template = $twig->createTemplate("{{ login_path() }}|{{ logout_path() }}|{{ profile_path() }}|{{ is_granted('admin') ? 'yes' : 'no' }}|{{ is_granted('editor') ? 'yes' : 'no' }}");
         self::assertSame(
@@ -1067,13 +1038,10 @@ final class ServicesTest extends TestCase
             AuthTranslationResourceProvider::class,
             $container->findTaggedServiceIds('derafu_translation.resource_provider')
         );
-        $container->register(Translator::class)
-            ->setFactory([TranslatorFactory::class, 'create'])
-            ->setArguments(['es', ['en'], new TaggedIteratorArgument('derafu_translation.resource_provider')])
-            ->setPublic(true);
+        $container->getDefinition(TranslatorInterface::class)->setPublic(true);
         $container->getDefinition(AuthController::class)->setPublic(true);
         $container->compile(true);
-        $translator = $this->service($container, Translator::class);
+        $translator = $this->service($container, TranslatorInterface::class);
         self::assertSame('Iniciar sesión', $translator->trans('Login', [], 'auth'));
         try {
             $this->service($container, AuthController::class)->callback(new ServerRequest());
@@ -1082,5 +1050,64 @@ final class ServicesTest extends TestCase
             self::assertSame(404, $exception->getCode());
             self::assertSame('Este proveedor no tiene callback.', $exception->trans($translator));
         }
+    }
+
+    #[Test]
+    public function aCompiledContainerRendersPublicPagesWithoutInitializingAnAuthProvider(): void
+    {
+        $container = $this->container('', false);
+        foreach ([TwigServiceInterface::class, RendererInterface::class, FormRendererInterface::class, FormFactoryInterface::class] as $id) {
+            $container->getDefinition($id)->setPublic(true);
+        }
+        $container->compile();
+        $class = 'CompiledAuthRenderingContainer';
+        $code = (new PhpDumper($container))->dump(['class' => $class]);
+        self::assertIsString($code);
+        $compiled = eval(substr($code, 5) . "\nreturn new " . $class . "();");
+        self::assertInstanceOf(ContainerInterface::class, $compiled);
+        $twigService = $compiled->get(TwigServiceInterface::class);
+        self::assertInstanceOf(TwigServiceInterface::class, $twigService);
+        $twig = $twigService->getTwig();
+        $twig->enableStrictVariables();
+        self::assertTrue($twig->hasExtension(AuthExtension::class));
+        self::assertTrue($twig->hasExtension(FormTwigExtension::class));
+        self::assertTrue($twig->getLoader()->exists('auth/profile.html.twig'));
+        self::assertTrue($twig->getLoader()->exists('form/form.html.twig'));
+        $renderer = $compiled->get(RendererInterface::class);
+        self::assertInstanceOf(RendererInterface::class, $renderer);
+        $engine = $renderer->getEngine('twig');
+        self::assertInstanceOf(TwigHtmlEngine::class, $engine);
+        self::assertSame($twig, $engine->getTwig());
+        self::assertSame('Public|no', $renderer->renderFromString("Public|{{ is_granted('admin') ? 'yes' : 'no' }}"));
+        self::assertSame('/auth/login|/auth/logout', $renderer->renderFromString('{{ login_path() }}|{{ logout_path() }}'));
+        $factory = $compiled->get(FormFactoryInterface::class);
+        self::assertInstanceOf(FormFactoryInterface::class, $factory);
+        $form = $factory->create(['schema' => ['type' => 'object', 'properties' => []]]);
+        $formRenderer = $compiled->get(FormRendererInterface::class);
+        self::assertInstanceOf(FormRendererInterface::class, $formRenderer);
+        $markup = $renderer->renderFromString('{{ form_start(form) }}{{ form_end(form) }}', ['form' => $form]);
+        self::assertSame($formRenderer->renderStart($form) . $formRenderer->renderEnd($form), $markup);
+        self::assertStringContainsString('<form', $markup);
+    }
+
+    #[Test]
+    public function theConfiguredAccountPageRendersWithTheSharedTemplatesAndTranslator(): void
+    {
+        $container = $this->configuredContainer('htpasswd');
+        $twig = $this->service($container, TwigServiceInterface::class)->getTwig();
+        $twig->enableStrictVariables();
+        $user = $this->service($container, UserFactoryInterface::class)->create('ana', ['admin'], ['name' => 'Ana']);
+        $twig->addGlobal('app', ['user' => $user, 'flashes' => []]);
+        $request = (new ServerRequest())
+            ->withUri(new Uri('https://app.example.com/auth/profile'))
+            ->withAttribute(\Mezzio\Authentication\UserInterface::class, $user)
+            ->withAttribute(SessionMiddleware::SESSION_ATTRIBUTE, new Session([]));
+        $page = $this->service($container, AccountController::class)->profile($request);
+
+        self::assertStringContainsString('<main>', $page);
+        self::assertStringContainsString('Ana', $page);
+        self::assertStringContainsString('Perfil', $page);
+        self::assertStringContainsString('action="/auth/logout"', $page);
+        self::assertStringContainsString('curl -u USERNAME:PASSWORD https://app.example.com/api/', $page);
     }
 }

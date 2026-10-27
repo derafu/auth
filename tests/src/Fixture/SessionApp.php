@@ -23,10 +23,9 @@ use Derafu\Auth\Contract\AuthenticationInterface;
 use Derafu\Captcha\Provider\AltchaProvider;
 use Derafu\Csrf\CsrfSessionMiddleware;
 use Derafu\Csrf\SessionCsrfTokenManager;
-use Derafu\DataProcessor\ProcessorFactory;
+use Derafu\DataProcessor\Contract\ProcessorInterface;
 use Derafu\Form\Contract\FormInterface;
 use Derafu\Form\Contract\Renderer\FormRendererInterface;
-use Derafu\Form\Factory\FormRendererFactory;
 use Derafu\Form\Processor\FormDataProcessor;
 use Derafu\Form\Processor\FormRulesResolver;
 use Laminas\Diactoros\Response;
@@ -181,7 +180,7 @@ final class SessionApp
     {
         return new FormDataProcessor(
             new FormRulesResolver(),
-            (new ProcessorFactory())->create(),
+            AuthApplication::service(ProcessorInterface::class),
             csrfTokenManager: $this->csrf,
             captchaProvider: $this->captcha
         );
@@ -192,10 +191,7 @@ final class SessionApp
      */
     public function renderer(): FormRendererInterface
     {
-        return FormRendererFactory::create([
-            'csrf_token_manager' => $this->csrf,
-            'captcha_provider' => $this->captcha,
-        ]);
+        return AuthApplication::service(FormRendererInterface::class, $this->csrf, $this->captcha);
     }
 
     /**

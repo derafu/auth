@@ -31,6 +31,7 @@ use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
+use PHPUnit\Framework\Attributes\UsesNamespace;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\ServerRequestInterface;
 
@@ -73,6 +74,7 @@ use Psr\Http\Message\ServerRequestInterface;
 #[UsesClass(User::class)]
 #[UsesClass(AuthTranslationResourceProvider::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationMiddleware::class)]
+#[UsesNamespace('Derafu\\Auth')]
 final class KeycloakConcurrentRefreshTest extends TestCase
 {
     private static RealKeycloak $keycloak;

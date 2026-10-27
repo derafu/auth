@@ -17,10 +17,13 @@ use Derafu\Auth\Authentication\Channel\Web\WebConfiguration;
 use Derafu\Auth\Translation\AuthTranslationResourceProvider;
 use Derafu\Auth\Twig\AuthExtension;
 use Derafu\Auth\User;
-use Derafu\Renderer\Factory\RendererFactory;
+use Derafu\Renderer\Engine\Html\TwigHtmlEngine;
+use Derafu\Renderer\Renderer;
 use Derafu\Translation\TranslatorFactory;
 use Derafu\Twig\Extension\TranslationExtension;
 use Derafu\Twig\Provider\DirectoryComponentProvider;
+use Derafu\Twig\Service\TwigCreator;
+use Derafu\Twig\Service\TwigService;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
@@ -68,8 +71,7 @@ final class AuthExtensionTest extends TestCase
             }
         };
 
-        return RendererFactory::create([
-            'engines' => ['twig'],
+        return new Renderer(['twig' => new TwigHtmlEngine(new TwigService(new TwigCreator([
             'extra' => false,
             'paths' => [self::ROOT . '/resources/templates', self::ROOT . '/vendor/derafu/twig-components/resources/templates'],
             'components' => new DirectoryComponentProvider(self::ROOT . '/vendor/derafu/twig-components/src/Component'),
@@ -78,7 +80,7 @@ final class AuthExtensionTest extends TestCase
                 new TranslationExtension(TranslatorFactory::create('es', ['en'], [new AuthTranslationResourceProvider()]), null, 'es'),
                 new AuthExtension(new WebConfiguration()),
             ],
-        ])->render($template, []);
+        ])))])->render($template, []);
     }
 
     #[Test]

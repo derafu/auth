@@ -13,8 +13,8 @@ declare(strict_types=1);
 namespace Derafu\Auth\Twig;
 
 use Derafu\Auth\Account\AccountController;
-use Derafu\Auth\Authentication\Channel\Web\WebConfiguration;
 use Derafu\Auth\Contract\UserInterface;
+use Derafu\Auth\Contract\WebConfigurationInterface;
 use Twig\Extension\AbstractExtension;
 use Twig\TwigFunction;
 
@@ -33,7 +33,7 @@ use Twig\TwigFunction;
  */
 final class AuthExtension extends AbstractExtension
 {
-    public function __construct(private readonly WebConfiguration $web)
+    public function __construct(private readonly WebConfigurationInterface $web)
     {
     }
 

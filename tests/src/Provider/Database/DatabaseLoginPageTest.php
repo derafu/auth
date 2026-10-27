@@ -28,7 +28,8 @@ use Derafu\Form\Translation\FormTranslationResourceProvider;
 use Derafu\Form\Type\TypeProvider;
 use Derafu\Form\Type\TypeRegistry;
 use Derafu\Form\Type\TypeResolver;
-use Derafu\Renderer\Factory\RendererFactory;
+use Derafu\Renderer\Engine\Html\TwigHtmlEngine;
+use Derafu\Renderer\Renderer;
 use Derafu\TestsAuth\Fixture\AppGlobal;
 use Derafu\TestsAuth\Fixture\SessionApp;
 use Derafu\TestsAuth\Fixture\Stack;
@@ -36,11 +37,14 @@ use Derafu\TestsAuth\Fixture\UsersDatabase;
 use Derafu\Translation\TranslatorFactory;
 use Derafu\Twig\Extension\TranslationExtension;
 use Derafu\Twig\Provider\DirectoryComponentProvider;
+use Derafu\Twig\Service\TwigCreator;
+use Derafu\Twig\Service\TwigService;
 use Laminas\Diactoros\Response\RedirectResponse;
 use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
+use PHPUnit\Framework\Attributes\UsesNamespace;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -74,6 +78,7 @@ use Twig\TwigFunction;
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
 #[UsesClass(AuthTranslationResourceProvider::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationMiddleware::class)]
+#[UsesNamespace('Derafu\\Auth')]
 final class DatabaseLoginPageTest extends TestCase
 {
     private SessionApp $app;
@@ -129,8 +134,7 @@ final class DatabaseLoginPageTest extends TestCase
 
         $this->appGlobal = new AppGlobal();
         $this->controller = new AuthController(
-            RendererFactory::create([
-                'engines' => ['twig'],
+            new Renderer(['twig' => new TwigHtmlEngine(new TwigService(new TwigCreator([
                 'extra' => false,
                 'paths' => [
                     $root . '/resources/templates',
@@ -145,7 +149,7 @@ final class DatabaseLoginPageTest extends TestCase
                     new FormTwigExtension($this->app->renderer()),
                     $this->appGlobal,
                 ],
-            ]),
+            ])))]),
             $formManager,
             Stack::webOf($config),
             new SessionManager(),

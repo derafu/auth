@@ -21,6 +21,7 @@ use Derafu\Auth\Contract\FormManagerInterface;
 use Derafu\Auth\Contract\SessionManagerInterface;
 use Derafu\Auth\Contract\UserFactoryInterface;
 use Derafu\Auth\Contract\UserInterface;
+use Derafu\Auth\Contract\WebConfigurationInterface;
 use Derafu\Auth\Contract\WebFlowInterface;
 use Derafu\Auth\Exception\FormException;
 use Derafu\Auth\Provider\Database\DatabaseConfiguration;
@@ -48,7 +49,7 @@ class DatabaseWebFlow implements WebFlowInterface
      *
      * @param DatabaseUserRepository $userRepository The user repository.
      * @param DatabaseConfiguration $config The configuration of the provider.
-     * @param WebConfiguration $web The configuration of the web channel.
+     * @param WebConfigurationInterface $web The configuration of the web channel.
      * @param SessionManagerInterface $sessionManager The session manager.
      * @param FormManagerInterface $formManager Makes and processes the login form.
      * @param UserInterface $anonymousUser The anonymous user.
@@ -61,7 +62,7 @@ class DatabaseWebFlow implements WebFlowInterface
     public function __construct(
         private readonly DatabaseUserRepository $userRepository,
         private readonly DatabaseConfiguration $config,
-        private readonly WebConfiguration $web,
+        private readonly WebConfigurationInterface $web,
         private readonly SessionManagerInterface $sessionManager,
         private readonly FormManagerInterface $formManager,
         private readonly UserInterface $anonymousUser = new AnonymousUser(),

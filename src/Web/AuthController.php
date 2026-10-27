@@ -12,10 +12,10 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Web;
 
-use Derafu\Auth\Authentication\Channel\Web\WebConfiguration;
 use Derafu\Auth\Contract\FormManagerInterface;
 use Derafu\Auth\Contract\SessionManagerInterface;
 use Derafu\Auth\Contract\UserInterface;
+use Derafu\Auth\Contract\WebConfigurationInterface;
 use Derafu\Auth\Contract\WebFlowInterface;
 use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Renderer\Contract\RendererInterface;
@@ -41,14 +41,14 @@ class AuthController
     /**
      * @param RendererInterface $renderer The renderer of the login page.
      * @param FormManagerInterface $formManager The forms of the provider.
-     * @param WebConfiguration $config The configuration of the web channel.
+     * @param WebConfigurationInterface $config The configuration of the web channel.
      * @param SessionManagerInterface $sessionManager The session manager.
      * @param WebFlowInterface $flow The flow of the provider.
      */
     public function __construct(
         private readonly RendererInterface $renderer,
         private readonly FormManagerInterface $formManager,
-        private readonly WebConfiguration $config,
+        private readonly WebConfigurationInterface $config,
         private readonly SessionManagerInterface $sessionManager,
         private readonly WebFlowInterface $flow
     ) {

@@ -1,0 +1,3 @@
+services:
+    Derafu\Auth\Contract\UserInterface:
+        class: Derafu\TestsAuth\Fixture\GuestUser

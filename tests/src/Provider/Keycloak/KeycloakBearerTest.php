@@ -46,6 +46,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
+use PHPUnit\Framework\Attributes\UsesNamespace;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;
@@ -86,6 +87,7 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
 #[UsesClass(\Derafu\Auth\User::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationMiddleware::class)]
+#[UsesNamespace('Derafu\\Auth')]
 final class KeycloakBearerTest extends TestCase
 {
     private const URL = 'https://keycloak.test';

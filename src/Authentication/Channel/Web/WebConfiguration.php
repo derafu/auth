@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Derafu\Auth\Authentication\Channel\Web;
 
 use Derafu\Array\ArrayReader;
+use Derafu\Auth\Contract\WebConfigurationInterface;
 use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 
@@ -23,7 +24,7 @@ use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
  * Nothing here is about a provider: the paths, and every how many seconds the
  * user of a session is asked to its provider again.
  */
-class WebConfiguration
+class WebConfiguration implements WebConfigurationInterface
 {
     /**
      * Every how many seconds, by default, the user of a session is asked to its

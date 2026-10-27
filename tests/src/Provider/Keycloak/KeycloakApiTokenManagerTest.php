@@ -43,6 +43,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
+use PHPUnit\Framework\Attributes\UsesNamespace;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -66,6 +67,7 @@ use Psr\Http\Message\ServerRequestInterface;
 #[UsesClass(User::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
 #[UsesClass(\Derafu\Auth\Account\Form\ApiTokenValueForm::class)]
+#[UsesNamespace('Derafu\\Auth')]
 final class KeycloakApiTokenManagerTest extends TestCase
 {
     /** @var list<RequestInterface> */

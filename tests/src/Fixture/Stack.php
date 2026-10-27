@@ -40,7 +40,10 @@ use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
 use Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager;
 use Derafu\Auth\Provider\Keycloak\Web\KeycloakWebFlow;
 use Derafu\Auth\Web\AuthController;
-use Derafu\Renderer\Factory\RendererFactory;
+use Derafu\Renderer\Engine\Html\TwigHtmlEngine;
+use Derafu\Renderer\Renderer;
+use Derafu\Twig\Service\TwigCreator;
+use Derafu\Twig\Service\TwigService;
 use Psr\Cache\CacheItemPoolInterface;
 use WeakMap;
 
@@ -303,7 +306,7 @@ final class Stack
         $web = self::webOf($config);
 
         return new AuthController(
-            RendererFactory::create(['engines' => ['twig'], 'extra' => false]),
+            new Renderer(['twig' => new TwigHtmlEngine(new TwigService(new TwigCreator(['extra' => false])))]),
             new NoForms(),
             $web,
             $sessionManager,

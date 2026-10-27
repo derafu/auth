@@ -18,6 +18,7 @@ use Derafu\Auth\Authentication\SameOrigin;
 use Derafu\Auth\Contract\ChannelInterface;
 use Derafu\Auth\Contract\SessionManagerInterface;
 use Derafu\Auth\Contract\UserInterface;
+use Derafu\Auth\Contract\WebConfigurationInterface;
 use Derafu\Auth\Contract\WebFlowInterface;
 use Derafu\Auth\Exception\ConfigurationException;
 use Laminas\Diactoros\Response\RedirectResponse;
@@ -43,13 +44,13 @@ final class WebChannel implements ChannelInterface
      * Creates the web channel.
      *
      * @param WebFlowInterface $flow What the provider gives to the channel.
-     * @param WebConfiguration $config The paths and the refresh of the session.
+     * @param WebConfigurationInterface $config The paths and the refresh of the session.
      * @param SessionManagerInterface $sessionManager The session manager.
      * @param UserInterface $anonymousUser The anonymous user.
      */
     public function __construct(
         private readonly WebFlowInterface $flow,
-        private readonly WebConfiguration $config,
+        private readonly WebConfigurationInterface $config,
         private readonly SessionManagerInterface $sessionManager,
         private readonly UserInterface $anonymousUser = new AnonymousUser()
     ) {

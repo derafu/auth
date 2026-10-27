@@ -34,17 +34,21 @@ use Derafu\Auth\User;
 use Derafu\Form\Contract\Csrf\CsrfTokenManagerInterface;
 use Derafu\Form\Contract\FormInterface;
 use Derafu\Form\Contract\Processor\FormDataProcessorInterface;
+use Derafu\Form\Contract\Renderer\FormRendererInterface;
 use Derafu\Form\Factory\FormFactory;
-use Derafu\Form\Factory\FormRendererFactory;
 use Derafu\Form\Renderer\FormTwigExtension;
 use Derafu\Form\Type\TypeProvider;
 use Derafu\Form\Type\TypeRegistry;
 use Derafu\Form\Type\TypeResolver;
-use Derafu\Renderer\Factory\RendererFactory;
+use Derafu\Renderer\Engine\Html\TwigHtmlEngine;
+use Derafu\Renderer\Renderer;
+use Derafu\TestsAuth\Fixture\AuthApplication;
 use Derafu\Translation\TranslatableMessage;
 use Derafu\Translation\TranslatorFactory;
 use Derafu\Twig\Extension\TranslationExtension;
 use Derafu\Twig\Provider\DirectoryComponentProvider;
+use Derafu\Twig\Service\TwigCreator;
+use Derafu\Twig\Service\TwigService;
 use Laminas\Diactoros\Response\HtmlResponse;
 use Laminas\Diactoros\Response\RedirectResponse;
 use Laminas\Diactoros\ServerRequest;
@@ -57,6 +61,7 @@ use Mezzio\Session\SessionMiddleware;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
+use PHPUnit\Framework\Attributes\UsesNamespace;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\ServerRequestInterface;
 use Twig\Extension\AbstractExtension;
@@ -85,6 +90,7 @@ use Twig\TwigFunction;
 #[UsesClass(FormManager::class)]
 #[UsesClass(NewApiToken::class)]
 #[CoversClass(\Derafu\Auth\Account\Form\ApiTokenValueForm::class)]
+#[UsesNamespace('Derafu\\Auth')]
 final class AccountControllerTest extends TestCase
 {
     private const ROOT = __DIR__ . '/../../..';
@@ -105,8 +111,7 @@ final class AccountControllerTest extends TestCase
         };
 
         return new AccountController(
-            RendererFactory::create([
-                'engines' => ['twig'],
+            new Renderer(['twig' => new TwigHtmlEngine(new TwigService(new TwigCreator([
                 'extra' => false,
                 'paths' => [
                     self::ROOT . '/resources/templates',
@@ -119,7 +124,7 @@ final class AccountControllerTest extends TestCase
                     $routing,
                     new TranslationExtension($translator, null, 'es'),
                     new AuthExtension(new WebConfiguration()),
-                    new FormTwigExtension(FormRendererFactory::create(['csrf_token_manager' => new class () implements CsrfTokenManagerInterface {
+                    new FormTwigExtension(AuthApplication::service(FormRendererInterface::class, new class () implements CsrfTokenManagerInterface {
                         public function getToken(string $id): string
                         {
                             return 'token-of-' . $id;
@@ -129,9 +134,9 @@ final class AccountControllerTest extends TestCase
                         {
                             return true;
                         }
-                    }])),
+                    })),
                 ],
-            ]),
+            ])))]),
             $account ?? new BasicAccount(),
             new FormManager(
                 new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),

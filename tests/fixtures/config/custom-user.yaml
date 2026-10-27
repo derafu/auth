@@ -1,0 +1,3 @@
+services:
+    Derafu\Auth\Contract\UserFactoryInterface:
+        class: Derafu\TestsAuth\Fixture\CustomUserFactory

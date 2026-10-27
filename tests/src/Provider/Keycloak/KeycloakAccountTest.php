@@ -39,6 +39,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
+use PHPUnit\Framework\Attributes\UsesNamespace;
 use PHPUnit\Framework\TestCase;
 use Throwable;
 
@@ -56,6 +57,7 @@ use Throwable;
 #[UsesClass(AuthenticationException::class)]
 #[UsesClass(ProviderUnavailableException::class)]
 #[UsesClass(FormManager::class)]
+#[UsesNamespace('Derafu\\Auth')]
 final class KeycloakAccountTest extends TestCase
 {
     private function account(Response|Throwable $answer, string $redirect = 'https://app.test/auth/callback'): KeycloakAccount

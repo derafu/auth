@@ -1,0 +1,3 @@
+services:
+    Derafu\TestsAuth\Fixture\CustomAuthProvider:
+        tags: [derafu_auth.provider]

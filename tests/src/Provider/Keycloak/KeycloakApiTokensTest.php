@@ -34,7 +34,8 @@ use Derafu\Form\Renderer\FormTwigExtension;
 use Derafu\Form\Type\TypeProvider;
 use Derafu\Form\Type\TypeRegistry;
 use Derafu\Form\Type\TypeResolver;
-use Derafu\Renderer\Factory\RendererFactory;
+use Derafu\Renderer\Engine\Html\TwigHtmlEngine;
+use Derafu\Renderer\Renderer;
 use Derafu\TestsAuth\Fixture\KeycloakBrowser;
 use Derafu\TestsAuth\Fixture\RealKeycloak;
 use Derafu\TestsAuth\Fixture\SessionApp;
@@ -42,6 +43,8 @@ use Derafu\TestsAuth\Fixture\Stack;
 use Derafu\Translation\TranslatorFactory;
 use Derafu\Twig\Extension\TranslationExtension;
 use Derafu\Twig\Provider\DirectoryComponentProvider;
+use Derafu\Twig\Service\TwigCreator;
+use Derafu\Twig\Service\TwigService;
 use Laminas\Diactoros\Response\HtmlResponse;
 use Laminas\Diactoros\Response\JsonResponse;
 use Laminas\Diactoros\Response\RedirectResponse;
@@ -51,6 +54,7 @@ use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
+use PHPUnit\Framework\Attributes\UsesNamespace;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -104,6 +108,7 @@ use Twig\TwigFunction;
 #[UsesClass(AuthExtension::class)]
 #[UsesClass(AuthTranslationResourceProvider::class)]
 #[UsesClass(\Derafu\Auth\Authentication\AuthenticationMiddleware::class)]
+#[UsesNamespace('Derafu\\Auth')]
 final class KeycloakApiTokensTest extends TestCase
 {
     private const ROOT = __DIR__ . '/../../../..';
@@ -178,8 +183,7 @@ final class KeycloakApiTokensTest extends TestCase
             }
         };
         $this->account = new AccountController(
-            RendererFactory::create([
-                'engines' => ['twig'],
+            new Renderer(['twig' => new TwigHtmlEngine(new TwigService(new TwigCreator([
                 'extra' => false,
                 'paths' => [
                     self::ROOT . '/resources/templates',
@@ -194,7 +198,7 @@ final class KeycloakApiTokensTest extends TestCase
                     new AuthExtension(Stack::webOf($config)),
                     new FormTwigExtension($this->app->renderer()),
                 ],
-            ]),
+            ])))]),
             new KeycloakAccount($config, $this->sessions, $client, $manager),
             $this->formManager($config)
         );

@@ -38,6 +38,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
+use PHPUnit\Framework\Attributes\UsesNamespace;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -71,6 +72,7 @@ use Psr\Http\Message\ServerRequestInterface;
 #[UsesClass(\Derafu\Auth\User::class)]
 #[UsesClass(\Derafu\Auth\UserFactory::class)]
 #[UsesClass(ConfigurationException::class)]
+#[UsesNamespace('Derafu\\Auth')]
 final class DatabaseRefreshTest extends TestCase
 {
     private SessionApp $app;
