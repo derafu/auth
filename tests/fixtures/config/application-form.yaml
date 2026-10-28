@@ -1,0 +1,5 @@
+services:
+    Derafu\TestsAuth\Fixture\ApplicationAuthForm:
+        arguments:
+            $field: display_name
+        tags: ['derafu_auth.form']

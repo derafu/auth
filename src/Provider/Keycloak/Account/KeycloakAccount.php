@@ -14,12 +14,13 @@ namespace Derafu\Auth\Provider\Keycloak\Account;
 
 use Derafu\Auth\Contract\AccountInterface;
 use Derafu\Auth\Contract\ApiTokenManagerInterface;
+use Derafu\Auth\Contract\KeycloakAccountClientInterface;
+use Derafu\Auth\Contract\KeycloakConfigurationInterface;
+use Derafu\Auth\Contract\KeycloakSessionManagerInterface;
 use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\ProviderUnavailableException;
-use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\TokenClaims;
-use Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager;
 use Derafu\Translation\TranslatableMessage;
 use Mezzio\Session\SessionInterface;
 
@@ -36,10 +37,10 @@ use Mezzio\Session\SessionInterface;
 class KeycloakAccount implements AccountInterface
 {
     public function __construct(
-        private readonly KeycloakConfiguration $config,
-        private readonly KeycloakSessionManager $sessionManager,
-        private readonly KeycloakAccountClient $account,
-        private readonly KeycloakApiTokenManager $tokens
+        private readonly KeycloakConfigurationInterface $config,
+        private readonly KeycloakSessionManagerInterface $sessionManager,
+        private readonly KeycloakAccountClientInterface $account,
+        private readonly ApiTokenManagerInterface $tokens
     ) {
     }
 

@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Derafu\Auth\Authentication;
 
 use Derafu\Array\ArrayReader;
+use Derafu\Auth\Contract\LoginThrottleInterface;
 use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Value\ValueType;
 use Psr\Cache\CacheItemPoolInterface;
@@ -30,7 +31,7 @@ use Psr\Http\Message\ServerRequestInterface;
  * The counts are in a PSR-6 cache pool, so they are shared by every request of
  * the application.
  */
-class LoginThrottle
+class LoginThrottle implements LoginThrottleInterface
 {
     /**
      * How many times more attempts an address can make, whatever the identity.
@@ -78,7 +79,7 @@ class LoginThrottle
     }
 
     /**
-     * Whether the login is limited for an identity from an address.
+     * {@inheritDoc}
      */
     public function isLimited(string $identity, string $address): bool
     {
@@ -86,8 +87,7 @@ class LoginThrottle
     }
 
     /**
-     * The seconds until the login is not limited for an identity from an
-     * address, or 0 if it is not limited.
+     * {@inheritDoc}
      */
     public function retryAfter(string $identity, string $address): int
     {
@@ -107,7 +107,7 @@ class LoginThrottle
     }
 
     /**
-     * Counts a failed attempt for an identity from an address.
+     * {@inheritDoc}
      */
     public function hit(string $identity, string $address): void
     {
@@ -123,8 +123,7 @@ class LoginThrottle
     }
 
     /**
-     * Clears the count of an identity from an address, after a login that works.
-     * The count of the address stays: it is of everything that it tried.
+     * {@inheritDoc}
      */
     public function clear(string $identity, string $address): void
     {

@@ -18,18 +18,30 @@ use Derafu\Auth\Account\Form\ApiTokenValueForm;
 use Derafu\Auth\Authentication\AuthenticationManager;
 use Derafu\Auth\Authentication\AuthenticationMiddleware;
 use Derafu\Auth\Authentication\Channel\Api\ApiChannel;
-use Derafu\Auth\Authentication\Channel\Api\ApiConfiguration;
 use Derafu\Auth\Authentication\Channel\Web\WebChannel;
+use Derafu\Auth\Authentication\LoginThrottle;
 use Derafu\Auth\Authorization\AccessRules;
 use Derafu\Auth\Authorization\AuthorizationMiddleware;
-use Derafu\Auth\AuthProviderRegistry;
 use Derafu\Auth\Contract\AccessRulesInterface;
 use Derafu\Auth\Contract\AccountInterface;
+use Derafu\Auth\Contract\ApiConfigurationInterface;
 use Derafu\Auth\Contract\ApiSchemeInterface;
+use Derafu\Auth\Contract\ApiTokenManagerInterface;
 use Derafu\Auth\Contract\AuthenticationInterface as DerafuAuthenticationInterface;
 use Derafu\Auth\Contract\AuthorizationInterface;
+use Derafu\Auth\Contract\AuthProviderInterface;
+use Derafu\Auth\Contract\AuthProviderRegistryInterface;
 use Derafu\Auth\Contract\ChannelInterface;
+use Derafu\Auth\Contract\DatabaseConfigurationInterface;
 use Derafu\Auth\Contract\FormManagerInterface;
+use Derafu\Auth\Contract\HtpasswdConfigurationInterface;
+use Derafu\Auth\Contract\KeycloakAccountClientInterface;
+use Derafu\Auth\Contract\KeycloakConfigurationInterface;
+use Derafu\Auth\Contract\KeycloakSessionManagerInterface;
+use Derafu\Auth\Contract\KeycloakTokenVerifierInterface;
+use Derafu\Auth\Contract\KeycloakUserRepositoryInterface;
+use Derafu\Auth\Contract\LoginThrottleInterface;
+use Derafu\Auth\Contract\PasswordUserRepositoryInterface;
 use Derafu\Auth\Contract\SessionManagerInterface;
 use Derafu\Auth\Contract\UserFactoryInterface;
 use Derafu\Auth\Contract\UserInterface;
@@ -37,12 +49,6 @@ use Derafu\Auth\Contract\WebConfigurationInterface;
 use Derafu\Auth\Contract\WebFlowInterface;
 use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\ConfigurationException;
-use Derafu\Auth\Provider\Database\DatabaseConfiguration;
-use Derafu\Auth\Provider\Database\DatabaseUserRepository;
-use Derafu\Auth\Provider\Htpasswd\HtpasswdConfiguration;
-use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
-use Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier;
-use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
 use Derafu\Auth\Translation\AuthTranslationResourceProvider;
 use Derafu\Auth\Twig\AuthExtension;
 use Derafu\Auth\UserFactory;
@@ -52,14 +58,28 @@ use Derafu\Form\Contract\Renderer\FormRendererInterface;
 use Derafu\Form\Renderer\FormTwigExtension;
 use Derafu\Renderer\Contract\RendererInterface;
 use Derafu\Renderer\Engine\Html\TwigHtmlEngine;
+use Derafu\TestsAuth\Fixture\ApplicationApiTokenManager;
+use Derafu\TestsAuth\Fixture\ApplicationAuthForm;
+use Derafu\TestsAuth\Fixture\ApplicationDatabaseConfiguration;
+use Derafu\TestsAuth\Fixture\ApplicationHtpasswdConfiguration;
+use Derafu\TestsAuth\Fixture\ApplicationKeycloakAccountClient;
+use Derafu\TestsAuth\Fixture\ApplicationKeycloakConfiguration;
+use Derafu\TestsAuth\Fixture\ApplicationKeycloakSessionManager;
+use Derafu\TestsAuth\Fixture\ApplicationKeycloakTokenVerifier;
+use Derafu\TestsAuth\Fixture\ApplicationKeycloakUserRepository;
+use Derafu\TestsAuth\Fixture\ApplicationPasswordUserRepository;
 use Derafu\TestsAuth\Fixture\AuthApplication;
 use Derafu\TestsAuth\Fixture\CustomAuthProvider;
 use Derafu\TestsAuth\Fixture\CustomUserFactory;
 use Derafu\TestsAuth\Fixture\GuestUser;
 use Derafu\TestsAuth\Fixture\HtpasswdFile;
+use Derafu\TestsAuth\Fixture\InvalidAuthProvider;
+use Derafu\TestsAuth\Fixture\KeycloakTokens;
+use Derafu\TestsAuth\Fixture\RealKeycloak;
 use Derafu\TestsAuth\Fixture\SessionApp;
 use Derafu\TestsAuth\Fixture\UsersDatabase;
 use Derafu\Twig\Contract\TwigServiceInterface;
+use GuzzleHttp\Client;
 use Laminas\Diactoros\ServerRequest;
 use Laminas\Diactoros\Uri;
 use Mezzio\Authentication\AuthenticationInterface;
@@ -75,6 +95,7 @@ use Psr\Http\Server\MiddlewareInterface;
 use ReflectionProperty;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Dumper\PhpDumper;
+use Symfony\Component\DependencyInjection\Reference;
 use Symfony\Component\VarExporter\LazyObjectInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 use Twig\Environment;
@@ -126,9 +147,9 @@ final class ServicesTest extends TestCase
      * @param class-string<T> $class
      * @return T
      */
-    private function service(ContainerBuilder $container, string $class): object
+    private function service(ContainerBuilder $container, string $class, ?string $id = null): object
     {
-        $service = $container->get($class);
+        $service = $container->get($id ?? $class);
         $this->assertInstanceOf($class, $service);
 
         return $service;
@@ -183,25 +204,25 @@ final class ServicesTest extends TestCase
     public function theVerifierOfKeycloakCachesTheKeysInThePoolOfTheApplication(): void
     {
         $container = $this->container('keycloak', true);
-        $container->getDefinition(KeycloakTokenVerifier::class)->setPublic(true);
-        $container->getDefinition(KeycloakUserRepository::class)->setPublic(true);
+        $container->getDefinition(KeycloakTokenVerifierInterface::class)->setPublic(true);
+        $container->getDefinition(KeycloakUserRepositoryInterface::class)->setPublic(true);
         $container->compile(true);
 
-        $verifier = $this->service($container, KeycloakTokenVerifier::class);
+        $verifier = $this->service($container, KeycloakTokenVerifierInterface::class);
 
         $this->assertSame($this->service($container, CacheItemPoolInterface::class), $this->property($verifier, 'cache'));
         // The repository verifies with that verifier.
-        $this->assertSame($verifier, $this->property($this->service($container, KeycloakUserRepository::class), 'verifier'));
+        $this->assertSame($verifier, $this->property($this->service($container, KeycloakUserRepositoryInterface::class), 'verifier'));
     }
 
     #[Test]
     public function theVerifierOfKeycloakWorksWithoutAPoolButDoesNotCache(): void
     {
         $container = $this->container('keycloak', false);
-        $container->getDefinition(KeycloakTokenVerifier::class)->setPublic(true);
+        $container->getDefinition(KeycloakTokenVerifierInterface::class)->setPublic(true);
         $container->compile(true);
 
-        $this->assertNull($this->property($this->service($container, KeycloakTokenVerifier::class), 'cache'));
+        $this->assertNull($this->property($this->service($container, KeycloakTokenVerifierInterface::class), 'cache'));
     }
 
     #[Test]
@@ -213,10 +234,10 @@ final class ServicesTest extends TestCase
         $this->environment('AUTH_KEYCLOAK_CLIENT_SECRET', 'secret');
         $this->environment('AUTH_KEYCLOAK_WEB_REDIRECT_URI', 'https://app.example.com/auth/callback');
         $container = $this->container('keycloak', true);
-        $container->getDefinition(KeycloakConfiguration::class)->setPublic(true);
+        $container->getDefinition(KeycloakConfigurationInterface::class)->setPublic(true);
         $container->compile(true);
 
-        $config = $this->service($container, KeycloakConfiguration::class);
+        $config = $this->service($container, KeycloakConfigurationInterface::class);
 
         $this->assertSame('https://auth.example.com/realms/derafu', $config->getIssuer());
         $this->assertSame('app', $config->getClientId());
@@ -237,10 +258,10 @@ final class ServicesTest extends TestCase
         $this->environment('AUTH_KEYCLOAK_WEB_POST_LOGOUT_REDIRECT_URI', 'https://app.example.com/goodbye');
         $this->environment('AUTH_KEYCLOAK_HTTP_VERIFY', 'false');
         $container = $this->container('keycloak', true);
-        $container->getDefinition(KeycloakConfiguration::class)->setPublic(true);
+        $container->getDefinition(KeycloakConfigurationInterface::class)->setPublic(true);
         $container->compile(true);
 
-        $config = $this->service($container, KeycloakConfiguration::class);
+        $config = $this->service($container, KeycloakConfigurationInterface::class);
 
         $this->assertFalse($config->isEndSession());
         $this->assertSame('https://public.example.com/realms/derafu', $config->getIssuer());
@@ -297,11 +318,11 @@ final class ServicesTest extends TestCase
     public function theLoginsOfTheDatabaseProviderAreLimitedByDefault(): void
     {
         $container = $this->container('database', true);
-        $container->getDefinition('auth.throttle.database')->setPublic(true);
+        $container->getDefinition(LoginThrottleInterface::class)->setPublic(true);
         $container->getDefinition(DerafuAuthenticationInterface::class)->setPublic(true);
         $container->compile(true);
 
-        $throttle = $container->get('auth.throttle.database');
+        $throttle = $container->get(LoginThrottleInterface::class);
         $this->assertSame(5, $this->property($throttle, 'maxAttempts'));
         $this->assertSame(900, $this->property($throttle, 'lockSeconds'));
 
@@ -314,13 +335,13 @@ final class ServicesTest extends TestCase
     #[Test]
     public function theLimitOfTheLoginsIsTheOneOfTheEnvironment(): void
     {
-        $this->environment('AUTH_DATABASE_LOGIN_MAX_ATTEMPTS', '2');
-        $this->environment('AUTH_DATABASE_LOGIN_LOCK_SECONDS', '60');
+        $this->environment('AUTH_LOGIN_MAX_ATTEMPTS', '2');
+        $this->environment('AUTH_LOGIN_LOCK_SECONDS', '60');
         $container = $this->container('database', true);
-        $container->getDefinition('auth.throttle.database')->setPublic(true);
+        $container->getDefinition(LoginThrottleInterface::class)->setPublic(true);
         $container->compile(true);
 
-        $throttle = $container->get('auth.throttle.database');
+        $throttle = $container->get(LoginThrottleInterface::class);
 
         $this->assertSame(2, $this->property($throttle, 'maxAttempts'));
         $this->assertSame(60, $this->property($throttle, 'lockSeconds'));
@@ -349,26 +370,26 @@ final class ServicesTest extends TestCase
     public function theColumnAndTheQueryOfActiveUsersAreTheOnesOfTheEnvironment(): void
     {
         $container = $this->container('database', true);
-        $container->getDefinition(DatabaseConfiguration::class)->setPublic(true);
+        $container->getDefinition(DatabaseConfigurationInterface::class)->setPublic(true);
         $container->compile(true);
-        $repository = $this->service($container, DatabaseConfiguration::class)->getUserRepository();
+        $repository = $this->service($container, DatabaseConfigurationInterface::class)->getUserRepository();
         $this->assertSame('active', $repository['field']['active']);
         $this->assertSame('SELECT active FROM user WHERE email = :identity', $repository['sql_is_active']);
 
         $this->environment('AUTH_DATABASE_USER_FIELD_ACTIVE', 'enabled');
         $container = $this->container('database', true);
-        $container->getDefinition(DatabaseConfiguration::class)->setPublic(true);
+        $container->getDefinition(DatabaseConfigurationInterface::class)->setPublic(true);
         $container->compile(true);
         $this->assertSame(
             'SELECT enabled FROM user WHERE email = :identity',
-            $this->service($container, DatabaseConfiguration::class)->getUserRepository()['sql_is_active']
+            $this->service($container, DatabaseConfigurationInterface::class)->getUserRepository()['sql_is_active']
         );
 
         $this->environment('AUTH_DATABASE_USER_SQL_IS_ACTIVE', 'false');
         $container = $this->container('database', true);
-        $container->getDefinition(DatabaseConfiguration::class)->setPublic(true);
+        $container->getDefinition(DatabaseConfigurationInterface::class)->setPublic(true);
         $container->compile(true);
-        $this->assertNull($this->service($container, DatabaseConfiguration::class)->getUserRepository()['sql_is_active']);
+        $this->assertNull($this->service($container, DatabaseConfigurationInterface::class)->getUserRepository()['sql_is_active']);
     }
 
     #[Test]
@@ -388,20 +409,20 @@ final class ServicesTest extends TestCase
     {
         $database = $this->container('database', true);
         AuthApplication::load($database, 'custom-user.yaml');
-        $database->getDefinition(DatabaseUserRepository::class)->setPublic(true);
+        $database->getDefinition(PasswordUserRepositoryInterface::class . ' $database')->setPublic(true);
         $database->getDefinition(DerafuAuthenticationInterface::class)->setPublic(true);
         $database->compile(true);
 
-        $this->assertInstanceOf(CustomUserFactory::class, $this->property($this->service($database, DatabaseUserRepository::class), 'userFactory'));
+        $this->assertInstanceOf(CustomUserFactory::class, $this->property($this->service($database, PasswordUserRepositoryInterface::class, PasswordUserRepositoryInterface::class . ' $database'), 'userFactory'));
         $web = $this->channels($database)[1];
         $this->assertInstanceOf(CustomUserFactory::class, $this->property($this->property($web, 'flow'), 'userFactory'));
 
         $keycloak = $this->container('keycloak', true);
         AuthApplication::load($keycloak, 'custom-user.yaml');
-        $keycloak->getDefinition(KeycloakUserRepository::class)->setPublic(true);
+        $keycloak->getDefinition(KeycloakUserRepositoryInterface::class)->setPublic(true);
         $keycloak->compile(true);
 
-        $this->assertInstanceOf(CustomUserFactory::class, $this->property($this->service($keycloak, KeycloakUserRepository::class), 'userFactory'));
+        $this->assertInstanceOf(CustomUserFactory::class, $this->property($this->service($keycloak, KeycloakUserRepositoryInterface::class), 'userFactory'));
     }
 
     #[Test]
@@ -410,23 +431,23 @@ final class ServicesTest extends TestCase
         // Neither is set: there is no URL (the configuration says so when it is
         // used).
         $container = $this->container('database', true);
-        $container->getDefinition(DatabaseConfiguration::class)->setPublic(true);
+        $container->getDefinition(DatabaseConfigurationInterface::class)->setPublic(true);
         $container->compile(true);
-        $this->assertSame('', $this->service($container, DatabaseConfiguration::class)->getDatabaseUrl());
+        $this->assertSame('', $this->service($container, DatabaseConfigurationInterface::class)->getDatabaseUrl());
 
         // The one of the application.
         $this->environment('DATABASE_URL', 'sqlite:/data/application.db');
         $container = $this->container('database', true);
-        $container->getDefinition(DatabaseConfiguration::class)->setPublic(true);
+        $container->getDefinition(DatabaseConfigurationInterface::class)->setPublic(true);
         $container->compile(true);
-        $this->assertSame('sqlite:/data/application.db', $this->service($container, DatabaseConfiguration::class)->getDatabaseUrl());
+        $this->assertSame('sqlite:/data/application.db', $this->service($container, DatabaseConfigurationInterface::class)->getDatabaseUrl());
 
         // Its own, that comes first.
         $this->environment('AUTH_DATABASE_URL', 'sqlite:/data/users.db');
         $container = $this->container('database', true);
-        $container->getDefinition(DatabaseConfiguration::class)->setPublic(true);
+        $container->getDefinition(DatabaseConfigurationInterface::class)->setPublic(true);
         $container->compile(true);
-        $this->assertSame('sqlite:/data/users.db', $this->service($container, DatabaseConfiguration::class)->getDatabaseUrl());
+        $this->assertSame('sqlite:/data/users.db', $this->service($container, DatabaseConfigurationInterface::class)->getDatabaseUrl());
     }
 
     #[Test]
@@ -438,10 +459,10 @@ final class ServicesTest extends TestCase
         $this->environment('AUTH_KEYCLOAK_WEB_SCOPES', '["openid", "email"]');
         $this->environment('AUTH_WEB_LOGIN_REDIRECT_PATH', '/dashboard');
         $container = $this->container('keycloak', true);
-        $container->getDefinition(KeycloakConfiguration::class)->setPublic(true);
+        $container->getDefinition(KeycloakConfigurationInterface::class)->setPublic(true);
         $container->getDefinition(WebConfigurationInterface::class)->setPublic(true);
         $container->compile(true);
-        $config = $this->service($container, KeycloakConfiguration::class);
+        $config = $this->service($container, KeycloakConfigurationInterface::class);
 
         $this->assertSame(7, $config->getHttpClientOptions()['timeout']);
         $this->assertSame(3, $config->getHttpClientOptions()['connect_timeout']);
@@ -495,27 +516,27 @@ final class ServicesTest extends TestCase
     {
         $this->environment('AUTH_DATABASE_USER_TABLE', 'people');
         $container = $this->container('database', true);
-        $container->getDefinition(DatabaseConfiguration::class)->setPublic(true);
+        $container->getDefinition(DatabaseConfigurationInterface::class)->setPublic(true);
         $container->compile(true);
 
-        $this->assertSame('people', $this->service($container, DatabaseConfiguration::class)->getUserRepository()['table']);
+        $this->assertSame('people', $this->service($container, DatabaseConfigurationInterface::class)->getUserRepository()['table']);
     }
 
     #[Test]
     public function theHtpasswdProviderIsWiredWithTheVariablesOfItsFile(): void
     {
         $this->environment('AUTH_HTPASSWD_PATH', '%kernel.project_dir%/var/.htpasswd');
-        $this->environment('AUTH_HTPASSWD_LOGIN_MAX_ATTEMPTS', '3');
-        $this->environment('AUTH_HTPASSWD_LOGIN_LOCK_SECONDS', '120');
+        $this->environment('AUTH_LOGIN_MAX_ATTEMPTS', '3');
+        $this->environment('AUTH_LOGIN_LOCK_SECONDS', '120');
         $container = $this->container('htpasswd', true);
-        $container->getDefinition(HtpasswdConfiguration::class)->setPublic(true);
-        $container->getDefinition('auth.throttle.htpasswd')->setPublic(true);
+        $container->getDefinition(HtpasswdConfigurationInterface::class)->setPublic(true);
+        $container->getDefinition(LoginThrottleInterface::class)->setPublic(true);
         $container->getDefinition(DerafuAuthenticationInterface::class)->setPublic(true);
         $container->compile(true);
 
-        $this->assertSame(dirname(__DIR__, 2) . '/var/.htpasswd', $this->service($container, HtpasswdConfiguration::class)->getHtpasswdPath());
+        $this->assertSame(dirname(__DIR__, 2) . '/var/.htpasswd', $this->service($container, HtpasswdConfigurationInterface::class)->getHtpasswdPath());
 
-        $throttle = $container->get('auth.throttle.htpasswd');
+        $throttle = $container->get(LoginThrottleInterface::class);
         $this->assertSame(3, $this->property($throttle, 'maxAttempts'));
         $this->assertSame(120, $this->property($throttle, 'lockSeconds'));
 
@@ -532,9 +553,9 @@ final class ServicesTest extends TestCase
 
         foreach (['keycloak', 'database', 'htpasswd'] as $file) {
             $container = $this->container($file, true);
-            $container->getDefinition(ApiConfiguration::class)->setPublic(true);
+            $container->getDefinition(ApiConfigurationInterface::class)->setPublic(true);
             $container->compile(true);
-            $config = $this->service($container, ApiConfiguration::class);
+            $config = $this->service($container, ApiConfigurationInterface::class);
 
             $this->assertSame(['/api', '/docs/index.json'], $config->getPaths(), $file);
             $this->assertSame('Billing', $config->getRealm(), $file);
@@ -546,9 +567,9 @@ final class ServicesTest extends TestCase
     {
         foreach (['keycloak', 'database', 'htpasswd'] as $file) {
             $container = $this->container($file, true);
-            $container->getDefinition(ApiConfiguration::class)->setPublic(true);
+            $container->getDefinition(ApiConfigurationInterface::class)->setPublic(true);
             $container->compile(true);
-            $config = $this->service($container, ApiConfiguration::class);
+            $config = $this->service($container, ApiConfigurationInterface::class);
 
             $this->assertSame(['/api'], $config->getPaths(), $file);
             $this->assertSame('API', $config->getRealm(), $file);
@@ -585,9 +606,9 @@ final class ServicesTest extends TestCase
         $this->environment('AUTH_KEYCLOAK_CLIENT_ID', 'derafu-api');
 
         $container = $this->container('keycloak', true);
-        $container->getDefinition(KeycloakConfiguration::class)->setPublic(true);
+        $container->getDefinition(KeycloakConfigurationInterface::class)->setPublic(true);
         $container->compile(true);
-        $config = $this->service($container, KeycloakConfiguration::class);
+        $config = $this->service($container, KeycloakConfigurationInterface::class);
 
         $this->assertTrue($config->isApiIntrospection());
         $this->assertSame('derafu-api', $config->getApiAudience(), 'The client of the application, if the audience is not given.');
@@ -596,9 +617,9 @@ final class ServicesTest extends TestCase
         $this->environment('AUTH_KEYCLOAK_API_INTROSPECTION', 'false');
         $this->environment('AUTH_KEYCLOAK_API_AUDIENCE', 'billing-api');
         $container = $this->container('keycloak', true);
-        $container->getDefinition(KeycloakConfiguration::class)->setPublic(true);
+        $container->getDefinition(KeycloakConfigurationInterface::class)->setPublic(true);
         $container->compile(true);
-        $config = $this->service($container, KeycloakConfiguration::class);
+        $config = $this->service($container, KeycloakConfigurationInterface::class);
 
         $this->assertFalse($config->isApiIntrospection());
         $this->assertSame('billing-api', $config->getApiAudience());
@@ -609,9 +630,9 @@ final class ServicesTest extends TestCase
         $this->environment('AUTH_KEYCLOAK_API_CLIENT_ID', 'billing-api');
         $this->environment('AUTH_KEYCLOAK_API_CLIENT_SECRET', 'billing-secret');
         $container = $this->container('keycloak', true);
-        $container->getDefinition(KeycloakConfiguration::class)->setPublic(true);
+        $container->getDefinition(KeycloakConfigurationInterface::class)->setPublic(true);
         $container->compile(true);
-        $config = $this->service($container, KeycloakConfiguration::class);
+        $config = $this->service($container, KeycloakConfigurationInterface::class);
 
         $this->assertSame('billing-api', $config->getApiClientId());
         $this->assertSame('billing-secret', $config->getApiClientSecret());
@@ -765,13 +786,13 @@ final class ServicesTest extends TestCase
     public function aProviderWithALimitOfLoginsWithoutAPoolSaysSoWhenItCounts(): void
     {
         $container = $this->container('database', false);
-        $container->getDefinition('auth.throttle.database')->setPublic(true);
+        $container->getDefinition(LoginThrottleInterface::class)->setPublic(true);
         $container->compile(true);
 
         $this->expectException(ConfigurationException::class);
         $this->expectExceptionMessage('PSR-6 cache pool');
 
-        $throttle = $container->get('auth.throttle.database');
+        $throttle = $container->get(LoginThrottleInterface::class);
         $this->assertInstanceOf(\Derafu\Auth\Authentication\LoginThrottle::class, $throttle);
         $throttle->isLimited('ana@example.com', '203.0.113.7');
     }
@@ -781,10 +802,10 @@ final class ServicesTest extends TestCase
     {
         $container = $this->container('custom', true);
         AuthApplication::load($container, 'custom-provider.yaml');
-        $container->getDefinition(AuthProviderRegistry::class)->setPublic(true);
+        $container->getDefinition(AuthProviderRegistryInterface::class)->setPublic(true);
         $container->compile(true);
 
-        $this->assertInstanceOf(CustomAuthProvider::class, $this->service($container, AuthProviderRegistry::class)->provider());
+        $this->assertInstanceOf(CustomAuthProvider::class, $this->service($container, AuthProviderRegistryInterface::class)->provider());
     }
 
     #[Test]
@@ -856,16 +877,13 @@ final class ServicesTest extends TestCase
         $container = $this->container($provider, true);
         $container->getDefinition(TwigServiceInterface::class)->setPublic(true);
         foreach ($container->getDefinitions() as $id => $definition) {
-            if (str_starts_with($id, 'Derafu\\Auth\\Provider\\')
-                && str_contains(substr($id, strlen('Derafu\\Auth\\Provider\\')), '\\')
-                && !str_starts_with($id, 'Derafu\\Auth\\Provider\\' . ucfirst($provider) . '\\')) {
+            $class = $definition->getClass() ?? '';
+            if (str_starts_with($class, 'Derafu\\Auth\\Provider\\')
+                && str_contains(substr($class, strlen('Derafu\\Auth\\Provider\\')), '\\')
+                && !str_starts_with($class, 'Derafu\\Auth\\Provider\\' . ucfirst($provider) . '\\')) {
                 continue;
             }
-            if ((str_starts_with($id, 'auth.forms.') || str_starts_with($id, 'auth.throttle.'))
-                && !str_ends_with($id, '.' . $provider)) {
-                continue;
-            }
-            if ($provider === 'keycloak' && in_array($id, [
+            if ($provider === 'keycloak' && in_array($class, [
                 BasicAccount::class,
                 \Derafu\Auth\Authentication\Channel\Web\SessionManager::class,
             ], true)) {
@@ -918,7 +936,7 @@ final class ServicesTest extends TestCase
             self::assertSame($container->get($target), $container->get($alias));
         }
 
-        $registry = $this->service($container, AuthProviderRegistry::class);
+        $registry = $this->service($container, AuthProviderRegistryInterface::class);
         self::assertSame($provider, $registry->provider()::name());
         self::assertSame($provider === 'keycloak' ? 'Bearer' : 'Basic', $registry->apiScheme()->scheme());
         self::assertSame($registry->apiScheme()->scheme(), $registry->account()->apiScheme());
@@ -1109,5 +1127,301 @@ final class ServicesTest extends TestCase
         self::assertStringContainsString('Perfil', $page);
         self::assertStringContainsString('action="/auth/logout"', $page);
         self::assertStringContainsString('curl -u USERNAME:PASSWORD https://app.example.com/api/', $page);
+    }
+
+    #[Test]
+    public function theProductionLocatorRejectsAServiceTaggedWithoutTheProviderContract(): void
+    {
+        $container = $this->container('broken', false);
+        AuthApplication::load($container, 'invalid-provider.yaml');
+        $container->getDefinition(AuthProviderRegistryInterface::class)->setPublic(true);
+        $container->compile(true);
+        $registry = $this->service($container, AuthProviderRegistryInterface::class);
+
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage(
+            'The authentication provider "broken" must implement ' . AuthProviderInterface::class
+                . '; received ' . InvalidAuthProvider::class . '.'
+        );
+        $registry->provider();
+    }
+
+    #[Test]
+    public function anApplicationCanSupplyItsOwnApiConfigurationThroughTheContract(): void
+    {
+        $container = $this->container('htpasswd', true);
+        AuthApplication::load($container, 'application-api.yaml');
+        $container->getDefinition(ApiChannel::class)->setPublic(true);
+        $container->compile(true);
+        $channel = $container->get(ApiChannel::class);
+        self::assertInstanceOf(ChannelInterface::class, $channel);
+        $request = (new ServerRequest())->withUri(new Uri('https://app.example.com/partner/api/orders'));
+
+        self::assertTrue($channel->matches($request));
+        self::assertFalse($channel->matches($request->withUri(new Uri('https://app.example.com/api/orders'))));
+        self::assertFalse($channel->matches($request->withUri(new Uri('https://app.example.com/partner/apiary'))));
+
+        try {
+            $channel->unauthorizedResponse($request);
+            self::fail('An unauthenticated API request was accepted.');
+        } catch (AuthenticationException $exception) {
+            self::assertSame(401, $exception->getCode());
+            self::assertSame(
+                ['WWW-Authenticate' => 'Basic realm="Partner API", charset="UTF-8"'],
+                $exception->getHeaders(),
+            );
+        }
+    }
+
+    #[Test]
+    public function taggedApplicationFormsReceiveTheirOwnConstructorDependencies(): void
+    {
+        $container = $this->container('database', false);
+        AuthApplication::load($container, 'application-form.yaml');
+        $container->getDefinition(FormManagerInterface::class)->setPublic(true);
+        $container->compile(true);
+        $manager = $this->service($container, FormManagerInterface::class);
+        $form = $manager->createForm(ApplicationAuthForm::class, ['display_name' => 'Ana']);
+
+        self::assertSame(['display_name'], array_keys($form->getFields()));
+        self::assertSame(['display_name' => 'Ana'], $form->getData()?->toArray());
+    }
+
+    #[Test]
+    public function bothPasswordProvidersUseTheSingleConfiguredThrottle(): void
+    {
+        $container = $this->container('database', true);
+        $throttles = [];
+        foreach ($container->getDefinitions() as $id => $definition) {
+            if ($definition->getClass() === LoginThrottle::class) {
+                $throttles[] = $id;
+            }
+        }
+        self::assertSame([LoginThrottleInterface::class], $throttles);
+        foreach ([
+            WebFlowInterface::class . ' $database',
+            WebFlowInterface::class . ' $htpasswd',
+            ApiSchemeInterface::class . ' $database',
+            ApiSchemeInterface::class . ' $htpasswd',
+        ] as $id) {
+            $reference = $container->getDefinition($id)->getArgument('$throttle');
+            self::assertInstanceOf(Reference::class, $reference);
+            self::assertSame(LoginThrottleInterface::class, (string) $reference);
+        }
+        $container->getDefinition(LoginThrottleInterface::class)->setPublic(true);
+        $container->compile(true);
+        $throttle = $this->service($container, LoginThrottleInterface::class);
+        self::assertSame($throttle, $container->get(LoginThrottleInterface::class));
+        self::assertFalse($throttle->isLimited('ana', '203.0.113.7'));
+        for ($attempt = 0; $attempt < 5; ++$attempt) {
+            $throttle->hit('ana', '203.0.113.7');
+        }
+        self::assertTrue($throttle->isLimited('ana', '203.0.113.7'));
+        $throttle->clear('ana', '203.0.113.7');
+        self::assertFalse($throttle->isLimited('ana', '203.0.113.7'));
+    }
+
+    #[Test]
+    #[DataProvider('serviceProviders')]
+    public function controllersAndProviderConsumersShareTheFormManager(string $provider): void
+    {
+        $container = $this->configuredContainer($provider);
+        $forms = $this->service($container, FormManagerInterface::class);
+        self::assertSame($forms, $container->get(FormManagerInterface::class));
+        self::assertSame($forms, $this->property($container->get(AuthController::class), 'formManager'));
+        self::assertSame($forms, $this->property($container->get(AccountController::class), 'forms'));
+
+        $consumer = match ($provider) {
+            'database' => WebFlowInterface::class . ' $database',
+            'htpasswd' => WebFlowInterface::class . ' $htpasswd',
+            'keycloak' => ApiTokenManagerInterface::class,
+            default => self::fail('Unexpected test provider: ' . $provider),
+        };
+        self::assertSame($forms, $this->property($container->get($consumer), 'formManager'));
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function unavailableProviders(): array
+    {
+        return [
+            'no selection' => [''],
+            'unknown selection' => ['unknown'],
+        ];
+    }
+
+    #[Test]
+    #[DataProvider('unavailableProviders')]
+    public function independentFormsWorkWithoutAUsableAuthenticationProvider(string $provider): void
+    {
+        $container = $this->container($provider, false);
+        AuthApplication::load($container, 'application-form.yaml');
+        $container->getDefinition(FormManagerInterface::class)->setPublic(true);
+        $container->compile(true);
+        $forms = $this->service($container, FormManagerInterface::class);
+        $form = $forms->createForm(ApplicationAuthForm::class, ['display_name' => 'Ana']);
+
+        self::assertSame(['display_name'], array_keys($form->getFields()));
+        self::assertSame(['display_name' => 'Ana'], $form->getData()?->toArray());
+        $result = $forms->processForm(ApiTokenValueForm::class, ['token' => 'example-token']);
+        self::assertTrue($result->isValid());
+        self::assertSame('example-token', $result->getReader()->requireString('token'));
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function passwordProviders(): array
+    {
+        return ['database' => ['database'], 'htpasswd' => ['htpasswd']];
+    }
+
+    #[Test]
+    #[DataProvider('passwordProviders')]
+    public function applicationPasswordContractsAuthenticateAndRefreshRealUsers(string $provider): void
+    {
+        $database = new UsersDatabase();
+        $file = new HtpasswdFile();
+        try {
+            $file->groups(['admin' => ['ana']]);
+            $this->environment('AUTH_DATABASE_URL', $database->config()->getDatabaseUrl());
+            $this->environment('AUTH_HTPASSWD_PATH', $file->path());
+            $this->environment('AUTH_HTPASSWD_GROUP_PATH', $file->groupPath());
+            $container = $this->container($provider, true);
+            AuthApplication::load($container, 'application-backends.yaml');
+            foreach ([DerafuAuthenticationInterface::class, WebFlowInterface::class, SessionManagerInterface::class,
+                PasswordUserRepositoryInterface::class . ' $' . $provider,
+                DatabaseConfigurationInterface::class, HtpasswdConfigurationInterface::class,
+            ] as $id) {
+                $container->getDefinition($id)->setPublic(true);
+            }
+            $container->compile(true);
+            $identity = $provider === 'database' ? 'ana@example.com' : 'ana';
+            $request = (new ServerRequest())
+                ->withUri(new Uri('https://app.example.com/api/reports'))
+                ->withHeader('Authorization', 'Basic ' . base64_encode($identity . ':secret'));
+            $user = $this->service($container, DerafuAuthenticationInterface::class)->authenticate($request);
+            self::assertInstanceOf(UserInterface::class, $user);
+            self::assertSame($identity, $user->getIdentity());
+            self::assertTrue($user->hasAnyRole(['admin']));
+
+            $session = new Session([]);
+            $this->service($container, SessionManagerInterface::class)->storeUserInfo($session, ['identity' => $identity]);
+            $session->set('auth_checked_at', 0);
+            $reloaded = $this->service($container, WebFlowInterface::class)->userFromSession($session);
+            self::assertInstanceOf(UserInterface::class, $reloaded);
+            self::assertSame($identity, $reloaded->getIdentity());
+            self::assertTrue($reloaded->hasAnyRole(['admin']));
+
+            $repository = $container->get(PasswordUserRepositoryInterface::class . ' $' . $provider);
+            self::assertInstanceOf(ApplicationPasswordUserRepository::class, $repository);
+            self::assertContains('authenticate', $repository->calls);
+            self::assertContains('find', $repository->calls);
+            if ($provider === 'database') {
+                $config = $container->get(DatabaseConfigurationInterface::class);
+                self::assertInstanceOf(ApplicationDatabaseConfiguration::class, $config);
+                self::assertContains('getDatabaseUrl', $config->calls);
+                self::assertContains('getUserIdentityField', $config->calls);
+            } else {
+                $config = $container->get(HtpasswdConfigurationInterface::class);
+                self::assertInstanceOf(ApplicationHtpasswdConfiguration::class, $config);
+                self::assertContains('getHtpasswdPath', $config->calls);
+                self::assertContains('getGroupPath', $config->calls);
+            }
+        } finally {
+            $database->remove();
+            $file->remove();
+        }
+    }
+
+    #[Test]
+    public function applicationKeycloakContractsPerformRealAuthenticationSessionAndAccountOperations(): void
+    {
+        $keycloak = RealKeycloak::start();
+        try {
+            foreach ([
+                'AUTH_KEYCLOAK_URL' => $keycloak->url(),
+                'AUTH_KEYCLOAK_REALM' => 'test',
+                'AUTH_KEYCLOAK_CLIENT_ID' => 'derafu-auth',
+                'AUTH_KEYCLOAK_CLIENT_SECRET' => 'test-secret',
+                'AUTH_KEYCLOAK_WEB_REDIRECT_URI' => 'https://app.test/auth/callback',
+                'AUTH_KEYCLOAK_API_AUDIENCE' => 'derafu-api',
+                'AUTH_KEYCLOAK_API_CLIENT_ID' => 'derafu-api',
+                'AUTH_KEYCLOAK_API_CLIENT_SECRET' => 'api-secret',
+            ] as $name => $value) {
+                $this->environment($name, $value);
+            }
+            $container = $this->container('keycloak', true);
+            AuthApplication::load($container, 'application-backends.yaml');
+            foreach ([DerafuAuthenticationInterface::class, WebFlowInterface::class, AccountInterface::class,
+                KeycloakUserRepositoryInterface::class, KeycloakSessionManagerInterface::class,
+                KeycloakAccountClientInterface::class, KeycloakTokenVerifierInterface::class,
+                KeycloakConfigurationInterface::class, ApiTokenManagerInterface::class,
+            ] as $id) {
+                $container->getDefinition($id)->setPublic(true);
+            }
+            $container->compile(true);
+
+            $apiToken = (new KeycloakTokens($keycloak->url()))->service('derafu-service', 'service-secret');
+            self::assertIsString($apiToken['access_token']);
+            $request = (new ServerRequest())
+                ->withUri(new Uri('https://app.example.com/api/reports'))
+                ->withHeader('Authorization', 'Bearer ' . $apiToken['access_token']);
+            $apiUser = $this->service($container, DerafuAuthenticationInterface::class)->authenticate($request);
+            self::assertInstanceOf(UserInterface::class, $apiUser);
+            self::assertFalse($apiUser->isAnonymous());
+
+            $response = (new Client())->post($keycloak->url() . '/realms/test/protocol/openid-connect/token', [
+                'form_params' => [
+                    'grant_type' => 'password', 'client_id' => 'derafu-auth', 'client_secret' => 'test-secret',
+                    'username' => 'ana', 'password' => 'secret', 'scope' => 'openid',
+                ],
+            ]);
+            $tokens = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
+            self::assertIsArray($tokens);
+            self::assertIsString($tokens['access_token']);
+            self::assertIsString($tokens['refresh_token']);
+            $repository = $container->get(KeycloakUserRepositoryInterface::class);
+            self::assertInstanceOf(ApplicationKeycloakUserRepository::class, $repository);
+            $info = $repository->getUserInfoFromToken($tokens['access_token']);
+            $sessions = $container->get(KeycloakSessionManagerInterface::class);
+            self::assertInstanceOf(ApplicationKeycloakSessionManager::class, $sessions);
+            $session = new Session([]);
+            $sessions->storeAuthInfo($session, [
+                'access_token' => $tokens['access_token'], 'refresh_token' => $tokens['refresh_token'], 'expires' => time() - 1,
+            ]);
+            $sessions->storeUserInfo($session, $info);
+            $user = $this->service($container, WebFlowInterface::class)->userFromSession($session);
+            self::assertInstanceOf(UserInterface::class, $user);
+            self::assertSame('ana', $user->getUsername());
+            self::assertContains('refreshToken', $repository->calls);
+            self::assertContains('verifyBearerToken', $repository->calls);
+            self::assertContains('getRefreshToken', $sessions->calls);
+
+            $account = $this->service($container, AccountInterface::class);
+            self::assertNotEmpty($account->sessionDetails($session));
+            $manager = $account->tokens();
+            self::assertInstanceOf(ApplicationApiTokenManager::class, $manager);
+            self::assertSame($manager, $container->get(ApiTokenManagerInterface::class));
+            self::assertSame([], $manager->list($session));
+            self::assertArrayHasKey('password', $manager->form($user)->getFields());
+            self::assertContains('list', $manager->calls);
+            self::assertContains('form', $manager->calls);
+            $client = $container->get(KeycloakAccountClientInterface::class);
+            self::assertInstanceOf(ApplicationKeycloakAccountClient::class, $client);
+            self::assertContains('session', $client->calls);
+            self::assertContains('tokens', $client->calls);
+            $verifier = $container->get(KeycloakTokenVerifierInterface::class);
+            self::assertInstanceOf(ApplicationKeycloakTokenVerifier::class, $verifier);
+            self::assertContains('verifyAccessToken', $verifier->calls);
+            self::assertContains('verifyBearerToken', $verifier->calls);
+            $config = $container->get(KeycloakConfigurationInterface::class);
+            self::assertInstanceOf(ApplicationKeycloakConfiguration::class, $config);
+            self::assertContains('validateApi', $config->calls);
+            self::assertContains('getClientId', $config->calls);
+        } finally {
+            $keycloak->stop();
+        }
     }
 }

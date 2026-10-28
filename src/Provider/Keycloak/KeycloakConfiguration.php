@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Derafu\Auth\Provider\Keycloak;
 
 use Derafu\Array\ArrayReader;
+use Derafu\Auth\Contract\KeycloakConfigurationInterface;
 use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 use Derafu\Value\ValueType;
@@ -20,7 +21,7 @@ use Derafu\Value\ValueType;
 /**
  * Configuration class for Keycloak authentication settings.
  */
-class KeycloakConfiguration
+class KeycloakConfiguration implements KeycloakConfigurationInterface
 {
     /**
      * The Keycloak URL.
@@ -170,14 +171,7 @@ class KeycloakConfiguration
     }
 
     /**
-     * Checks what the web flow needs: the login of the user in Keycloak.
-     *
-     * It is checked when the flow is used, not when the configuration is made, so
-     * a site that has it wrong fails where Keycloak is needed and not in every
-     * page.
-     *
-     * @throws ConfigurationException If something that the login needs is not
-     * configured, or is not a valid address.
+     * {@inheritDoc}
      */
     public function validateWeb(): void
     {
@@ -198,14 +192,7 @@ class KeycloakConfiguration
     }
 
     /**
-     * Checks what the API needs: to verify the tokens that Keycloak gave.
-     *
-     * Verifying a token needs the realm (its keys) and the audience. Asking
-     * Keycloak whether the token is still active (the introspection) needs a
-     * client that Keycloak accepts, and an audience that is that client.
-     *
-     * @throws ConfigurationException If something that the API needs is not
-     * configured, or is not valid.
+     * {@inheritDoc}
      */
     public function validateApi(): void
     {
@@ -275,9 +262,7 @@ class KeycloakConfiguration
     }
 
     /**
-     * Gets the Keycloak URL.
-     *
-     * @return string The Keycloak URL.
+     * {@inheritDoc}
      */
     public function getKeycloakUrl(): string
     {
@@ -285,9 +270,7 @@ class KeycloakConfiguration
     }
 
     /**
-     * Gets the Keycloak realm.
-     *
-     * @return string The Keycloak realm.
+     * {@inheritDoc}
      */
     public function getRealm(): string
     {
@@ -295,9 +278,7 @@ class KeycloakConfiguration
     }
 
     /**
-     * Gets the Keycloak client ID.
-     *
-     * @return string The Keycloak client ID.
+     * {@inheritDoc}
      */
     public function getClientId(): string
     {
@@ -305,9 +286,7 @@ class KeycloakConfiguration
     }
 
     /**
-     * Gets the Keycloak client secret.
-     *
-     * @return string The Keycloak client secret.
+     * {@inheritDoc}
      */
     public function getClientSecret(): string
     {
@@ -315,9 +294,7 @@ class KeycloakConfiguration
     }
 
     /**
-     * Gets the Keycloak redirect URI.
-     *
-     * @return string The Keycloak redirect URI.
+     * {@inheritDoc}
      */
     public function getRedirectUri(): string
     {
@@ -325,9 +302,7 @@ class KeycloakConfiguration
     }
 
     /**
-     * Gets the Keycloak scopes.
-     *
-     * @return array<array-key, string> The Keycloak scopes.
+     * {@inheritDoc}
      */
     public function getScopes(): array
     {
@@ -335,9 +310,7 @@ class KeycloakConfiguration
     }
 
     /**
-     * Gets the Keycloak callback path.
-     *
-     * @return string The Keycloak callback path.
+     * {@inheritDoc}
      */
     public function getCallbackPath(): string
     {
@@ -345,10 +318,7 @@ class KeycloakConfiguration
     }
 
     /**
-     * Gets the address of the account console of the realm, where the user edits
-     * its data.
-     *
-     * @return string The address.
+     * {@inheritDoc}
      */
     public function getAccountUrl(): string
     {
@@ -356,14 +326,7 @@ class KeycloakConfiguration
     }
 
     /**
-     * Gets the Keycloak HTTP client options.
-     *
-     * The requests have a `User-Agent` that says who makes them (see
-     * `getUserAgent()`), unless the application gives its own in
-     * `http_client_options.headers`: Keycloak and the servers in front of it have it
-     * in their logs.
-     *
-     * @return array<array-key, mixed> The Keycloak HTTP client options.
+     * {@inheritDoc}
      */
     public function getHttpClientOptions(): array
     {
@@ -377,9 +340,7 @@ class KeycloakConfiguration
     }
 
     /**
-     * The `User-Agent` of the requests of the package: `Derafu Auth (<client>)`.
-     * Keycloak does not show it in the list of the sessions (it only shows the
-     * browsers that it knows), but it is in the logs of the servers.
+     * {@inheritDoc}
      */
     public function getUserAgent(): string
     {
@@ -390,9 +351,7 @@ class KeycloakConfiguration
     }
 
     /**
-     * Gets the issuer of the tokens (their `iss`).
-     *
-     * @return string The URL of the realm, or the issuer that was configured.
+     * {@inheritDoc}
      */
     public function getIssuer(): string
     {
@@ -400,9 +359,7 @@ class KeycloakConfiguration
     }
 
     /**
-     * Gets the URL of the realm, where the endpoints of Keycloak are.
-     *
-     * @return string The URL of the realm.
+     * {@inheritDoc}
      */
     public function getRealmUrl(): string
     {
@@ -410,9 +367,7 @@ class KeycloakConfiguration
     }
 
     /**
-     * Whether the logout also ends the session of the user in Keycloak.
-     *
-     * @return bool True if it does.
+     * {@inheritDoc}
      */
     public function isEndSession(): bool
     {
@@ -420,12 +375,7 @@ class KeycloakConfiguration
     }
 
     /**
-     * Gets the URL where Keycloak sends the user after the logout.
-     *
-     * @param string $logoutRedirectPath The page of the site that follows the
-     * logout (the one of the web channel), when no URL was configured.
-     * @return string The URL: the one that was configured, or the page that
-     * follows the logout in the site of the redirect URI.
+     * {@inheritDoc}
      */
     public function getPostLogoutRedirectUri(string $logoutRedirectPath = '/'): string
     {
@@ -446,16 +396,7 @@ class KeycloakConfiguration
     }
 
     /**
-     * Gets the audience that the access token of a client of the API must have
-     * (the `aud` of the token): the identifier of the API in Keycloak.
-     *
-     * Without it, a token that Keycloak gave to any client of the realm, for any
-     * other application, would be accepted by the API: the audience says that the
-     * token was made to be used here. It is the client of the application unless
-     * another one is configured. The roles of the client of the audience are the
-     * ones of the client of the API (together with the ones of the realm).
-     *
-     * @return string The audience.
+     * {@inheritDoc}
      */
     public function getApiAudience(): string
     {
@@ -463,11 +404,7 @@ class KeycloakConfiguration
     }
 
     /**
-     * Gets the client that asks Keycloak about the tokens of the API
-     * (introspection): the client of the API if it has one of its own, and the
-     * client of the application otherwise.
-     *
-     * @return string The ID of the client.
+     * {@inheritDoc}
      */
     public function getApiClientId(): string
     {
@@ -475,10 +412,7 @@ class KeycloakConfiguration
     }
 
     /**
-     * Gets the secret of the client that asks Keycloak about the tokens of the
-     * API (see `getApiClientId()`).
-     *
-     * @return string The secret of the client.
+     * {@inheritDoc}
      */
     public function getApiClientSecret(): string
     {
@@ -486,23 +420,7 @@ class KeycloakConfiguration
     }
 
     /**
-     * Gets whether Keycloak is asked, in each request of a client of the API,
-     * whether its access token is still **active** (token introspection, RFC
-     * 7662). It is, by default.
-     *
-     * A token is verified by what it says (its signature and its expiration), so a
-     * token of a user that was disabled, or that was revoked, is valid until it
-     * expires. Asking Keycloak closes that: the token that Keycloak does not
-     * consider active is not valid, at once. It has a price, a request to Keycloak
-     * for each request to the API. Turning it off is for the ones that give their
-     * clients tokens that last a short time and trust that: the token is verified
-     * with no request to Keycloak but the one for its keys, that are cached.
-     *
-     * Keycloak answers about a token only to a client that is in the audience of
-     * the token, so with the introspection on the audience of the API is the
-     * client that asks: the one of the API (`getApiClientId()`).
-     *
-     * @return bool True if the token is asked to Keycloak.
+     * {@inheritDoc}
      */
     public function isApiIntrospection(): bool
     {

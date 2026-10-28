@@ -13,9 +13,11 @@ declare(strict_types=1);
 namespace Derafu\Auth\Provider\Keycloak;
 
 use Derafu\Array\ArrayReader;
+use Derafu\Auth\Contract\KeycloakConfigurationInterface;
+use Derafu\Auth\Contract\KeycloakTokenVerifierInterface;
+use Derafu\Auth\Contract\KeycloakUserRepositoryInterface;
 use Derafu\Auth\Contract\UserFactoryInterface;
 use Derafu\Auth\Contract\UserInterface as DerafuUserInterface;
-use Derafu\Auth\Contract\UserRepositoryInterface;
 use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Auth\Exception\ProviderUnavailableException;
@@ -38,11 +40,11 @@ use Mezzio\Authentication\UserInterface;
  * (their signature, issuer, expiration, audience and nonce), and the user
  * information.
  */
-class KeycloakUserRepository implements UserRepositoryInterface
+class KeycloakUserRepository implements KeycloakUserRepositoryInterface
 {
     private GenericProvider $provider;
 
-    private KeycloakTokenVerifier $verifier;
+    private KeycloakTokenVerifierInterface $verifier;
 
     private ClientInterface $httpClient;
 
@@ -54,8 +56,8 @@ class KeycloakUserRepository implements UserRepositoryInterface
     /**
      * Creates a new Keycloak user repository.
      *
-     * @param KeycloakConfiguration $config The Keycloak configuration.
-     * @param KeycloakTokenVerifier|null $verifier Verifies the tokens. By
+     * @param KeycloakConfigurationInterface $config The Keycloak configuration.
+     * @param KeycloakTokenVerifierInterface|null $verifier Verifies the tokens. By
      * default, one that reads the keys of the realm of the configuration.
      * @param UserFactoryInterface|null $userFactory Makes the users.
      * @param ClientInterface|null $httpClient The client for the requests to
@@ -65,8 +67,8 @@ class KeycloakUserRepository implements UserRepositoryInterface
     private readonly UserFactoryInterface $userFactory;
 
     public function __construct(
-        private readonly KeycloakConfiguration $config,
-        ?KeycloakTokenVerifier $verifier = null,
+        private readonly KeycloakConfigurationInterface $config,
+        ?KeycloakTokenVerifierInterface $verifier = null,
         ?UserFactoryInterface $userFactory = null,
         ?ClientInterface $httpClient = null
     ) {
@@ -99,16 +101,7 @@ class KeycloakUserRepository implements UserRepositoryInterface
     }
 
     /**
-     * Gets user information using an access token.
-     *
-     * The token is verified (its signature, issuer, expiration and that it was
-     * given to this client), and the user information of Keycloak must be the one
-     * of the user of the token. The claims of the token (the roles, for example)
-     * are added to the user information.
-     *
-     * @param string $accessToken The access token.
-     * @return array<string, mixed> The user information.
-     * @throws AuthenticationException If token validation fails.
+     * {@inheritDoc}
      */
     public function getUserInfoFromToken(string $accessToken): array
     {
@@ -133,18 +126,7 @@ class KeycloakUserRepository implements UserRepositoryInterface
     }
 
     /**
-     * Verifies the access token that a client of the API sends: what the token
-     * says (see `KeycloakTokenVerifier::verifyBearerToken()`) and, unless it is
-     * turned off in the configuration, that Keycloak says that it is active (see
-     * `introspect()`). The first is done before the second, so a token that is not
-     * valid does not cost a request to Keycloak.
-     *
-     * @param string $accessToken The access token.
-     * @return array<string, mixed> The claims of the token.
-     * @throws AuthenticationException If the token is not valid, or it is not
-     * active.
-     * @throws ProviderUnavailableException If Keycloak can not be asked whether
-     * the token is active: the token is not accepted without knowing.
+     * {@inheritDoc}
      */
     public function verifyBearerToken(string $accessToken): array
     {
@@ -208,12 +190,7 @@ class KeycloakUserRepository implements UserRepositoryInterface
     }
 
     /**
-     * Exchanges an authorization code for an access token.
-     *
-     * @param string $code The authorization code.
-     * @param string|null $pkceCode The PKCE code (the verifier) of the login.
-     * @return array<string, mixed> The token information.
-     * @throws AuthenticationException If code exchange fails.
+     * {@inheritDoc}
      */
     public function exchangeCodeForToken(string $code, ?string $pkceCode = null): array
     {
@@ -243,11 +220,7 @@ class KeycloakUserRepository implements UserRepositoryInterface
     }
 
     /**
-     * Refreshes an access token using a refresh token.
-     *
-     * @param string $refreshToken The refresh token.
-     * @return array<string, mixed> The new token information.
-     * @throws AuthenticationException If token refresh fails.
+     * {@inheritDoc}
      */
     public function refreshToken(string $refreshToken): array
     {
@@ -273,23 +246,7 @@ class KeycloakUserRepository implements UserRepositoryInterface
     }
 
     /**
-     * Asks Keycloak for an offline token for a user that gives its password: the
-     * token of the API that the user makes in its profile.
-     *
-     * Each token is an offline session of its own (the one that a login of a browser
-     * makes is the session of the user, which every token of it would share, and
-     * revoking one would revoke them all), and the password is asked again, so a
-     * session cookie that was stolen is not enough. It needs the client of the
-     * application to have the direct access grants (the grant `password`) on.
-     *
-     * @param string $username The user name (the claim `preferred_username`).
-     * @param string $password Its password.
-     * @param string|null $otp The code of its second factor, if it has one.
-     * @return array{refresh_token: string} What Keycloak gives: `refresh_token` is the offline
-     * token.
-     * @throws AuthenticationException If Keycloak does not accept the credentials, or
-     * it does not give an offline token.
-     * @throws ProviderUnavailableException If Keycloak can not answer.
+     * {@inheritDoc}
      */
     public function requestOfflineToken(string $username, string $password, ?string $otp = null): array
     {
@@ -363,14 +320,7 @@ class KeycloakUserRepository implements UserRepositoryInterface
     }
 
     /**
-     * Creates an authorization URL for OAuth2 flow.
-     *
-     * It has the `state` (against CSRF), the `nonce` (that the ID token must
-     * have) and the PKCE challenge. What the login needs to finish is read after
-     * this: `getState()`, `getNonce()` and `getPkceCode()`.
-     *
-     * @param array<string, mixed> $options Additional options for authorization URL.
-     * @return string The authorization URL.
+     * {@inheritDoc}
      */
     public function createAuthorizationUrl(array $options = []): string
     {
@@ -383,9 +333,7 @@ class KeycloakUserRepository implements UserRepositoryInterface
     }
 
     /**
-     * Gets the nonce of the authorization URL that was created last.
-     *
-     * @return string The nonce.
+     * {@inheritDoc}
      */
     public function getNonce(): string
     {
@@ -393,10 +341,7 @@ class KeycloakUserRepository implements UserRepositoryInterface
     }
 
     /**
-     * Gets the PKCE code (the verifier) of the authorization URL that was
-     * created last.
-     *
-     * @return string|null The PKCE code.
+     * {@inheritDoc}
      */
     public function getPkceCode(): ?string
     {
@@ -406,12 +351,7 @@ class KeycloakUserRepository implements UserRepositoryInterface
     }
 
     /**
-     * Verifies the ID token of a login.
-     *
-     * @param string $idToken The ID token.
-     * @param string $nonce The nonce of the authorization URL of the login.
-     * @return array<string, mixed> The claims of the ID token.
-     * @throws AuthenticationException If the ID token is not valid.
+     * {@inheritDoc}
      */
     public function verifyIdToken(string $idToken, string $nonce): array
     {
@@ -419,14 +359,7 @@ class KeycloakUserRepository implements UserRepositoryInterface
     }
 
     /**
-     * Gets the URL that ends the session of the user in Keycloak.
-     *
-     * @param string|null $idToken The ID token of the session, that tells
-     * Keycloak which session it is.
-     * @param string $logoutRedirectPath The page of the site that follows the
-     * logout, if the configuration has no post logout redirect URI.
-     * @return string The URL, which sends the user back to the post logout
-     * redirect URI of the configuration.
+     * {@inheritDoc}
      */
     public function getLogoutUrl(?string $idToken = null, string $logoutRedirectPath = '/'): string
     {
@@ -438,9 +371,7 @@ class KeycloakUserRepository implements UserRepositoryInterface
     }
 
     /**
-     * Gets the state parameter for CSRF protection.
-     *
-     * @return string The state parameter.
+     * {@inheritDoc}
      */
     public function getState(): string
     {
@@ -448,10 +379,7 @@ class KeycloakUserRepository implements UserRepositoryInterface
     }
 
     /**
-     * Validates if an access token is still valid.
-     *
-     * @param string $accessToken The access token to validate.
-     * @return bool True if token is valid, false otherwise.
+     * {@inheritDoc}
      */
     public function isTokenValid(string $accessToken): bool
     {
@@ -464,23 +392,7 @@ class KeycloakUserRepository implements UserRepositoryInterface
     }
 
     /**
-     * Makes the user from what Keycloak says about it (the claims of the access
-     * token and the user info).
-     *
-     * The identity is the `sub`, the roles are the ones of the realm and the ones
-     * of the client of the application, and the details are the claims as they
-     * are: the standard fields of the user (name, email...) are the claims of
-     * OpenID Connect, and the claims that a mapper of the realm adds (an
-     * attribute of the user, its groups) are there too. A claim that is not there
-     * is a field that is `null`, not an error. The user is made by the factory,
-     * so it is the class of user of the application.
-     *
-     * @param array<string, mixed> $userInfo The claims and the user info.
-     * @param string|null $client The client whose roles are the ones of the user
-     * (together with the ones of the realm): the one of the application by
-     * default, and the one of the audience for a client of the API.
-     * @return DerafuUserInterface The user.
-     * @throws AuthenticationException If there is no `sub`.
+     * {@inheritDoc}
      */
     public function createUser(array $userInfo, ?string $client = null): DerafuUserInterface
     {
@@ -552,7 +464,7 @@ class KeycloakUserRepository implements UserRepositoryInterface
     }
 
     /**
-     * The realm of Keycloak where the users of the application have their account.
+     * {@inheritDoc}
      */
     public function getRealm(): string
     {

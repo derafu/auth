@@ -167,4 +167,10 @@ return [
     'There is no user in the session.' => 'No hay un usuario en la sesión.',
     'The flash request attribute must implement Mezzio\\Flash\\FlashMessagesInterface.' => 'El atributo flash de la solicitud debe implementar Mezzio\\Flash\\FlashMessagesInterface.',
     'Invalid response from Keycloak: {error}' => 'Respuesta inválida de Keycloak: {error}',
+    'The authentication provider "{name}" must implement {interface}; received {type}.' =>
+        'El proveedor de autenticación "{name}" debe implementar {interface}; se recibió {type}.',
+    'The authentication form "{form}" is not registered. Register its service with the derafu_auth.form tag.' =>
+        'El formulario de autenticación "{form}" no está registrado. Registra su servicio con la etiqueta derafu_auth.form.',
+    'The authentication form "{form}" must implement {interface}; received {type}.' =>
+        'El formulario de autenticación "{form}" debe implementar {interface}; se recibió {type}.',
 ];

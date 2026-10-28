@@ -25,7 +25,7 @@ final class CustomAuthProvider extends AuthProvider
     {
         $nothing = static fn (): never => throw new LogicException('The custom provider gives nothing.');
 
-        parent::__construct($nothing, $nothing, $nothing, $nothing, $nothing);
+        parent::__construct($nothing, $nothing, $nothing, $nothing);
     }
 
     public static function name(): string

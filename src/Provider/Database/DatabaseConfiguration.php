@@ -13,13 +13,14 @@ declare(strict_types=1);
 namespace Derafu\Auth\Provider\Database;
 
 use Derafu\Array\ArrayReader;
+use Derafu\Auth\Contract\DatabaseConfigurationInterface;
 use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 
 /**
  * Configuration class for Database authentication settings.
  */
-class DatabaseConfiguration
+class DatabaseConfiguration implements DatabaseConfigurationInterface
 {
     private string $databaseUrl = '';
 
@@ -74,9 +75,7 @@ class DatabaseConfiguration
     }
 
     /**
-     * Gets the database URL.
-     *
-     * @return string The database URL.
+     * {@inheritDoc}
      */
     public function getDatabaseUrl(): string
     {
@@ -84,15 +83,7 @@ class DatabaseConfiguration
     }
 
     /**
-     * Gets the user repository configuration.
-     *
-     * @return array{
-     *     table: string,
-     *     field: array{identity: string, password: string, active: string},
-     *     sql_get_roles: string,
-     *     sql_get_details: string,
-     *     sql_is_active: string|null
-     * } The user repository configuration.
+     * {@inheritDoc}
      */
     public function getUserRepository(): array
     {
@@ -100,9 +91,7 @@ class DatabaseConfiguration
     }
 
     /**
-     * Gets the user identity field.
-     *
-     * @return string The user identity field.
+     * {@inheritDoc}
      */
     public function getUserIdentityField(): string
     {
@@ -110,9 +99,7 @@ class DatabaseConfiguration
     }
 
     /**
-     * Gets the user password field.
-     *
-     * @return string The user password field.
+     * {@inheritDoc}
      */
     public function getUserPasswordField(): string
     {

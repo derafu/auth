@@ -1,0 +1,3 @@
+services:
+    Derafu\TestsAuth\Fixture\InvalidAuthProvider:
+        tags: [derafu_auth.provider]

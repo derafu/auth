@@ -43,6 +43,7 @@ use Derafu\Form\Type\TypeResolver;
 use Derafu\Renderer\Engine\Html\TwigHtmlEngine;
 use Derafu\Renderer\Renderer;
 use Derafu\TestsAuth\Fixture\AuthApplication;
+use Derafu\TestsAuth\Fixture\Stack;
 use Derafu\Translation\TranslatableMessage;
 use Derafu\Translation\TranslatorFactory;
 use Derafu\Twig\Extension\TranslationExtension;
@@ -141,7 +142,7 @@ final class AccountControllerTest extends TestCase
             new FormManager(
                 new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
                 $this->createStub(FormDataProcessorInterface::class),
-                new \stdClass()
+                Stack::formDefinitions()
             )
         );
     }

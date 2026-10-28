@@ -15,13 +15,14 @@ namespace Derafu\Auth\Provider\Keycloak\Web;
 use Derafu\Array\ArrayReader;
 use Derafu\Auth\AnonymousUser;
 use Derafu\Auth\Authentication\Channel\Web\Flash;
+use Derafu\Auth\Contract\KeycloakConfigurationInterface;
+use Derafu\Auth\Contract\KeycloakSessionManagerInterface;
+use Derafu\Auth\Contract\KeycloakUserRepositoryInterface;
 use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Contract\WebConfigurationInterface;
 use Derafu\Auth\Contract\WebFlowInterface;
 use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\ProviderUnavailableException;
-use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
-use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
 use Derafu\Value\ValueType;
 use Exception;
 use Laminas\Diactoros\Response\RedirectResponse;
@@ -42,17 +43,17 @@ class KeycloakWebFlow implements WebFlowInterface
     /**
      * Creates the web flow of Keycloak.
      *
-     * @param KeycloakUserRepository $userRepository The user repository.
-     * @param KeycloakConfiguration $config The configuration of Keycloak.
+     * @param KeycloakUserRepositoryInterface $userRepository The user repository.
+     * @param KeycloakConfigurationInterface $config The configuration of Keycloak.
      * @param WebConfigurationInterface $web The configuration of the web channel.
-     * @param KeycloakSessionManager $sessionManager The session manager.
+     * @param KeycloakSessionManagerInterface $sessionManager The session manager.
      * @param UserInterface $anonymousUser The anonymous user.
      */
     public function __construct(
-        private readonly KeycloakUserRepository $userRepository,
-        private readonly KeycloakConfiguration $config,
+        private readonly KeycloakUserRepositoryInterface $userRepository,
+        private readonly KeycloakConfigurationInterface $config,
         private readonly WebConfigurationInterface $web,
-        private readonly KeycloakSessionManager $sessionManager,
+        private readonly KeycloakSessionManagerInterface $sessionManager,
         private readonly UserInterface $anonymousUser = new AnonymousUser()
     ) {
     }

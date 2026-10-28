@@ -18,14 +18,15 @@ use Derafu\Auth\Authentication\Channel\Web\Flash;
 use Derafu\Auth\Authentication\Channel\Web\WebConfiguration;
 use Derafu\Auth\Authentication\LoginThrottle;
 use Derafu\Auth\Contract\FormManagerInterface;
+use Derafu\Auth\Contract\HtpasswdConfigurationInterface;
+use Derafu\Auth\Contract\LoginThrottleInterface;
+use Derafu\Auth\Contract\PasswordUserRepositoryInterface;
 use Derafu\Auth\Contract\SessionManagerInterface;
 use Derafu\Auth\Contract\UserFactoryInterface;
 use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Contract\WebConfigurationInterface;
 use Derafu\Auth\Contract\WebFlowInterface;
 use Derafu\Auth\Exception\FormException;
-use Derafu\Auth\Provider\Htpasswd\HtpasswdConfiguration;
-use Derafu\Auth\Provider\Htpasswd\HtpasswdUserRepository;
 use Derafu\Auth\Provider\Htpasswd\Web\Form\LoginForm;
 use Derafu\Auth\UserFactory;
 use Mezzio\Session\SessionInterface;
@@ -46,26 +47,26 @@ class HtpasswdWebFlow implements WebFlowInterface
     /**
      * Creates the web flow.
      *
-     * @param HtpasswdUserRepository $userRepository The user repository.
-     * @param HtpasswdConfiguration $config The configuration of the provider.
+     * @param PasswordUserRepositoryInterface $userRepository The user repository.
+     * @param HtpasswdConfigurationInterface $config The configuration of the provider.
      * @param WebConfigurationInterface $web The configuration of the web channel.
      * @param SessionManagerInterface $sessionManager The session manager.
      * @param FormManagerInterface $formManager Makes and processes the login form.
      * @param UserInterface $anonymousUser The anonymous user.
-     * @param LoginThrottle|null $throttle Limits the failed attempts to log in.
+     * @param LoginThrottleInterface|null $throttle Limits the failed attempts to log in.
      * Without it the attempts are not limited.
      * @param UserFactoryInterface|null $userFactory Makes the users (the one of
      * the login, the one of the session, the one of the check). The default one
      * makes a `User`.
      */
     public function __construct(
-        private readonly HtpasswdUserRepository $userRepository,
-        private readonly HtpasswdConfiguration $config,
+        private readonly PasswordUserRepositoryInterface $userRepository,
+        private readonly HtpasswdConfigurationInterface $config,
         private readonly WebConfigurationInterface $web,
         private readonly SessionManagerInterface $sessionManager,
         private readonly FormManagerInterface $formManager,
         private readonly UserInterface $anonymousUser = new AnonymousUser(),
-        private readonly ?LoginThrottle $throttle = null,
+        private readonly ?LoginThrottleInterface $throttle = null,
         ?UserFactoryInterface $userFactory = null
     ) {
         $this->userFactory = $userFactory ?? new UserFactory();

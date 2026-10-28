@@ -18,11 +18,11 @@ use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 
 /**
- * The configuration of the web channel: the session of a user, and where it is
- * sent in and out.
+ * Resolves web authentication settings from application and provider defaults.
  *
- * Nothing here is about a provider: the paths, and every how many seconds the
- * user of a session is asked to its provider again.
+ * Application path values take precedence over provider defaults and built-in
+ * paths. Null path values use the next available default. Refresh intervals
+ * must be non-negative integers; zero and null delegate to the provider.
  */
 class WebConfiguration implements WebConfigurationInterface
 {
@@ -100,34 +100,48 @@ class WebConfiguration implements WebConfigurationInterface
         $this->refreshInterval = $refreshInterval === 0 ? null : $refreshInterval;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getLoginPath(): string
     {
         return $this->loginPath;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getLogoutPath(): string
     {
         return $this->logoutPath;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getLoginRedirectPath(): string
     {
         return $this->loginRedirectPath;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getLogoutRedirectPath(): string
     {
         return $this->logoutRedirectPath;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getUnauthorizedRedirectPath(): string
     {
         return $this->unauthorizedRedirectPath;
     }
 
     /**
-     * The seconds between two times that the session asks the provider again, or
-     * null if the configuration does not say (the provider decides).
+     * {@inheritDoc}
      */
     public function getRefreshInterval(): ?int
     {

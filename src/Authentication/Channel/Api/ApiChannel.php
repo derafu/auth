@@ -14,6 +14,7 @@ namespace Derafu\Auth\Authentication\Channel\Api;
 
 use Derafu\Auth\AnonymousUser;
 use Derafu\Auth\Authentication\Identification;
+use Derafu\Auth\Contract\ApiConfigurationInterface;
 use Derafu\Auth\Contract\ApiSchemeInterface;
 use Derafu\Auth\Contract\ChannelInterface;
 use Derafu\Auth\Contract\UserInterface;
@@ -58,12 +59,12 @@ final class ApiChannel implements ChannelInterface
     /**
      * Creates the API channel.
      *
-     * @param ApiConfiguration $config The paths and the realm of the API.
+     * @param ApiConfigurationInterface $config The paths and the realm of the API.
      * @param ApiSchemeInterface $scheme The scheme that the provider reads.
      * @param UserInterface $anonymousUser The anonymous user.
      */
     public function __construct(
-        private readonly ApiConfiguration $config,
+        private readonly ApiConfigurationInterface $config,
         private readonly ApiSchemeInterface $scheme,
         private readonly UserInterface $anonymousUser = new AnonymousUser()
     ) {

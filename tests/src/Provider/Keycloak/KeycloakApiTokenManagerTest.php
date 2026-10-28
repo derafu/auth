@@ -31,6 +31,7 @@ use Derafu\Form\Type\TypeProvider;
 use Derafu\Form\Type\TypeRegistry;
 use Derafu\Form\Type\TypeResolver;
 use Derafu\TestsAuth\Fixture\SessionApp;
+use Derafu\TestsAuth\Fixture\Stack;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 use GuzzleHttp\Client;
 use GuzzleHttp\Handler\MockHandler;
@@ -104,7 +105,7 @@ final class KeycloakApiTokenManagerTest extends TestCase
             new FormManager(
                 new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
                 $app->processor(),
-                $config
+                Stack::formDefinitions()
             )
         );
         $request = $app->request('/auth/profile/tokens', body: [], csrf: false, captcha: false)
@@ -308,7 +309,7 @@ final class KeycloakApiTokenManagerTest extends TestCase
             new KeycloakUserRepository($config, httpClient: $http),
             new KeycloakAccountClient($config, $http),
             new KeycloakSessionManager(),
-            new FormManager(new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))), $app->processor(), $config)
+            new FormManager(new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))), $app->processor(), Stack::formDefinitions())
         );
 
         // The access token of the session: the account API asks for these roles.

@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Authentication\Channel\Api;
 
+use Derafu\Auth\Contract\ApiConfigurationInterface;
 use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Support\Url;
 
@@ -19,7 +20,7 @@ use Derafu\Support\Url;
  * The configuration of the API channel: which paths are the API, and the label of
  * its protection space.
  */
-class ApiConfiguration
+class ApiConfiguration implements ApiConfigurationInterface
 {
     /**
      * The paths of the API, in their canonical form.
@@ -65,9 +66,7 @@ class ApiConfiguration
     }
 
     /**
-     * The paths of the API, in their canonical form.
-     *
-     * @return list<string>
+     * {@inheritDoc}
      */
     public function getPaths(): array
     {
@@ -75,7 +74,7 @@ class ApiConfiguration
     }
 
     /**
-     * Whether a path is one of the API or is below one of them.
+     * {@inheritDoc}
      */
     public function isApiPath(string $path): bool
     {
@@ -88,6 +87,9 @@ class ApiConfiguration
         return false;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getRealm(): string
     {
         return $this->realm;

@@ -110,7 +110,7 @@ final class HtpasswdAuthenticationTest extends TestCase
             new FormManager(
                 new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
                 $this->app->processor(),
-                $config
+                Stack::formDefinitions()
             ),
             throttle: $throttle,
             userFactory: $factory
@@ -474,7 +474,7 @@ final class HtpasswdAuthenticationTest extends TestCase
             new FormManager(
                 new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
                 $this->app->processor(),
-                $config
+                Stack::formDefinitions()
             )
         );
     }

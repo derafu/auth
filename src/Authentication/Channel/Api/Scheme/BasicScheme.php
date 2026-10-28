@@ -14,6 +14,7 @@ namespace Derafu\Auth\Authentication\Channel\Api\Scheme;
 
 use Derafu\Auth\Authentication\LoginThrottle;
 use Derafu\Auth\Contract\ApiSchemeInterface;
+use Derafu\Auth\Contract\LoginThrottleInterface;
 use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Contract\UserRepositoryInterface;
 use Derafu\Auth\Exception\TooManyAttemptsException;
@@ -43,12 +44,12 @@ abstract class BasicScheme implements ApiSchemeInterface
      * Creates the scheme.
      *
      * @param UserRepositoryInterface $repository Where the users are.
-     * @param LoginThrottle|null $throttle Limits the failed attempts. Without it
+     * @param LoginThrottleInterface|null $throttle Limits the failed attempts. Without it
      * they are not limited.
      */
     public function __construct(
         private readonly UserRepositoryInterface $repository,
-        private readonly ?LoginThrottle $throttle = null
+        private readonly ?LoginThrottleInterface $throttle = null
     ) {
     }
 

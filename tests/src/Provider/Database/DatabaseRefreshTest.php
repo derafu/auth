@@ -108,7 +108,7 @@ final class DatabaseRefreshTest extends TestCase
             new FormManager(
                 new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
                 $this->app->processor(),
-                $config
+                Stack::formDefinitions($config)
             ),
             userFactory: $userFactory
         );
@@ -340,7 +340,7 @@ final class DatabaseRefreshTest extends TestCase
             new FormManager(
                 new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
                 $this->app->processor(),
-                $config
+                Stack::formDefinitions($config)
             )
         );
     }

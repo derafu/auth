@@ -17,10 +17,14 @@ use Derafu\Auth\AuthProviderRegistry;
 use Derafu\Auth\Contract\AccountInterface;
 use Derafu\Auth\Contract\ApiSchemeInterface;
 use Derafu\Auth\Contract\AuthProviderInterface;
-use Derafu\Auth\Contract\FormManagerInterface;
 use Derafu\Auth\Contract\SessionManagerInterface;
 use Derafu\Auth\Contract\WebFlowInterface;
 use Derafu\Auth\Exception\ConfigurationException;
+use Derafu\Auth\Provider\AuthProvider;
+use Derafu\Auth\Translation\AuthTranslationResourceProvider;
+use Derafu\TestsAuth\Fixture\CustomAuthProvider;
+use Derafu\TestsAuth\Fixture\InvalidAuthProvider;
+use Derafu\Translation\TranslatorFactory;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
@@ -34,6 +38,8 @@ use Symfony\Component\DependencyInjection\ServiceLocator;
 #[CoversClass(AuthProviderRegistry::class)]
 #[UsesClass(WebConfiguration::class)]
 #[UsesClass(ConfigurationException::class)]
+#[UsesClass(AuthProvider::class)]
+#[UsesClass(AuthTranslationResourceProvider::class)]
 final class AuthProviderRegistryTest extends TestCase
 {
     private AuthProviderInterface $database;
@@ -55,7 +61,6 @@ final class AuthProviderRegistryTest extends TestCase
         $provider->method('webDefaults')->willReturn($defaults);
         $provider->method('webFlow')->willReturn($this->createStub(WebFlowInterface::class));
         $provider->method('sessionManager')->willReturn($this->createStub(SessionManagerInterface::class));
-        $provider->method('forms')->willReturn($this->createStub(FormManagerInterface::class));
         $provider->method('apiScheme')->willReturn($this->createStub(ApiSchemeInterface::class));
         $provider->method('account')->willReturn($this->createStub(AccountInterface::class));
 
@@ -84,7 +89,6 @@ final class AuthProviderRegistryTest extends TestCase
 
         $this->assertSame($this->database->webFlow(), $registry->webFlow());
         $this->assertSame($this->database->sessionManager(), $registry->sessionManager());
-        $this->assertSame($this->database->forms(), $registry->forms());
         $this->assertSame($this->database->apiScheme(), $registry->apiScheme());
         $this->assertSame($this->database->account(), $registry->account());
         // And not what the other gives.
@@ -170,5 +174,53 @@ final class AuthProviderRegistryTest extends TestCase
 
         $this->assertSame('/bye', $config->getLogoutRedirectPath());
         $this->assertSame('/', $config->getLoginRedirectPath());
+    }
+
+    #[Test]
+    public function anInvalidProviderServiceProducesATranslatableConfigurationError(): void
+    {
+        $registry = new AuthProviderRegistry(new ServiceLocator([
+            'broken' => static fn (): InvalidAuthProvider => new InvalidAuthProvider(),
+        ]), 'broken');
+
+        try {
+            $registry->provider();
+            self::fail('A service without the authentication provider contract was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                'The authentication provider "broken" must implement ' . AuthProviderInterface::class
+                    . '; received ' . InvalidAuthProvider::class . '.',
+                $exception->getMessage(),
+            );
+            $translator = TranslatorFactory::create('es', ['en'], [new AuthTranslationResourceProvider()]);
+            self::assertSame(
+                'El proveedor de autenticación "broken" debe implementar ' . AuthProviderInterface::class
+                    . '; se recibió ' . InvalidAuthProvider::class . '.',
+                $exception->trans($translator),
+            );
+        }
+    }
+
+    #[Test]
+    public function onlyTheSelectedProviderIsResolved(): void
+    {
+        $resolved = [];
+        $locator = new ServiceLocator([
+            'custom' => static function () use (&$resolved): CustomAuthProvider {
+                $resolved[] = 'custom';
+
+                return new CustomAuthProvider();
+            },
+            'broken' => static function () use (&$resolved): InvalidAuthProvider {
+                $resolved[] = 'broken';
+
+                return new InvalidAuthProvider();
+            },
+        ]);
+        $registry = new AuthProviderRegistry($locator, 'custom');
+        self::assertSame([], $resolved);
+
+        self::assertInstanceOf(CustomAuthProvider::class, $registry->provider());
+        self::assertSame(['custom'], $resolved);
     }
 }

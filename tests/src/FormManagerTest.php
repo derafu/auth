@@ -18,6 +18,7 @@ use AltchaOrg\Altcha\Challenge;
 use AltchaOrg\Altcha\Payload;
 use AltchaOrg\Altcha\SolveChallengeOptions;
 use Derafu\Auth\Authentication\Channel\Web\FormManager;
+use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Auth\Exception\FormException;
 use Derafu\Auth\Provider\Database\DatabaseConfiguration;
 use Derafu\Auth\Provider\Database\Web\Form\LoginForm;
@@ -39,6 +40,9 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\Attributes\UsesNamespace;
 use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerInterface;
+use stdClass;
+use Symfony\Component\DependencyInjection\ServiceLocator;
 
 /**
  * The forms of the authentication are created and processed with the real form
@@ -104,12 +108,12 @@ final class FormManagerTest extends TestCase
     /**
      * @param array<string, mixed> $config
      */
-    private function manager(array $config = []): FormManager
+    private function manager(array $config = [], ?ContainerInterface $definitions = null): FormManager
     {
         return new FormManager(
             new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
             new FormDataProcessor(new FormRulesResolver(), AuthApplication::service(ProcessorInterface::class), csrfTokenManager: $this->csrf, captchaProvider: $this->captcha),
-            Stack::databaseConfiguration($config + ['database_url' => 'sqlite::memory:'])
+            $definitions ?? Stack::formDefinitions(Stack::databaseConfiguration($config + ['database_url' => 'sqlite::memory:']))
         );
     }
 
@@ -249,5 +253,61 @@ final class FormManagerTest extends TestCase
 
         $this->assertSame(['email', 'password'], array_keys($form->getFields()));
         $this->assertSame(['email' => 'ana@example.com'], $form->getData()?->toArray());
+    }
+
+    #[Test]
+    public function anUnregisteredFormReportsHowToRegisterIt(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('The authentication form "' . LoginForm::class . '" is not registered. Register its service with the derafu_auth.form tag.');
+
+        $this->manager(definitions: new ServiceLocator([]))->createForm(LoginForm::class);
+    }
+
+    #[Test]
+    public function aRegisteredServiceMustImplementTheFormContract(): void
+    {
+        $locator = new ServiceLocator([LoginForm::class => static fn (): stdClass => new stdClass()]);
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('received stdClass.');
+
+        $this->manager(definitions: $locator)->createForm(LoginForm::class);
+    }
+
+    #[Test]
+    public function definitionsAreLazyAndReusedWithoutSharingPerCallData(): void
+    {
+        $constructions = 0;
+        $locator = new ServiceLocator([
+            LoginForm::class => static function () use (&$constructions): LoginForm {
+                ++$constructions;
+
+                return new LoginForm(Stack::databaseConfiguration(['database_url' => 'sqlite::memory:']));
+            },
+        ]);
+        $manager = $this->manager(definitions: $locator);
+        self::assertSame(0, $constructions);
+        $first = $manager->createForm(LoginForm::class, ['email' => 'ana@example.com']);
+        $second = $manager->createForm(LoginForm::class, ['email' => 'bob@example.com']);
+        $empty = $manager->createForm(LoginForm::class);
+
+        self::assertSame(1, $constructions);
+        self::assertNotSame($first, $second);
+        self::assertSame(['email' => 'ana@example.com'], $first->getData()?->toArray());
+        self::assertSame(['email' => 'bob@example.com'], $second->getData()?->toArray());
+        self::assertNull($empty->getData());
+    }
+
+    #[Test]
+    public function aSuppliedDefinitionDoesNotRequireRegistration(): void
+    {
+        $definition = new LoginForm(Stack::databaseConfiguration([
+            'database_url' => 'sqlite::memory:',
+            'user_repository' => ['field' => ['identity' => 'rut', 'password' => 'clave']],
+        ]));
+        $form = $this->manager(definitions: new ServiceLocator([]))->createForm($definition, ['rut' => '123']);
+
+        self::assertSame(['rut', 'clave'], array_keys($form->getFields()));
+        self::assertSame(['rut' => '123'], $form->getData()?->toArray());
     }
 }

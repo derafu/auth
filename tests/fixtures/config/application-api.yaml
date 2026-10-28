@@ -1,0 +1,3 @@
+services:
+    Derafu\Auth\Contract\ApiConfigurationInterface:
+        class: Derafu\TestsAuth\Fixture\ApplicationApiConfiguration

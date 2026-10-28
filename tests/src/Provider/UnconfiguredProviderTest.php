@@ -140,7 +140,7 @@ final class UnconfiguredProviderTest extends TestCase
                         new DatabaseUserRepository($config),
                         $config,
                         new SessionManager(),
-                        new FormManager(new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))), (new SessionApp())->processor(), $config)
+                        new FormManager(new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))), (new SessionApp())->processor(), Stack::formDefinitions($config))
                     );
                 },
                 '/auth/login',
@@ -156,7 +156,7 @@ final class UnconfiguredProviderTest extends TestCase
                         new HtpasswdUserRepository($config),
                         $config,
                         new SessionManager(),
-                        new FormManager(new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))), (new SessionApp())->processor(), $config)
+                        new FormManager(new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))), (new SessionApp())->processor(), Stack::formDefinitions())
                     );
                 },
                 '/auth/login',

@@ -14,6 +14,8 @@ namespace Derafu\Auth\Provider\Keycloak;
 
 use ArrayAccess;
 use Derafu\Array\ArrayReader;
+use Derafu\Auth\Contract\KeycloakConfigurationInterface;
+use Derafu\Auth\Contract\KeycloakTokenVerifierInterface;
 use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Value\ValueType;
@@ -40,7 +42,7 @@ use UnexpectedValueException;
  * Without a pool they are read once per verifier, and again if a token is signed
  * with a key that is not known.
  */
-class KeycloakTokenVerifier
+class KeycloakTokenVerifier implements KeycloakTokenVerifierInterface
 {
     /**
      * The seconds that the clocks of Keycloak and of the application can differ.
@@ -66,7 +68,7 @@ class KeycloakTokenVerifier
     /**
      * Constructor.
      *
-     * @param KeycloakConfiguration $config The configuration.
+     * @param KeycloakConfigurationInterface $config The configuration.
      * @param CacheItemPoolInterface|null $cache Where the keys of the realm are
      * cached.
      * @param ClientInterface|null $http The client that reads the keys of the
@@ -78,7 +80,7 @@ class KeycloakTokenVerifier
      * `league/oauth2-client`) is not installed.
      */
     public function __construct(
-        private readonly KeycloakConfiguration $config,
+        private readonly KeycloakConfigurationInterface $config,
         private readonly ?CacheItemPoolInterface $cache = null,
         ?ClientInterface $http = null,
         ?RequestFactoryInterface $requestFactory = null
@@ -100,12 +102,7 @@ class KeycloakTokenVerifier
     }
 
     /**
-     * Verifies an ID token.
-     *
-     * @param string $idToken The ID token.
-     * @param string $nonce The nonce that was sent in the authorization request.
-     * @return array<string, mixed> The claims of the token.
-     * @throws AuthenticationException If the token is not valid.
+     * {@inheritDoc}
      */
     public function verifyIdToken(string $idToken, string $nonce): array
     {
@@ -124,11 +121,7 @@ class KeycloakTokenVerifier
     }
 
     /**
-     * Verifies an access token.
-     *
-     * @param string $accessToken The access token.
-     * @return array<string, mixed> The claims of the token.
-     * @throws AuthenticationException If the token is not valid.
+     * {@inheritDoc}
      */
     public function verifyAccessToken(string $accessToken): array
     {
@@ -143,24 +136,7 @@ class KeycloakTokenVerifier
     }
 
     /**
-     * Verifies the access token that a client of the API sends.
-     *
-     * The token is the one of a service (`client_credentials`) or of a person,
-     * that was given to any client of the realm: what makes it valid for this API
-     * is its audience, so it must have the configured one (see
-     * `KeycloakConfiguration::getApiAudience()`). Apart from the signature, the
-     * issuer and the expiration, it must be an access token (an ID token, a
-     * refresh token or an offline token are not one, they must not open the API by
-     * themselves: an offline token is exchanged for an access token first, see
-     * `KeycloakBearerScheme`).
-     *
-     * It is verified only by what it says: a token that was not revoked, of a
-     * user that was disabled after it was given, is valid until it expires.
-     *
-     * @param string $accessToken The access token.
-     * @param string $audience The audience that it must have.
-     * @return array<string, mixed> The claims of the token.
-     * @throws AuthenticationException If the token is not valid.
+     * {@inheritDoc}
      */
     public function verifyBearerToken(string $accessToken, string $audience): array
     {

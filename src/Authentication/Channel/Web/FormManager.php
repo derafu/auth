@@ -14,14 +14,20 @@ namespace Derafu\Auth\Authentication\Channel\Web;
 
 use Derafu\Auth\Contract\FormInterface as AuthFormInterface;
 use Derafu\Auth\Contract\FormManagerInterface;
+use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Auth\Exception\FormException;
 use Derafu\Form\Contract\Factory\FormFactoryInterface;
 use Derafu\Form\Contract\FormInterface;
 use Derafu\Form\Contract\Processor\FormDataProcessorInterface;
 use Derafu\Form\Contract\Processor\ProcessResultInterface;
+use Psr\Container\ContainerInterface;
 
 /**
- * Form manager implementation.
+ * Creates and processes forms from registered authentication definitions.
+ *
+ * Class names are resolved through a locator restricted to form definitions.
+ * Definitions supplied as objects are used directly, including runtime context
+ * added by the caller. Resolved definitions are cached by class name.
  */
 class FormManager implements FormManagerInterface
 {
@@ -37,14 +43,14 @@ class FormManager implements FormManagerInterface
      *
      * @param FormFactoryInterface $formFactory The form factory.
      * @param FormDataProcessorInterface $formDataProcessor The form data processor.
-     * @param object $configuration The configuration of the provider, that the
-     * forms are made with (the columns of the login form of a database, for
-     * example).
+     * @param ContainerInterface $formDefinitions The lazy form definition locator,
+     * indexed by form class name. Services must implement AuthFormInterface;
+     * their actual types are validated when requested.
      */
     public function __construct(
         private readonly FormFactoryInterface $formFactory,
         private readonly FormDataProcessorInterface $formDataProcessor,
-        private readonly object $configuration,
+        private readonly ContainerInterface $formDefinitions,
     ) {
     }
 
@@ -95,11 +101,30 @@ class FormManager implements FormManagerInterface
      *
      * @param class-string<AuthFormInterface> $formType The form type.
      * @return array<string, mixed> The form definition.
+     * @throws ConfigurationException If the form is not registered or its service
+     * does not implement the authentication form contract.
      */
     private function getFormDefinition(string $formType): array
     {
         if (!isset($this->forms[$formType])) {
-            $this->forms[$formType] = new $formType($this->configuration);
+            if (!$this->formDefinitions->has($formType)) {
+                throw new ConfigurationException([
+                    'The authentication form "{form}" is not registered. Register its service with the derafu_auth.form tag.',
+                    'form' => $formType,
+                ]);
+            }
+
+            $definition = $this->formDefinitions->get($formType);
+            if (!$definition instanceof AuthFormInterface) {
+                throw new ConfigurationException([
+                    'The authentication form "{form}" must implement {interface}; received {type}.',
+                    'form' => $formType,
+                    'interface' => AuthFormInterface::class,
+                    'type' => get_debug_type($definition),
+                ]);
+            }
+
+            $this->forms[$formType] = $definition;
         }
 
         return $this->forms[$formType]->getDefinition();

@@ -12,9 +12,10 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Provider\Htpasswd;
 
+use Derafu\Auth\Contract\HtpasswdConfigurationInterface;
+use Derafu\Auth\Contract\PasswordUserRepositoryInterface;
 use Derafu\Auth\Contract\UserFactoryInterface;
 use Derafu\Auth\Contract\UserInterface;
-use Derafu\Auth\Contract\UserRepositoryInterface;
 use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Auth\UserFactory;
 
@@ -38,7 +39,7 @@ use Derafu\Auth\UserFactory;
  * password is verified against a hash anyway), so the time it takes does not say
  * which identities exist.
  */
-class HtpasswdUserRepository implements UserRepositoryInterface
+class HtpasswdUserRepository implements PasswordUserRepositoryInterface
 {
     /**
      * The hash that is verified when the user does not exist.
@@ -50,12 +51,12 @@ class HtpasswdUserRepository implements UserRepositoryInterface
     /**
      * Creates a new htpasswd user repository.
      *
-     * @param HtpasswdConfiguration $config The htpasswd configuration.
+     * @param HtpasswdConfigurationInterface $config The htpasswd configuration.
      * @param UserFactoryInterface|null $userFactory Makes the users. The default
      * one makes a `User`.
      */
     public function __construct(
-        private readonly HtpasswdConfiguration $config,
+        private readonly HtpasswdConfigurationInterface $config,
         ?UserFactoryInterface $userFactory = null
     ) {
         $this->userFactory = $userFactory ?? new UserFactory();
@@ -85,13 +86,7 @@ class HtpasswdUserRepository implements UserRepositoryInterface
     }
 
     /**
-     * Finds a user by its identity: it is what a session does to know whether
-     * its user is still in the file. The password is not asked (the user already
-     * logged in).
-     *
-     * @param string $identity The identity of the user.
-     * @return UserInterface|null The user, or null if it is not in the file.
-     * @throws ConfigurationException If the file can not be read.
+     * {@inheritDoc}
      */
     public function find(string $identity): ?UserInterface
     {

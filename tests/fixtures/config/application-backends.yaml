@@ -1,0 +1,71 @@
+services:
+    Derafu\Auth\Contract\DatabaseConfigurationInterface $application:
+        class: Derafu\TestsAuth\Fixture\ApplicationDatabaseConfiguration
+        decorates: Derafu\Auth\Contract\DatabaseConfigurationInterface
+        public: true
+        arguments:
+            $inner: '@.inner'
+
+    Derafu\Auth\Contract\HtpasswdConfigurationInterface $application:
+        class: Derafu\TestsAuth\Fixture\ApplicationHtpasswdConfiguration
+        decorates: Derafu\Auth\Contract\HtpasswdConfigurationInterface
+        public: true
+        arguments:
+            $inner: '@.inner'
+
+    Derafu\Auth\Contract\KeycloakConfigurationInterface $application:
+        class: Derafu\TestsAuth\Fixture\ApplicationKeycloakConfiguration
+        decorates: Derafu\Auth\Contract\KeycloakConfigurationInterface
+        public: true
+        arguments:
+            $inner: '@.inner'
+
+    Derafu\Auth\Contract\PasswordUserRepositoryInterface $applicationDatabase:
+        class: Derafu\TestsAuth\Fixture\ApplicationPasswordUserRepository
+        decorates: Derafu\Auth\Contract\PasswordUserRepositoryInterface $database
+        public: true
+        arguments:
+            $inner: '@.inner'
+
+    Derafu\Auth\Contract\PasswordUserRepositoryInterface $applicationHtpasswd:
+        class: Derafu\TestsAuth\Fixture\ApplicationPasswordUserRepository
+        decorates: Derafu\Auth\Contract\PasswordUserRepositoryInterface $htpasswd
+        public: true
+        arguments:
+            $inner: '@.inner'
+
+    Derafu\Auth\Contract\KeycloakUserRepositoryInterface $application:
+        class: Derafu\TestsAuth\Fixture\ApplicationKeycloakUserRepository
+        decorates: Derafu\Auth\Contract\KeycloakUserRepositoryInterface
+        public: true
+        arguments:
+            $inner: '@.inner'
+
+    Derafu\Auth\Contract\KeycloakTokenVerifierInterface $application:
+        class: Derafu\TestsAuth\Fixture\ApplicationKeycloakTokenVerifier
+        decorates: Derafu\Auth\Contract\KeycloakTokenVerifierInterface
+        public: true
+        arguments:
+            $inner: '@.inner'
+
+    Derafu\Auth\Contract\KeycloakAccountClientInterface $application:
+        class: Derafu\TestsAuth\Fixture\ApplicationKeycloakAccountClient
+        decorates: Derafu\Auth\Contract\KeycloakAccountClientInterface
+        public: true
+        arguments:
+            $inner: '@.inner'
+
+    Derafu\Auth\Contract\KeycloakSessionManagerInterface $application:
+        class: Derafu\TestsAuth\Fixture\ApplicationKeycloakSessionManager
+        decorates: Derafu\Auth\Contract\KeycloakSessionManagerInterface
+        public: true
+        arguments:
+            $inner: '@.inner'
+
+    Derafu\Auth\Contract\ApiTokenManagerInterface $application:
+        class: Derafu\TestsAuth\Fixture\ApplicationApiTokenManager
+        decorates: Derafu\Auth\Contract\ApiTokenManagerInterface
+        public: true
+        arguments:
+            $inner: '@.inner'
+

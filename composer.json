@@ -52,7 +52,6 @@
         "phpstan/phpstan": "^2.3",
         "phpunit/phpunit": "^13.4",
         "nikic/php-parser": "^5.9",
-        "derafu/data-processor": "dev-main",
         "derafu/csrf": "dev-main",
         "derafu/captcha": "dev-main",
         "firebase/php-jwt": "^7.2",

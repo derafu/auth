@@ -114,7 +114,7 @@ final class DatabaseLoginPageTest extends TestCase
                 $translator
             ),
             $this->app->processor(),
-            $config
+            Stack::formDefinitions($config)
         );
 
         $this->authentication = Stack::database(

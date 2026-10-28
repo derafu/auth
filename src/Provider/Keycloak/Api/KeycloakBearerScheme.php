@@ -15,10 +15,10 @@ namespace Derafu\Auth\Provider\Keycloak\Api;
 use DateTimeImmutable;
 use Derafu\Array\ArrayReader;
 use Derafu\Auth\Authentication\Channel\Api\Scheme\BearerScheme;
+use Derafu\Auth\Contract\KeycloakConfigurationInterface;
+use Derafu\Auth\Contract\KeycloakUserRepositoryInterface;
 use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Exception\AuthenticationException;
-use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
-use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
 use Derafu\Auth\Provider\Keycloak\TokenClaims;
 use Derafu\Value\ValueType;
 use Firebase\JWT\BeforeValidException;
@@ -54,8 +54,8 @@ class KeycloakBearerScheme extends BearerScheme
     /**
      * Creates the scheme.
      *
-     * @param KeycloakUserRepository $userRepository The user repository.
-     * @param KeycloakConfiguration $config The configuration of Keycloak.
+     * @param KeycloakUserRepositoryInterface $userRepository The user repository.
+     * @param KeycloakConfigurationInterface $config The configuration of Keycloak.
      */
     /**
      * The seconds before its expiry that an exchanged access token stops being
@@ -80,8 +80,8 @@ class KeycloakBearerScheme extends BearerScheme
      * exchanged for an offline token are kept until they expire.
      */
     public function __construct(
-        private readonly KeycloakUserRepository $userRepository,
-        private readonly KeycloakConfiguration $config,
+        private readonly KeycloakUserRepositoryInterface $userRepository,
+        private readonly KeycloakConfigurationInterface $config,
         private readonly ?CacheItemPoolInterface $cache = null
     ) {
     }

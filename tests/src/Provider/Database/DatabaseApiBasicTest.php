@@ -108,7 +108,7 @@ final class DatabaseApiBasicTest extends TestCase
             new FormManager(
                 new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
                 $this->app->processor(),
-                $config
+                Stack::formDefinitions($config)
             ),
             throttle: $throttle
         );

@@ -105,7 +105,7 @@ final class DatabaseAuthenticationTest extends TestCase
             new FormManager(
                 new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
                 $this->app->processor(),
-                $config
+                Stack::formDefinitions($config)
             )
         );
     }
@@ -506,7 +506,7 @@ final class DatabaseAuthenticationTest extends TestCase
             new FormManager(
                 new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
                 $this->app->processor(),
-                $config
+                Stack::formDefinitions($config)
             )
         );
         $users = [];
@@ -631,7 +631,7 @@ final class DatabaseAuthenticationTest extends TestCase
                 new FormManager(
                     new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
                     $this->app->processor(),
-                    $config
+                    Stack::formDefinitions($config)
                 ),
                 throttle: new LoginThrottle($cache, maxAttempts: 3, lockSeconds: 600)
             ),
@@ -903,7 +903,7 @@ final class DatabaseAuthenticationTest extends TestCase
             new FormManager(
                 new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
                 $this->app->processor(),
-                $config
+                Stack::formDefinitions($config)
             )
         );
     }
@@ -920,7 +920,7 @@ final class DatabaseAuthenticationTest extends TestCase
             new FormManager(
                 new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
                 $this->app->processor(),
-                $config
+                Stack::formDefinitions($config)
             )
         );
         $result = $this->authenticate($this->app->request('/auth/login', body: ['email' => '0', 'password' => '0']));

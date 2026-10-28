@@ -17,13 +17,14 @@ use Derafu\Auth\Account\ApiToken;
 use Derafu\Auth\Account\NewApiToken;
 use Derafu\Auth\Contract\ApiTokenManagerInterface;
 use Derafu\Auth\Contract\FormManagerInterface;
+use Derafu\Auth\Contract\KeycloakAccountClientInterface;
+use Derafu\Auth\Contract\KeycloakSessionManagerInterface;
+use Derafu\Auth\Contract\KeycloakUserRepositoryInterface;
 use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\ProviderUnavailableException;
 use Derafu\Auth\Provider\Keycloak\Account\Form\ApiTokenForm;
-use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
 use Derafu\Auth\Provider\Keycloak\TokenClaims;
-use Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager;
 use Derafu\Form\Contract\FormInterface;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 use Derafu\Translation\TranslatableMessage;
@@ -39,9 +40,9 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 class KeycloakApiTokenManager implements ApiTokenManagerInterface
 {
     public function __construct(
-        private readonly KeycloakUserRepository $userRepository,
-        private readonly KeycloakAccountClient $account,
-        private readonly KeycloakSessionManager $sessionManager,
+        private readonly KeycloakUserRepositoryInterface $userRepository,
+        private readonly KeycloakAccountClientInterface $account,
+        private readonly KeycloakSessionManagerInterface $sessionManager,
         private readonly FormManagerInterface $formManager,
         private readonly ?TranslatorInterface $translator = null
     ) {

@@ -12,8 +12,8 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Provider\Database\Web\Form;
 
+use Derafu\Auth\Contract\DatabaseConfigurationInterface;
 use Derafu\Auth\Contract\FormInterface;
-use Derafu\Auth\Provider\Database\DatabaseConfiguration;
 
 /**
  * Login form.
@@ -37,10 +37,10 @@ class LoginForm implements FormInterface
     /**
      * Creates a new login form.
      *
-     * @param DatabaseConfiguration $config The database configuration.
+     * @param DatabaseConfigurationInterface $config The database configuration.
      */
     public function __construct(
-        private readonly DatabaseConfiguration $config
+        private readonly DatabaseConfigurationInterface $config
     ) {
     }
 

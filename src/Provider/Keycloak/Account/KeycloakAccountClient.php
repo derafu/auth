@@ -14,9 +14,10 @@ namespace Derafu\Auth\Provider\Keycloak\Account;
 
 use Derafu\Array\ArrayReader;
 use Derafu\Auth\Account\ApiToken;
+use Derafu\Auth\Contract\KeycloakAccountClientInterface;
+use Derafu\Auth\Contract\KeycloakConfigurationInterface;
 use Derafu\Auth\Exception\AuthenticationException;
 use Derafu\Auth\Exception\ProviderUnavailableException;
-use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\TokenClaims;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 use Derafu\Value\ValueType;
@@ -37,7 +38,7 @@ use GuzzleHttp\ClientInterface;
  * `manage-account` of the client `account`, which a realm gives to its users by
  * default.
  */
-class KeycloakAccountClient
+class KeycloakAccountClient implements KeycloakAccountClientInterface
 {
     /**
      * The client of the account API of every realm, and the roles that it asks.
@@ -57,18 +58,14 @@ class KeycloakAccountClient
     private readonly ClientInterface $http;
 
     public function __construct(
-        private readonly KeycloakConfiguration $config,
+        private readonly KeycloakConfigurationInterface $config,
         ?ClientInterface $http = null
     ) {
         $this->http = $http ?? new Client($config->getHttpClientOptions());
     }
 
     /**
-     * The tokens of the API of the user: its offline sessions of this client.
-     *
-     * @return list<ApiToken> The newest first.
-     * @throws AuthenticationException If Keycloak does not let the user see them.
-     * @throws ProviderUnavailableException If Keycloak does not answer.
+     * {@inheritDoc}
      */
     public function tokens(string $accessToken): array
     {
@@ -114,11 +111,7 @@ class KeycloakAccountClient
     }
 
     /**
-     * Whether the user has a second factor (a code of an app) set up: the account API
-     * lists the kinds of credentials of the user, with the ones that it has.
-     *
-     * @throws AuthenticationException If Keycloak does not let the user see them.
-     * @throws ProviderUnavailableException If Keycloak does not answer.
+     * {@inheritDoc}
      */
     public function hasSecondFactor(string $accessToken): bool
     {
@@ -132,11 +125,7 @@ class KeycloakAccountClient
     }
 
     /**
-     * What Keycloak says about a session of login of the user.
-     *
-     * @return array<string, mixed>|null The session, or null if it is not there.
-     * @throws AuthenticationException If Keycloak does not let the user see it.
-     * @throws ProviderUnavailableException If Keycloak does not answer.
+     * {@inheritDoc}
      */
     public function session(string $accessToken, string $id): ?array
     {
@@ -150,10 +139,7 @@ class KeycloakAccountClient
     }
 
     /**
-     * Revokes a session of the user: the token stops working at once.
-     *
-     * @throws AuthenticationException If Keycloak does not let the user do it.
-     * @throws ProviderUnavailableException If Keycloak does not answer.
+     * {@inheritDoc}
      */
     public function revoke(string $accessToken, string $id): void
     {

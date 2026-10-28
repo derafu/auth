@@ -14,17 +14,17 @@
 #       one authority on which path needs a user and which roles.
 #     - The web channel and the API channel, with their configuration:
 #       `AUTH_WEB_*` and `AUTH_API_*`.
-#   - The registry of the providers (`AuthProviderRegistry`), that gives the five
+#   - The registry of the providers (`AuthProviderRegistry`), that gives the four
 #     contracts that depend on the provider (`WebFlowInterface`,
-#     `SessionManagerInterface`, `FormManagerInterface`, `ApiSchemeInterface` and
+#     `SessionManagerInterface`, `ApiSchemeInterface` and
 #     `AccountInterface`) from the provider that `AUTH_PROVIDER` says. The
 #     providers are the services tagged `derafu_auth.provider`. To add one, define
 #     its services and tag its provider: nothing else changes.
 #   - The three providers of the package, each with its own services and its own
 #     variables (`AUTH_KEYCLOAK_*`, `AUTH_DATABASE_*`, `AUTH_HTPASSWD_*`). All of
-#     them are defined and none is made unless it is chosen. The pieces of a
-#     provider receive their own services (not the contracts), because the
-#     contracts are given by the provider.
+#     them are defined lazily. Backend-specific services use qualified interface
+#     IDs to avoid resolving themselves through the selected-provider contracts;
+#     shared services use their common interface IDs.
 #
 # Channels and backend services are lazy: provider configuration is validated
 # when it is used, allowing public pages to render without an auth provider.
@@ -44,11 +44,8 @@ parameters:
     # The database of the provider is the one of the application (DATABASE_URL)
     # unless AUTH_DATABASE_URL says another.
     derafu.auth.database.url.fallback: '%env(default::string:DATABASE_URL)%'
-    env(AUTH_DATABASE_LOGIN_MAX_ATTEMPTS): '5'
-    env(AUTH_DATABASE_LOGIN_LOCK_SECONDS): '900'
-
-    env(AUTH_HTPASSWD_LOGIN_MAX_ATTEMPTS): '5'
-    env(AUTH_HTPASSWD_LOGIN_LOCK_SECONDS): '900'
+    env(AUTH_LOGIN_MAX_ATTEMPTS): '5'
+    env(AUTH_LOGIN_LOCK_SECONDS): '900'
 
 services:
 
@@ -69,6 +66,16 @@ services:
     # that has its own class of user registers its factory in its place.
     Derafu\Auth\Contract\UserFactoryInterface:
         class: Derafu\Auth\UserFactory
+
+    # One policy and one shared instance for Database and Htpasswd, in both
+    # web login and HTTP Basic. A PSR-6 pool is required when limits are used.
+    Derafu\Auth\Contract\LoginThrottleInterface:
+        class: Derafu\Auth\Authentication\LoginThrottle
+        lazy: true
+        arguments:
+            $cache: '@?Psr\Cache\CacheItemPoolInterface'
+            $maxAttempts: '%env(int:AUTH_LOGIN_MAX_ATTEMPTS)%'
+            $lockSeconds: '%env(int:AUTH_LOGIN_LOCK_SECONDS)%'
 
     # Who may enter which path: the protected paths with their roles
     # (AUTH_PROTECTED_PATHS) and whether they are enforced (AUTH_ENABLED).
@@ -113,7 +120,7 @@ services:
     # there).
     Derafu\Auth\Contract\WebConfigurationInterface:
         class: Derafu\Auth\Authentication\Channel\Web\WebConfiguration
-        factory: ['@Derafu\Auth\AuthProviderRegistry', webConfiguration]
+        factory: ['@Derafu\Auth\Contract\AuthProviderRegistryInterface', webConfiguration]
         lazy: true
         arguments:
             $config:
@@ -129,7 +136,8 @@ services:
 
     # The API channel: credentials in the header of each request, no session. It
     # is asked before the web one.
-    Derafu\Auth\Authentication\Channel\Api\ApiConfiguration:
+    Derafu\Auth\Contract\ApiConfigurationInterface:
+        class: Derafu\Auth\Authentication\Channel\Api\ApiConfiguration
         lazy: true
         arguments:
             $config:
@@ -153,32 +161,49 @@ services:
     Derafu\Auth\Provider\AuthExtensionProvider:
         tags: [derafu_twig.extension_provider]
 
+    # Definition services are indexed by their FQCN. Additional authentication
+    # forms join this lazy collection with derafu_auth.form. The container builds
+    # each definition with its own dependencies only when that form is requested.
+    Derafu\Auth\Provider\Database\Web\Form\LoginForm:
+        arguments:
+            $config: '@Derafu\Auth\Contract\DatabaseConfigurationInterface'
+        tags: ['derafu_auth.form']
+    Derafu\Auth\Provider\Htpasswd\Web\Form\LoginForm:
+        tags: ['derafu_auth.form']
+    Derafu\Auth\Provider\Keycloak\Account\Form\ApiTokenForm:
+        tags: ['derafu_auth.form']
+    Derafu\Auth\Account\Form\ApiTokenValueForm:
+        tags: ['derafu_auth.form']
+
     # The provider of the application, chosen with AUTH_PROVIDER. It is read when
     # a piece of the provider is needed, so with it empty or wrong only what needs
     # it fails, with a message that says what to set.
-    Derafu\Auth\AuthProviderRegistry:
+    Derafu\Auth\Contract\AuthProviderRegistryInterface:
+        class: Derafu\Auth\AuthProviderRegistry
         arguments:
             $providers: !tagged_locator { tag: derafu_auth.provider, default_index_method: name }
             $name: '%env(default::string:AUTH_PROVIDER)%'
     Derafu\Auth\Contract\WebFlowInterface:
         class: Derafu\Auth\Contract\WebFlowInterface
-        factory: ['@Derafu\Auth\AuthProviderRegistry', webFlow]
+        factory: ['@Derafu\Auth\Contract\AuthProviderRegistryInterface', webFlow]
         lazy: true
     Derafu\Auth\Contract\SessionManagerInterface:
         class: Derafu\Auth\Contract\SessionManagerInterface
-        factory: ['@Derafu\Auth\AuthProviderRegistry', sessionManager]
+        factory: ['@Derafu\Auth\Contract\AuthProviderRegistryInterface', sessionManager]
         lazy: true
+    # Form creation and processing are shared across authentication providers.
     Derafu\Auth\Contract\FormManagerInterface:
-        class: Derafu\Auth\Contract\FormManagerInterface
-        factory: ['@Derafu\Auth\AuthProviderRegistry', forms]
+        class: Derafu\Auth\Authentication\Channel\Web\FormManager
         lazy: true
+        arguments:
+            $formDefinitions: !tagged_locator derafu_auth.form
     Derafu\Auth\Contract\ApiSchemeInterface:
         class: Derafu\Auth\Contract\ApiSchemeInterface
-        factory: ['@Derafu\Auth\AuthProviderRegistry', apiScheme]
+        factory: ['@Derafu\Auth\Contract\AuthProviderRegistryInterface', apiScheme]
         lazy: true
     Derafu\Auth\Contract\AccountInterface:
         class: Derafu\Auth\Contract\AccountInterface
-        factory: ['@Derafu\Auth\AuthProviderRegistry', account]
+        factory: ['@Derafu\Auth\Contract\AuthProviderRegistryInterface', account]
         lazy: true
 
     # ------------------------------------------------------------------------
@@ -189,34 +214,39 @@ services:
     Derafu\Auth\Provider\Keycloak\KeycloakAuthProvider:
         tags: ['derafu_auth.provider']
         arguments:
-            $webFlow: !service_closure '@Derafu\Auth\Provider\Keycloak\Web\KeycloakWebFlow'
-            $sessionManager: !service_closure '@Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager'
-            $forms: !service_closure '@auth.forms.keycloak'
-            $apiScheme: !service_closure '@Derafu\Auth\Provider\Keycloak\Api\KeycloakBearerScheme'
-            $account: !service_closure '@Derafu\Auth\Provider\Keycloak\Account\KeycloakAccount'
+            $webFlow: !service_closure '@Derafu\Auth\Contract\WebFlowInterface $keycloak'
+            $sessionManager: !service_closure '@Derafu\Auth\Contract\KeycloakSessionManagerInterface'
+            $apiScheme: !service_closure '@Derafu\Auth\Contract\ApiSchemeInterface $keycloak'
+            $account: !service_closure '@Derafu\Auth\Contract\AccountInterface $keycloak'
 
     # The login of the user in Keycloak, and its session.
-    Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager:
+    Derafu\Auth\Contract\KeycloakSessionManagerInterface:
+        class: Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager
         lazy: true
-    Derafu\Auth\Provider\Keycloak\Web\KeycloakWebFlow:
+    Derafu\Auth\Contract\WebFlowInterface $keycloak:
+        class: Derafu\Auth\Provider\Keycloak\Web\KeycloakWebFlow
         lazy: true
 
     # The access tokens that it gives to a client, `Bearer`.
-    Derafu\Auth\Provider\Keycloak\Api\KeycloakBearerScheme:
+    Derafu\Auth\Contract\ApiSchemeInterface $keycloak:
+        class: Derafu\Auth\Provider\Keycloak\Api\KeycloakBearerScheme
         lazy: true
 
     # Verifies the tokens with the keys of the realm. The keys are cached in the
     # PSR-6 pool of the application if it has one (Psr\Cache\CacheItemPoolInterface).
     # The client that reads them is made from the options of the configuration
     # (verification of the certificate, timeouts), not the one of the application.
-    Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier:
+    Derafu\Auth\Contract\KeycloakTokenVerifierInterface:
+        class: Derafu\Auth\Provider\Keycloak\KeycloakTokenVerifier
         lazy: true
         arguments:
             $http: ~
             $requestFactory: ~
-    Derafu\Auth\Provider\Keycloak\KeycloakUserRepository:
+    Derafu\Auth\Contract\KeycloakUserRepositoryInterface:
+        class: Derafu\Auth\Provider\Keycloak\KeycloakUserRepository
         lazy: true
-    Derafu\Auth\Provider\Keycloak\KeycloakConfiguration:
+    Derafu\Auth\Contract\KeycloakConfigurationInterface:
+        class: Derafu\Auth\Provider\Keycloak\KeycloakConfiguration
         lazy: true
         arguments:
             $config:
@@ -246,16 +276,14 @@ services:
 
     # The account: the data in the account console of the realm, and the tokens of
     # the API (offline tokens) that the user makes and revokes.
-    Derafu\Auth\Provider\Keycloak\Account\KeycloakAccountClient: ~
-    Derafu\Auth\Provider\Keycloak\Account\KeycloakApiTokenManager:
+    Derafu\Auth\Contract\KeycloakAccountClientInterface:
+        class: Derafu\Auth\Provider\Keycloak\Account\KeycloakAccountClient
+    Derafu\Auth\Contract\ApiTokenManagerInterface:
+        class: Derafu\Auth\Provider\Keycloak\Account\KeycloakApiTokenManager
         arguments:
-            $formManager: '@auth.forms.keycloak'
-    auth.forms.keycloak:
-        class: Derafu\Auth\Authentication\Channel\Web\FormManager
-        lazy: true
-        arguments:
-            $configuration: '@Derafu\Auth\Provider\Keycloak\KeycloakConfiguration'
-    Derafu\Auth\Provider\Keycloak\Account\KeycloakAccount:
+            $formManager: '@Derafu\Auth\Contract\FormManagerInterface'
+    Derafu\Auth\Contract\AccountInterface $keycloak:
+        class: Derafu\Auth\Provider\Keycloak\Account\KeycloakAccount
         lazy: true
 
     # ------------------------------------------------------------------------
@@ -266,46 +294,34 @@ services:
     Derafu\Auth\Provider\Database\DatabaseAuthProvider:
         tags: ['derafu_auth.provider']
         arguments:
-            $webFlow: !service_closure '@Derafu\Auth\Provider\Database\Web\DatabaseWebFlow'
-            $sessionManager: !service_closure '@Derafu\Auth\Authentication\Channel\Web\SessionManager'
-            $forms: !service_closure '@auth.forms.database'
-            $apiScheme: !service_closure '@Derafu\Auth\Provider\Database\Api\DatabaseBasicScheme'
-            $account: !service_closure '@Derafu\Auth\Account\BasicAccount'
+            $webFlow: !service_closure '@Derafu\Auth\Contract\WebFlowInterface $database'
+            $sessionManager: !service_closure '@Derafu\Auth\Contract\SessionManagerInterface $password'
+            $apiScheme: !service_closure '@Derafu\Auth\Contract\ApiSchemeInterface $database'
+            $account: !service_closure '@Derafu\Auth\Contract\AccountInterface $password'
 
     # The login with a form, and its session.
-    Derafu\Auth\Provider\Database\Web\DatabaseWebFlow:
+    Derafu\Auth\Contract\WebFlowInterface $database:
+        class: Derafu\Auth\Provider\Database\Web\DatabaseWebFlow
         lazy: true
         arguments:
-            $sessionManager: '@Derafu\Auth\Authentication\Channel\Web\SessionManager'
-            $formManager: '@auth.forms.database'
-            $throttle: '@auth.throttle.database'
-    auth.forms.database:
-        class: Derafu\Auth\Authentication\Channel\Web\FormManager
-        lazy: true
-        arguments:
-            $configuration: '@Derafu\Auth\Provider\Database\DatabaseConfiguration'
+            $userRepository: '@Derafu\Auth\Contract\PasswordUserRepositoryInterface $database'
+            $sessionManager: '@Derafu\Auth\Contract\SessionManagerInterface $password'
+            $formManager: '@Derafu\Auth\Contract\FormManagerInterface'
+            $throttle: '@Derafu\Auth\Contract\LoginThrottleInterface'
 
     # `Basic`, the user and the password of the client.
-    Derafu\Auth\Provider\Database\Api\DatabaseBasicScheme:
+    Derafu\Auth\Contract\ApiSchemeInterface $database:
+        class: Derafu\Auth\Provider\Database\Api\DatabaseBasicScheme
         lazy: true
         arguments:
-            $throttle: '@auth.throttle.database'
+            $userRepository: '@Derafu\Auth\Contract\PasswordUserRepositoryInterface $database'
+            $throttle: '@Derafu\Auth\Contract\LoginThrottleInterface'
 
-    # Limits the failed attempts to log in, in the form and in `Basic`. It keeps
-    # the counts in the PSR-6 pool of the application
-    # (Psr\Cache\CacheItemPoolInterface), so the application must have one to use
-    # this provider.
-    auth.throttle.database:
-        class: Derafu\Auth\Authentication\LoginThrottle
+    Derafu\Auth\Contract\PasswordUserRepositoryInterface $database:
+        class: Derafu\Auth\Provider\Database\DatabaseUserRepository
         lazy: true
-        arguments:
-            $cache: '@?Psr\Cache\CacheItemPoolInterface'
-            $maxAttempts: '%env(int:AUTH_DATABASE_LOGIN_MAX_ATTEMPTS)%'
-            $lockSeconds: '%env(int:AUTH_DATABASE_LOGIN_LOCK_SECONDS)%'
-
-    Derafu\Auth\Provider\Database\DatabaseUserRepository:
-        lazy: true
-    Derafu\Auth\Provider\Database\DatabaseConfiguration:
+    Derafu\Auth\Contract\DatabaseConfigurationInterface:
+        class: Derafu\Auth\Provider\Database\DatabaseConfiguration
         lazy: true
         arguments:
             $config:
@@ -329,43 +345,34 @@ services:
     Derafu\Auth\Provider\Htpasswd\HtpasswdAuthProvider:
         tags: ['derafu_auth.provider']
         arguments:
-            $webFlow: !service_closure '@Derafu\Auth\Provider\Htpasswd\Web\HtpasswdWebFlow'
-            $sessionManager: !service_closure '@Derafu\Auth\Authentication\Channel\Web\SessionManager'
-            $forms: !service_closure '@auth.forms.htpasswd'
-            $apiScheme: !service_closure '@Derafu\Auth\Provider\Htpasswd\Api\HtpasswdBasicScheme'
-            $account: !service_closure '@Derafu\Auth\Account\BasicAccount'
+            $webFlow: !service_closure '@Derafu\Auth\Contract\WebFlowInterface $htpasswd'
+            $sessionManager: !service_closure '@Derafu\Auth\Contract\SessionManagerInterface $password'
+            $apiScheme: !service_closure '@Derafu\Auth\Contract\ApiSchemeInterface $htpasswd'
+            $account: !service_closure '@Derafu\Auth\Contract\AccountInterface $password'
 
     # The login with a form, and its session.
-    Derafu\Auth\Provider\Htpasswd\Web\HtpasswdWebFlow:
+    Derafu\Auth\Contract\WebFlowInterface $htpasswd:
+        class: Derafu\Auth\Provider\Htpasswd\Web\HtpasswdWebFlow
         lazy: true
         arguments:
-            $sessionManager: '@Derafu\Auth\Authentication\Channel\Web\SessionManager'
-            $formManager: '@auth.forms.htpasswd'
-            $throttle: '@auth.throttle.htpasswd'
-    auth.forms.htpasswd:
-        class: Derafu\Auth\Authentication\Channel\Web\FormManager
-        lazy: true
-        arguments:
-            $configuration: '@Derafu\Auth\Provider\Htpasswd\HtpasswdConfiguration'
+            $userRepository: '@Derafu\Auth\Contract\PasswordUserRepositoryInterface $htpasswd'
+            $sessionManager: '@Derafu\Auth\Contract\SessionManagerInterface $password'
+            $formManager: '@Derafu\Auth\Contract\FormManagerInterface'
+            $throttle: '@Derafu\Auth\Contract\LoginThrottleInterface'
 
     # `Basic`, the user and the password of the client.
-    Derafu\Auth\Provider\Htpasswd\Api\HtpasswdBasicScheme:
+    Derafu\Auth\Contract\ApiSchemeInterface $htpasswd:
+        class: Derafu\Auth\Provider\Htpasswd\Api\HtpasswdBasicScheme
         lazy: true
         arguments:
-            $throttle: '@auth.throttle.htpasswd'
+            $userRepository: '@Derafu\Auth\Contract\PasswordUserRepositoryInterface $htpasswd'
+            $throttle: '@Derafu\Auth\Contract\LoginThrottleInterface'
 
-    # Limits the failed attempts to log in, like the one of the database provider.
-    auth.throttle.htpasswd:
-        class: Derafu\Auth\Authentication\LoginThrottle
+    Derafu\Auth\Contract\PasswordUserRepositoryInterface $htpasswd:
+        class: Derafu\Auth\Provider\Htpasswd\HtpasswdUserRepository
         lazy: true
-        arguments:
-            $cache: '@?Psr\Cache\CacheItemPoolInterface'
-            $maxAttempts: '%env(int:AUTH_HTPASSWD_LOGIN_MAX_ATTEMPTS)%'
-            $lockSeconds: '%env(int:AUTH_HTPASSWD_LOGIN_LOCK_SECONDS)%'
-
-    Derafu\Auth\Provider\Htpasswd\HtpasswdUserRepository:
-        lazy: true
-    Derafu\Auth\Provider\Htpasswd\HtpasswdConfiguration:
+    Derafu\Auth\Contract\HtpasswdConfigurationInterface:
+        class: Derafu\Auth\Provider\Htpasswd\HtpasswdConfiguration
         lazy: true
         arguments:
             $config:
@@ -379,7 +386,9 @@ services:
 
     # The session of a login with a form, and the account of a user and a password
     # (no tokens).
-    Derafu\Auth\Authentication\Channel\Web\SessionManager:
+    Derafu\Auth\Contract\SessionManagerInterface $password:
+        class: Derafu\Auth\Authentication\Channel\Web\SessionManager
         lazy: true
-    Derafu\Auth\Account\BasicAccount:
+    Derafu\Auth\Contract\AccountInterface $password:
+        class: Derafu\Auth\Account\BasicAccount
         lazy: true

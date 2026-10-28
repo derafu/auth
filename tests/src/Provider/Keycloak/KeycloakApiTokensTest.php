@@ -22,7 +22,6 @@ use Derafu\Auth\Exception\AuthorizationException;
 use Derafu\Auth\Provider\Keycloak\Account\KeycloakAccount;
 use Derafu\Auth\Provider\Keycloak\Account\KeycloakAccountClient;
 use Derafu\Auth\Provider\Keycloak\Account\KeycloakApiTokenManager;
-use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
 use Derafu\Auth\Provider\Keycloak\TokenClaims;
 use Derafu\Auth\Provider\Keycloak\Web\KeycloakSessionManager;
@@ -171,7 +170,7 @@ final class KeycloakApiTokensTest extends TestCase
 
         $client = new KeycloakAccountClient($config);
         $translator = TranslatorFactory::create('es', ['en'], [new AuthTranslationResourceProvider()]);
-        $this->manager = $manager = new KeycloakApiTokenManager($this->repository, $client, $this->sessions, $this->formManager($config), $translator);
+        $this->manager = $manager = new KeycloakApiTokenManager($this->repository, $client, $this->sessions, $this->formManager(), $translator);
 
         $routing = new class () extends AbstractExtension {
             public function getFunctions(): array
@@ -200,7 +199,7 @@ final class KeycloakApiTokensTest extends TestCase
                 ],
             ])))]),
             new KeycloakAccount($config, $this->sessions, $client, $manager),
-            $this->formManager($config)
+            $this->formManager()
         );
     }
 
@@ -213,12 +212,12 @@ final class KeycloakApiTokensTest extends TestCase
      * Runs a request through the middlewares and the authentication, and gives the
      * action what the application would: the request of the user.
      */
-    private function formManager(KeycloakConfiguration $config): FormManager
+    private function formManager(): FormManager
     {
         return new FormManager(
             new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
             $this->app->processor(),
-            $config
+            Stack::formDefinitions()
         );
     }
 
@@ -401,7 +400,7 @@ final class KeycloakApiTokensTest extends TestCase
             new KeycloakUserRepository($config),
             new KeycloakAccountClient($config),
             $this->sessions,
-            $this->formManager($config)
+            $this->formManager()
         );
         $request = $this->app->request('/auth/profile/tokens', body: ['password' => 'secret'], captcha: false, form: 'api_token')
             ->withAttribute(MezzioUserInterface::class, new \Derafu\Auth\User('7d5e590b', [], ['preferred_username' => 'otto']));

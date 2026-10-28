@@ -13,13 +13,14 @@ declare(strict_types=1);
 namespace Derafu\Auth\Provider\Htpasswd;
 
 use Derafu\Array\ArrayReader;
+use Derafu\Auth\Contract\HtpasswdConfigurationInterface;
 use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
 
 /**
  * Configuration class for the authentication with an `.htpasswd` file.
  */
-class HtpasswdConfiguration
+class HtpasswdConfiguration implements HtpasswdConfigurationInterface
 {
     private string $htpasswdPath = '';
 
@@ -62,10 +63,7 @@ class HtpasswdConfiguration
     }
 
     /**
-     * Gets the path of the group file (`.htgroup`), which gives the roles of the
-     * users, or an empty text if there is none: the users have no roles.
-     *
-     * @return string The path of the group file.
+     * {@inheritDoc}
      */
     public function getGroupPath(): string
     {
@@ -73,9 +71,7 @@ class HtpasswdConfiguration
     }
 
     /**
-     * Gets the path of the htpasswd file.
-     *
-     * @return string The path of the htpasswd file.
+     * {@inheritDoc}
      */
     public function getHtpasswdPath(): string
     {

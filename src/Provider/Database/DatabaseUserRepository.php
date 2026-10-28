@@ -12,9 +12,10 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Provider\Database;
 
+use Derafu\Auth\Contract\DatabaseConfigurationInterface;
+use Derafu\Auth\Contract\PasswordUserRepositoryInterface;
 use Derafu\Auth\Contract\UserFactoryInterface;
 use Derafu\Auth\Contract\UserInterface;
-use Derafu\Auth\Contract\UserRepositoryInterface;
 use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Auth\UserFactory;
 use PDO;
@@ -41,7 +42,7 @@ use PDOStatement;
  * The connection is made when it is needed, from the URL of the configuration,
  * unless a `PDO` is given.
  */
-class DatabaseUserRepository implements UserRepositoryInterface
+class DatabaseUserRepository implements PasswordUserRepositoryInterface
 {
     /**
      * The hash that is verified when the user does not exist.
@@ -53,14 +54,14 @@ class DatabaseUserRepository implements UserRepositoryInterface
     /**
      * Creates a new Database user repository.
      *
-     * @param DatabaseConfiguration $config The Database configuration.
+     * @param DatabaseConfigurationInterface $config The Database configuration.
      * @param PDO|null $pdo The connection to the database. By default, one made
      * from the URL of the configuration when it is needed.
      */
     private readonly UserFactoryInterface $userFactory;
 
     public function __construct(
-        private readonly DatabaseConfiguration $config,
+        private readonly DatabaseConfigurationInterface $config,
         ?PDO $pdo = null,
         ?UserFactoryInterface $userFactory = null
     ) {
@@ -110,17 +111,7 @@ class DatabaseUserRepository implements UserRepositoryInterface
     }
 
     /**
-     * Finds a user by its identity, with its roles and details as the database
-     * has them now.
-     *
-     * It is what a session does to know whether its user is still the same: the
-     * password is not asked (the user already logged in), and it is not read nor
-     * changed.
-     *
-     * @param string $identity The identity of the user.
-     * @return UserInterface|null The user, or null if there is no user with that
-     * identity (it was deleted).
-     * @throws PDOException If the database can not be asked.
+     * {@inheritDoc}
      */
     public function find(string $identity): ?UserInterface
     {

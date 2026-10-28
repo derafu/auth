@@ -104,7 +104,7 @@ final class HtpasswdApiBasicTest extends TestCase
             new FormManager(
                 new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
                 $this->app->processor(),
-                $config
+                Stack::formDefinitions()
             ),
             throttle: $throttle
         );

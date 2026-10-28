@@ -14,7 +14,6 @@ namespace Derafu\TestsAuth\Provider;
 
 use Derafu\Auth\Contract\AccountInterface;
 use Derafu\Auth\Contract\ApiSchemeInterface;
-use Derafu\Auth\Contract\FormManagerInterface;
 use Derafu\Auth\Contract\SessionManagerInterface;
 use Derafu\Auth\Contract\WebFlowInterface;
 use Derafu\Auth\Provider\AuthProvider;
@@ -45,7 +44,6 @@ final class AuthProviderTest extends TestCase
         return [
             'webFlow' => $this->createStub(WebFlowInterface::class),
             'sessionManager' => $this->createStub(SessionManagerInterface::class),
-            'forms' => $this->createStub(FormManagerInterface::class),
             'apiScheme' => $this->createStub(ApiSchemeInterface::class),
             'account' => $this->createStub(AccountInterface::class),
         ];
@@ -107,7 +105,6 @@ final class AuthProviderTest extends TestCase
 
         $this->assertSame($pieces['webFlow'], $provider->webFlow());
         $this->assertSame($pieces['sessionManager'], $provider->sessionManager());
-        $this->assertSame($pieces['forms'], $provider->forms());
         $this->assertSame($pieces['apiScheme'], $provider->apiScheme());
         $this->assertSame($pieces['account'], $provider->account());
     }
@@ -120,10 +117,10 @@ final class AuthProviderTest extends TestCase
 
         // Nothing is made when the provider is: choosing it does not make what
         // it can give.
-        $this->assertSame(['webFlow' => 0, 'sessionManager' => 0, 'forms' => 0, 'apiScheme' => 0, 'account' => 0], $made);
+        $this->assertSame(['webFlow' => 0, 'sessionManager' => 0, 'apiScheme' => 0, 'account' => 0], $made);
 
         $provider->apiScheme();
 
-        $this->assertSame(['webFlow' => 0, 'sessionManager' => 0, 'forms' => 0, 'apiScheme' => 1, 'account' => 0], $made);
+        $this->assertSame(['webFlow' => 0, 'sessionManager' => 0, 'apiScheme' => 1, 'account' => 0], $made);
     }
 }

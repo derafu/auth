@@ -75,6 +75,16 @@ interface SessionManagerInterface
      */
     public function isRefreshDue(SessionInterface $session, ?int $interval): bool;
 
+    /**
+     * Removes authentication state and the stored post-login redirect.
+     *
+     * Implementations also remove their provider-specific authentication state.
+     * Unrelated session data and the session identifier are preserved; renew
+     * the identifier separately with regenerate() when required by the flow.
+     *
+     * @param SessionInterface $session The session whose authentication state
+     * must be cleared.
+     */
     public function clearSession(SessionInterface $session): void;
 
     /**

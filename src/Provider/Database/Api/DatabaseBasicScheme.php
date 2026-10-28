@@ -13,9 +13,9 @@ declare(strict_types=1);
 namespace Derafu\Auth\Provider\Database\Api;
 
 use Derafu\Auth\Authentication\Channel\Api\Scheme\BasicScheme;
-use Derafu\Auth\Authentication\LoginThrottle;
-use Derafu\Auth\Provider\Database\DatabaseConfiguration;
-use Derafu\Auth\Provider\Database\DatabaseUserRepository;
+use Derafu\Auth\Contract\DatabaseConfigurationInterface;
+use Derafu\Auth\Contract\LoginThrottleInterface;
+use Derafu\Auth\Contract\PasswordUserRepositoryInterface;
 
 /**
  * The scheme of the API of the database provider: `Basic`, the user and the
@@ -27,15 +27,15 @@ class DatabaseBasicScheme extends BasicScheme
     /**
      * Creates the scheme.
      *
-     * @param DatabaseUserRepository $userRepository Where the users are.
-     * @param DatabaseConfiguration $config The configuration of the provider.
-     * @param LoginThrottle|null $throttle Limits the failed attempts. Without it
+     * @param PasswordUserRepositoryInterface $userRepository Where the users are.
+     * @param DatabaseConfigurationInterface $config The configuration of the provider.
+     * @param LoginThrottleInterface|null $throttle Limits the failed attempts. Without it
      * they are not limited.
      */
     public function __construct(
-        DatabaseUserRepository $userRepository,
-        private readonly DatabaseConfiguration $config,
-        ?LoginThrottle $throttle = null
+        PasswordUserRepositoryInterface $userRepository,
+        private readonly DatabaseConfigurationInterface $config,
+        ?LoginThrottleInterface $throttle = null
     ) {
         parent::__construct($userRepository, $throttle);
     }

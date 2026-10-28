@@ -14,8 +14,14 @@ namespace Derafu\TestsAuth\Fixture;
 
 use Derafu\Twig\Contract\TemplatePathProviderInterface;
 
+/**
+ * Supplies the test application layout through the shared template path collection.
+ */
 final class ApplicationTemplatePathProvider implements TemplatePathProviderInterface
 {
+    /**
+     * {@inheritDoc}
+     */
     public function getPaths(): array
     {
         return [dirname(__DIR__, 2) . '/fixtures/templates'];

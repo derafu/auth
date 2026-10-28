@@ -16,7 +16,6 @@ use Closure;
 use Derafu\Auth\Contract\AccountInterface;
 use Derafu\Auth\Contract\ApiSchemeInterface;
 use Derafu\Auth\Contract\AuthProviderInterface;
-use Derafu\Auth\Contract\FormManagerInterface;
 use Derafu\Auth\Contract\SessionManagerInterface;
 use Derafu\Auth\Contract\WebFlowInterface;
 
@@ -33,14 +32,12 @@ abstract class AuthProvider implements AuthProviderInterface
     /**
      * @param Closure(): WebFlowInterface $webFlow
      * @param Closure(): SessionManagerInterface $sessionManager
-     * @param Closure(): FormManagerInterface $forms
      * @param Closure(): ApiSchemeInterface $apiScheme
      * @param Closure(): AccountInterface $account
      */
     public function __construct(
         private readonly Closure $webFlow,
         private readonly Closure $sessionManager,
-        private readonly Closure $forms,
         private readonly Closure $apiScheme,
         private readonly Closure $account
     ) {
@@ -60,14 +57,6 @@ abstract class AuthProvider implements AuthProviderInterface
     public function sessionManager(): SessionManagerInterface
     {
         return ($this->sessionManager)();
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function forms(): FormManagerInterface
-    {
-        return ($this->forms)();
     }
 
     /**

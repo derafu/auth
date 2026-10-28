@@ -112,7 +112,7 @@ final class HtpasswdLoginPageTest extends TestCase
                 $translator
             ),
             $this->app->processor(),
-            $config
+            Stack::formDefinitions()
         );
 
         $this->authentication = Stack::htpasswd(

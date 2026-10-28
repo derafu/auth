@@ -15,7 +15,7 @@ namespace Derafu\Auth\Provider\Keycloak\Web;
 use Derafu\Array\ArrayReader;
 use Derafu\Auth\Authentication\Channel\Web\SessionManager;
 use Derafu\Auth\Authentication\Channel\Web\WebConfiguration;
-use Derafu\Auth\Contract\SessionManagerInterface;
+use Derafu\Auth\Contract\KeycloakSessionManagerInterface;
 use Mezzio\Session\SessionInterface;
 
 /**
@@ -23,7 +23,7 @@ use Mezzio\Session\SessionInterface;
  *
  * Handles OAuth2 session data storage and retrieval for Keycloak.
  */
-class KeycloakSessionManager extends SessionManager implements SessionManagerInterface
+class KeycloakSessionManager extends SessionManager implements KeycloakSessionManagerInterface
 {
     /**
      * {@inheritDoc}
@@ -48,10 +48,7 @@ class KeycloakSessionManager extends SessionManager implements SessionManagerInt
     }
 
     /**
-     * Stores authentication information in the session.
-     *
-     * @param SessionInterface $session The session to store the info in.
-     * @param array<string, mixed> $tokenInfo The token information to store.
+     * {@inheritDoc}
      */
     public function storeAuthInfo(SessionInterface $session, array $tokenInfo): void
     {
@@ -72,11 +69,7 @@ class KeycloakSessionManager extends SessionManager implements SessionManagerInt
     }
 
     /**
-     * Tells whether the access token expired. A token that has no expiry does
-     * not (when it has to be asked again is up to `isRefreshDue()`).
-     *
-     * @param SessionInterface $session The session.
-     * @return bool True if the token has an expiry and it is in the past.
+     * {@inheritDoc}
      */
     public function isTokenExpired(SessionInterface $session): bool
     {
@@ -103,10 +96,7 @@ class KeycloakSessionManager extends SessionManager implements SessionManagerInt
     }
 
     /**
-     * Gets the stored refresh token from the session.
-     *
-     * @param SessionInterface $session The session to get the token from.
-     * @return string|null The refresh token or null if not found.
+     * {@inheritDoc}
      */
     public function getRefreshToken(SessionInterface $session): ?string
     {
@@ -115,10 +105,7 @@ class KeycloakSessionManager extends SessionManager implements SessionManagerInt
     }
 
     /**
-     * Stores the state parameter for CSRF protection.
-     *
-     * @param SessionInterface $session The session to store the state in.
-     * @param string $state The state parameter to store.
+     * {@inheritDoc}
      */
     public function storeState(SessionInterface $session, string $state): void
     {
@@ -126,10 +113,7 @@ class KeycloakSessionManager extends SessionManager implements SessionManagerInt
     }
 
     /**
-     * Gets the stored state parameter from the session.
-     *
-     * @param SessionInterface $session The session to get the state from.
-     * @return string|null The state parameter or null if not found.
+     * {@inheritDoc}
      */
     public function getState(SessionInterface $session): ?string
     {
@@ -138,14 +122,7 @@ class KeycloakSessionManager extends SessionManager implements SessionManagerInt
     }
 
     /**
-     * Stores what the login needs to be finished when the user comes back from
-     * Keycloak: the nonce that the ID token must have and the PKCE code (the
-     * verifier of the challenge that was sent). The state is stored with
-     * `storeState()`.
-     *
-     * @param SessionInterface $session The session.
-     * @param string $nonce The nonce of the authorization URL.
-     * @param string|null $pkceCode The PKCE code of the authorization URL.
+     * {@inheritDoc}
      */
     public function storeLogin(SessionInterface $session, string $nonce, ?string $pkceCode): void
     {
@@ -154,10 +131,7 @@ class KeycloakSessionManager extends SessionManager implements SessionManagerInt
     }
 
     /**
-     * Gets the nonce of the login that is in progress.
-     *
-     * @param SessionInterface $session The session.
-     * @return string|null The nonce or null if there is no login in progress.
+     * {@inheritDoc}
      */
     public function getNonce(SessionInterface $session): ?string
     {
@@ -166,10 +140,7 @@ class KeycloakSessionManager extends SessionManager implements SessionManagerInt
     }
 
     /**
-     * Gets the PKCE code (the verifier) of the login that is in progress.
-     *
-     * @param SessionInterface $session The session.
-     * @return string|null The PKCE code.
+     * {@inheritDoc}
      */
     public function getPkceCode(SessionInterface $session): ?string
     {
@@ -178,11 +149,7 @@ class KeycloakSessionManager extends SessionManager implements SessionManagerInt
     }
 
     /**
-     * Gets the ID token of the session: what Keycloak needs to end the session
-     * of the user.
-     *
-     * @param SessionInterface $session The session.
-     * @return string|null The ID token.
+     * {@inheritDoc}
      */
     public function getIdToken(SessionInterface $session): ?string
     {
@@ -191,11 +158,7 @@ class KeycloakSessionManager extends SessionManager implements SessionManagerInt
     }
 
     /**
-     * Gets the access token that the session has (the one of the user, that is
-     * renewed when it is due).
-     *
-     * @param SessionInterface $session The session.
-     * @return string|null The access token, or null if there is none.
+     * {@inheritDoc}
      */
     public function getAccessToken(SessionInterface $session): ?string
     {
@@ -205,10 +168,7 @@ class KeycloakSessionManager extends SessionManager implements SessionManagerInt
     }
 
     /**
-     * Clears what the login in progress stored: the state, the nonce and the PKCE
-     * code.
-     *
-     * @param SessionInterface $session The session to clear.
+     * {@inheritDoc}
      */
     public function clearState(SessionInterface $session): void
     {

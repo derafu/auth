@@ -17,8 +17,8 @@ namespace Derafu\Auth\Contract;
  *
  * The application uses one, chosen with `AUTH_PROVIDER` (see
  * `AuthProviderRegistry`). The pieces of the package that depend on the provider
- * (the flow of the web channel, the scheme of the API, the account, the session
- * and the forms) are the ones that its implementation gives.
+ * (the flow of the web channel, the scheme of the API, the account and the
+ * session) are the ones that its implementation gives.
  *
  * To add a provider: implement this interface (extending `AuthProvider` is the
  * short way), define its services and tag the service of the provider with
@@ -41,11 +41,6 @@ interface AuthProviderInterface
      * The session of the web channel, with what the provider keeps in it.
      */
     public function sessionManager(): SessionManagerInterface;
-
-    /**
-     * The forms of the web channel, with the configuration of the provider.
-     */
-    public function forms(): FormManagerInterface;
 
     /**
      * What the provider gives to the API channel: how a client says who it is.

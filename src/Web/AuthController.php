@@ -40,7 +40,7 @@ class AuthController
 {
     /**
      * @param RendererInterface $renderer The renderer of the login page.
-     * @param FormManagerInterface $formManager The forms of the provider.
+     * @param FormManagerInterface $formManager The shared authentication form manager.
      * @param WebConfigurationInterface $config The configuration of the web channel.
      * @param SessionManagerInterface $sessionManager The session manager.
      * @param WebFlowInterface $flow The flow of the provider.

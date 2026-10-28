@@ -28,6 +28,7 @@ use Derafu\Form\Type\TypeProvider;
 use Derafu\Form\Type\TypeRegistry;
 use Derafu\Form\Type\TypeResolver;
 use Derafu\TestsAuth\Fixture\SessionApp;
+use Derafu\TestsAuth\Fixture\Stack;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Handler\MockHandler;
@@ -72,7 +73,7 @@ final class KeycloakAccountTest extends TestCase
         $forms = new FormManager(
             new FormFactory(new TypeResolver(new TypeRegistry(new TypeProvider()))),
             (new SessionApp())->processor(),
-            $config
+            Stack::formDefinitions()
         );
 
         return new KeycloakAccount(

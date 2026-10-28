@@ -33,6 +33,12 @@ use Twig\TwigFunction;
  */
 final class AuthExtension extends AbstractExtension
 {
+    /**
+     * Creates the extension with the shared web authentication settings.
+     *
+     * @param WebConfigurationInterface $web Settings used by login_path() and
+     * logout_path(). The settings are read when these Twig functions are called.
+     */
     public function __construct(private readonly WebConfigurationInterface $web)
     {
     }

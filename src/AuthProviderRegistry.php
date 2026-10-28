@@ -16,19 +16,19 @@ use Derafu\Auth\Authentication\Channel\Web\WebConfiguration;
 use Derafu\Auth\Contract\AccountInterface;
 use Derafu\Auth\Contract\ApiSchemeInterface;
 use Derafu\Auth\Contract\AuthProviderInterface;
-use Derafu\Auth\Contract\FormManagerInterface;
+use Derafu\Auth\Contract\AuthProviderRegistryInterface;
 use Derafu\Auth\Contract\SessionManagerInterface;
+use Derafu\Auth\Contract\WebConfigurationInterface;
 use Derafu\Auth\Contract\WebFlowInterface;
 use Derafu\Auth\Exception\ConfigurationException;
-use Psr\Container\ContainerInterface;
 use Symfony\Contracts\Service\ServiceProviderInterface;
 
 /**
  * The provider that the application uses, chosen with `AUTH_PROVIDER`.
  *
  * It is the one that gives the pieces that depend on the provider (the contracts
- * `WebFlowInterface`, `SessionManagerInterface`, `FormManagerInterface`,
- * `ApiSchemeInterface` and `AccountInterface` are made by it), so the services of
+ * `WebFlowInterface`, `SessionManagerInterface`, `ApiSchemeInterface` and
+ * `AccountInterface` are made by it), so the services of
  * the package are the same for every provider and the application only says which
  * one. The providers are the services tagged `derafu_auth.provider`, and the
  * name is the one that each gives (`AuthProviderInterface::name()`).
@@ -37,23 +37,24 @@ use Symfony\Contracts\Service\ServiceProviderInterface;
  * built: with it empty or wrong, only what needs the provider fails, with a
  * message that says what to set.
  */
-final class AuthProviderRegistry
+final class AuthProviderRegistry implements AuthProviderRegistryInterface
 {
     /**
-     * @param ContainerInterface $providers The providers, by name.
+     * Creates the registry without resolving any provider services.
+     *
+     * @param ServiceProviderInterface<mixed> $providers The provider services,
+     * indexed by name. Returned services are validated when selected.
      * @param string|null $name The chosen one (`AUTH_PROVIDER`): null or empty
      * when the variable is not set.
      */
     public function __construct(
-        private readonly ContainerInterface $providers,
+        private readonly ServiceProviderInterface $providers,
         private readonly ?string $name
     ) {
     }
 
     /**
-     * The chosen provider.
-     *
-     * @throws ConfigurationException If there is none chosen, or it is not known.
+     * {@inheritDoc}
      */
     public function provider(): AuthProviderInterface
     {
@@ -80,43 +81,54 @@ final class AuthProviderRegistry
         }
 
         $provider = $this->providers->get($this->name);
-        assert($provider instanceof AuthProviderInterface);
+        if (!$provider instanceof AuthProviderInterface) {
+            throw new ConfigurationException([
+                'The authentication provider "{name}" must implement {interface}; received {type}.',
+                'name' => $this->name,
+                'interface' => AuthProviderInterface::class,
+                'type' => get_debug_type($provider),
+            ]);
+        }
 
         return $provider;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function webFlow(): WebFlowInterface
     {
         return $this->provider()->webFlow();
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function sessionManager(): SessionManagerInterface
     {
         return $this->provider()->sessionManager();
     }
 
-    public function forms(): FormManagerInterface
-    {
-        return $this->provider()->forms();
-    }
-
+    /**
+     * {@inheritDoc}
+     */
     public function apiScheme(): ApiSchemeInterface
     {
         return $this->provider()->apiScheme();
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function account(): AccountInterface
     {
         return $this->provider()->account();
     }
 
     /**
-     * The configuration of the web channel: the paths that `$config` gives, and
-     * for the ones it does not, what the provider asks for.
-     *
-     * @param array<string, mixed> $config See `WebConfiguration`.
+     * {@inheritDoc}
      */
-    public function webConfiguration(array $config): WebConfiguration
+    public function webConfiguration(array $config): WebConfigurationInterface
     {
         return new WebConfiguration($config, $this->webDefaults());
     }
@@ -145,8 +157,6 @@ final class AuthProviderRegistry
      */
     private function names(): array
     {
-        return $this->providers instanceof ServiceProviderInterface
-            ? array_map('strval', array_keys($this->providers->getProvidedServices()))
-            : [];
+        return array_map('strval', array_keys($this->providers->getProvidedServices()));
     }
 }

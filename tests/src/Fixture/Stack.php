@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\TestsAuth\Fixture;
 
+use Derafu\Auth\Account\Form\ApiTokenValueForm;
 use Derafu\Auth\AnonymousUser;
 use Derafu\Auth\Authentication\AuthenticationManager;
 use Derafu\Auth\Authentication\Channel\Api\ApiChannel;
@@ -30,10 +31,13 @@ use Derafu\Auth\Provider\Database\Api\DatabaseBasicScheme;
 use Derafu\Auth\Provider\Database\DatabaseConfiguration;
 use Derafu\Auth\Provider\Database\DatabaseUserRepository;
 use Derafu\Auth\Provider\Database\Web\DatabaseWebFlow;
+use Derafu\Auth\Provider\Database\Web\Form\LoginForm as DatabaseLoginForm;
 use Derafu\Auth\Provider\Htpasswd\Api\HtpasswdBasicScheme;
 use Derafu\Auth\Provider\Htpasswd\HtpasswdConfiguration;
 use Derafu\Auth\Provider\Htpasswd\HtpasswdUserRepository;
+use Derafu\Auth\Provider\Htpasswd\Web\Form\LoginForm as HtpasswdLoginForm;
 use Derafu\Auth\Provider\Htpasswd\Web\HtpasswdWebFlow;
+use Derafu\Auth\Provider\Keycloak\Account\Form\ApiTokenForm;
 use Derafu\Auth\Provider\Keycloak\Api\KeycloakBearerScheme;
 use Derafu\Auth\Provider\Keycloak\KeycloakConfiguration;
 use Derafu\Auth\Provider\Keycloak\KeycloakUserRepository;
@@ -45,6 +49,8 @@ use Derafu\Renderer\Renderer;
 use Derafu\Twig\Service\TwigCreator;
 use Derafu\Twig\Service\TwigService;
 use Psr\Cache\CacheItemPoolInterface;
+use Psr\Container\ContainerInterface;
+use Symfony\Component\DependencyInjection\ServiceLocator;
 use WeakMap;
 
 /**
@@ -67,6 +73,25 @@ use WeakMap;
  */
 final class Stack
 {
+    /**
+     * Builds the lazy form definition dependencies of a unit-test application.
+     *
+     * @param DatabaseConfiguration|null $database The exact database settings of
+     * the scenario. Other definitions do not take a provider configuration.
+     * @return ContainerInterface Form definitions indexed by their class names.
+     */
+    public static function formDefinitions(?DatabaseConfiguration $database = null): ContainerInterface
+    {
+        return new ServiceLocator([
+            DatabaseLoginForm::class => static fn (): DatabaseLoginForm => new DatabaseLoginForm(
+                $database ?? self::databaseConfiguration(['database_url' => 'sqlite::memory:'])
+            ),
+            HtpasswdLoginForm::class => static fn (): HtpasswdLoginForm => new HtpasswdLoginForm(),
+            ApiTokenForm::class => static fn (): ApiTokenForm => new ApiTokenForm(),
+            ApiTokenValueForm::class => static fn (): ApiTokenValueForm => new ApiTokenValueForm(),
+        ]);
+    }
+
     /**
      * The keys of the settings of the API, and the key that its configuration
      * gives them.
