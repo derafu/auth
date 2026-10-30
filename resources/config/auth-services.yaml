@@ -3,6 +3,10 @@
 # application chooses one with `AUTH_PROVIDER` (keycloak, database or htpasswd),
 # and sets only the variables of that one.
 #
+# For Derafu HTTP, import auth-http-services.yaml instead: it also adds the
+# authentication and authorization middlewares to the shared pipeline by tag.
+# This base file registers them without activating a pipeline.
+#
 # What is here:
 #
 #   - What every provider shares:

@@ -1,0 +1,22 @@
+imports:
+    - { resource: '../../../resources/config/auth-http-services.yaml' }
+    - { resource: cache.yaml }
+
+parameters:
+    derafu.twig.options: { extra: false }
+
+services:
+    Symfony\Contracts\Translation\TranslatorInterface:
+        class: Symfony\Component\Translation\Translator
+        factory: ['Derafu\Translation\TranslatorFactory', create]
+        arguments:
+            $defaultLocale: es
+            $fallbackLocales: [en]
+            $resourceProviders: !tagged_iterator derafu_translation.resource_provider
+
+    # The consumer uses Derafu HTTP's tag without requiring its kernel.
+    test.http_middlewares:
+        class: IteratorIterator
+        public: true
+        arguments:
+            $iterator: !tagged_iterator derafu_http.middleware

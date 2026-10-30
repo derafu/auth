@@ -1,0 +1,24 @@
+# Opt-in integration with Derafu HTTP's shared middleware pipeline.
+# Import this file instead of auth-services.yaml to activate both middlewares.
+# The application supplies the HTTP pipeline and, for the web channel, session
+# middleware. Higher priorities execute first: session 500, flash 450, CSRF 400,
+# authentication 350, authorization 300 and dispatch 200.
+# No HTTP kernel or session services are created by this integration.
+imports:
+    - { resource: auth-services.yaml }
+
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+        public: false
+
+    Derafu\Auth\Authentication\AuthenticationMiddleware:
+        lazy: Psr\Http\Server\MiddlewareInterface
+        tags:
+            - { name: derafu_http.middleware, priority: 350 }
+
+    Derafu\Auth\Authorization\AuthorizationMiddleware:
+        lazy: Psr\Http\Server\MiddlewareInterface
+        tags:
+            - { name: derafu_http.middleware, priority: 300 }
