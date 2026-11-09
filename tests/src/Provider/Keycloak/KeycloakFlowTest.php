@@ -728,7 +728,8 @@ final class KeycloakFlowTest extends TestCase
         [, , $repository] = $this->keycloak();
         $key = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
         $this->assertNotFalse($key);
-        openssl_pkey_export($key, $pem);
+        $this->assertTrue(openssl_pkey_export($key, $pem));
+        $this->assertIsString($pem);
         $token = JWT::encode([
             'iss' => self::$keycloak->url() . '/realms/test',
             'azp' => 'derafu-auth',
@@ -848,7 +849,8 @@ final class KeycloakFlowTest extends TestCase
     {
         $key = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
         $this->assertNotFalse($key);
-        openssl_pkey_export($key, $pem);
+        $this->assertTrue(openssl_pkey_export($key, $pem));
+        $this->assertIsString($pem);
 
         return JWT::encode([
             'iss' => self::$keycloak->url() . '/realms/test',

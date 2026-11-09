@@ -177,7 +177,11 @@ final class KeycloakApiTokensTest extends TestCase
             {
                 return [new TwigFunction(
                     'path',
-                    fn (string $name, array $parameters = []): string => '/' . str_replace('_', '/', $name) . ($parameters === [] ? '' : '/' . implode('/', $parameters))
+                    function (string $name, array $parameters = []): string {
+                        Assert::assertContainsOnlyString($parameters);
+
+                        return '/' . str_replace('_', '/', $name) . ($parameters === [] ? '' : '/' . implode('/', $parameters));
+                    }
                 )];
             }
         };

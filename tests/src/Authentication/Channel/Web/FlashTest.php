@@ -68,7 +68,7 @@ final class FlashTest extends TestCase
     /**
      * What the next request reads: the session gave back JSON.
      *
-     * @return array<string, mixed>
+     * @return array<array-key, mixed>
      */
     private function nextRequestFlashes(): array
     {

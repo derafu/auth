@@ -90,6 +90,7 @@ final class ApiChannelTest extends TestCase
     private function bearer(\Closure $authenticate): BearerScheme
     {
         return new class ($authenticate) extends BearerScheme {
+            /** @param \Closure(string): ?UserInterface $authenticate */
             public function __construct(private readonly \Closure $authenticate)
             {
             }

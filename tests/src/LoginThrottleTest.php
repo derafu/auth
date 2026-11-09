@@ -282,8 +282,19 @@ final class LoginThrottleTest extends TestCase
         yield 'trusted network attribute' => [['REMOTE_ADDR' => '127.0.0.1'], '203.0.113.0/24', '203.0.113.0/24'];
         yield 'connection address' => [['REMOTE_ADDR' => '203.0.113.7'], null, '203.0.113.7'];
         yield 'unknown connection' => [[], null, 'unknown'];
+        yield 'null connection address' => [['REMOTE_ADDR' => null], null, 'unknown'];
         yield 'empty network attribute' => [['REMOTE_ADDR' => '203.0.113.7'], '', '203.0.113.7'];
         yield 'nonstring network attribute' => [['REMOTE_ADDR' => '203.0.113.7'], [], '203.0.113.7'];
+    }
+
+    public function testClientAddressRejectsAnArrayInsteadOfText(): void
+    {
+        $request = new ServerRequest(serverParams: ['REMOTE_ADDR' => ['203.0.113.7']]);
+
+        $this->expectException(TranslatableInvalidArgumentException::class);
+        $this->expectExceptionMessage('The key "REMOTE_ADDR" of request server parameters must be of type string, array given.');
+
+        LoginThrottle::clientOf($request);
     }
 
     /** @param array<string, mixed> $serverParams */

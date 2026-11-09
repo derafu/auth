@@ -186,7 +186,13 @@ final class KeycloakConcurrentRefreshTest extends TestCase
         $decoded = json_decode($output, true);
         $this->assertIsArray($decoded, 'The script said: ' . $output . $errors);
 
-        return $decoded;
+        $result = [];
+        foreach ($decoded as $key => $value) {
+            $this->assertIsString($key);
+            $result[$key] = $value;
+        }
+
+        return $result;
     }
 
     /**

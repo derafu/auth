@@ -165,6 +165,7 @@ final class KeycloakAdmin
         // sessions that it made.
         $account = $this->clientId('account');
         $given = array_column($this->request('GET', '/users/' . $this->userId('ana') . '/role-mappings/clients/' . $account), 'name');
+        Assert::assertContainsOnlyString($given);
         foreach (array_diff($given, ['view-profile']) as $role) {
             $found = $this->request('GET', '/clients/' . $account . '/roles/' . rawurlencode($role));
             $this->request(
@@ -176,6 +177,7 @@ final class KeycloakAdmin
         $this->deleteConsent('ana', 'derafu-auth');
 
         $roles = array_column($this->request('GET', '/users/' . $this->userId('ana') . '/role-mappings/realm'), 'name');
+        Assert::assertContainsOnlyString($roles);
         foreach (array_diff($roles, ['admin', 'default-roles-test', 'offline_access', 'uma_authorization']) as $role) {
             $this->removeRealmRole('ana', $role);
         }
@@ -187,6 +189,7 @@ final class KeycloakAdmin
         $this->setEnabled('otto', true);
         $this->deleteConsent('otto', 'derafu-auth');
         foreach (array_column($this->request('GET', '/users/' . $this->userId('otto') . '/role-mappings/realm'), 'name') as $role) {
+            Assert::assertIsString($role);
             if (!in_array($role, ['admin', 'default-roles-test', 'offline_access', 'uma_authorization'], true)) {
                 $this->removeRealmRole('otto', $role);
             }

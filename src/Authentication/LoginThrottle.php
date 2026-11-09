@@ -75,7 +75,8 @@ class LoginThrottle implements LoginThrottleInterface
             return $network;
         }
 
-        return (string) ($request->getServerParams()['REMOTE_ADDR'] ?? 'unknown');
+        return ArrayReader::fromArray($request->getServerParams(), 'request server parameters')
+            ->getString('REMOTE_ADDR') ?? 'unknown';
     }
 
     /**

@@ -23,7 +23,7 @@ final class TokenClaims
     /**
      * The claims of a JWT, or an empty array if it is not one.
      *
-     * @return array<string, mixed>
+     * @return array<array-key, mixed>
      */
     public static function of(string $jwt): array
     {

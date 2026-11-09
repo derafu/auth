@@ -108,9 +108,14 @@ final class KeycloakBearerTest extends TestCase
     {
         $key = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
         self::assertNotFalse($key);
-        openssl_pkey_export($key, $pem);
+        self::assertTrue(openssl_pkey_export($key, $pem));
+        self::assertIsString($pem);
         $details = openssl_pkey_get_details($key);
         self::assertIsArray($details);
+        self::assertIsString($details['key']);
+        self::assertIsArray($details['rsa']);
+        self::assertIsString($details['rsa']['n']);
+        self::assertIsString($details['rsa']['e']);
 
         self::$pem = $pem;
         self::$publicPem = $details['key'];
@@ -403,7 +408,8 @@ final class KeycloakBearerTest extends TestCase
     {
         $other = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
         $this->assertNotFalse($other);
-        openssl_pkey_export($other, $otherPem);
+        $this->assertTrue(openssl_pkey_export($other, $otherPem));
+        $this->assertIsString($otherPem);
 
         $tokens = [
             'another key with the id of the realm' => $this->token(key: $otherPem),

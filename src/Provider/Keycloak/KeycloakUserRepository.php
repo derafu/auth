@@ -23,6 +23,7 @@ use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Auth\Exception\ProviderUnavailableException;
 use Derafu\Auth\UserFactory;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
+use Derafu\Value\ValueType;
 use Exception;
 use GuzzleHttp\Client;
 use GuzzleHttp\ClientInterface;
@@ -109,7 +110,7 @@ class KeycloakUserRepository implements KeycloakUserRepositoryInterface
 
         try {
             $user = $this->provider->getResourceOwner(new AccessToken(['access_token' => $accessToken]));
-            $userInfo = $user->toArray();
+            $userInfo = ValueType::map()->parse($user->toArray(), source: 'Keycloak user info');
         } catch (Exception $e) {
             if ($this->isRejection($e)) {
                 throw new AuthenticationException(['Failed to get user info: {error}', 'error' => $e->getMessage()], 0, $e);
@@ -122,7 +123,11 @@ class KeycloakUserRepository implements KeycloakUserRepositoryInterface
             throw new AuthenticationException('The user of the user info is not the user of the token.');
         }
 
-        return array_merge($userInfo, $claims);
+        // Both inputs have string keys; merging preserves them and lets claims win.
+        /** @var array<string, mixed> $merged */
+        $merged = array_merge($userInfo, $claims);
+
+        return $merged;
     }
 
     /**

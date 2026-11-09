@@ -59,6 +59,7 @@ use Mezzio\Flash\FlashMessagesInterface;
 use Mezzio\Session\Session;
 use Mezzio\Session\SessionInterface;
 use Mezzio\Session\SessionMiddleware;
+use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
@@ -106,7 +107,11 @@ final class AccountControllerTest extends TestCase
             {
                 return [new TwigFunction(
                     'path',
-                    fn (string $name, array $parameters = []): string => '/' . str_replace('_', '/', $name) . ($parameters === [] ? '' : '/' . implode('/', $parameters))
+                    function (string $name, array $parameters = []): string {
+                        Assert::assertContainsOnlyString($parameters);
+
+                        return '/' . str_replace('_', '/', $name) . ($parameters === [] ? '' : '/' . implode('/', $parameters));
+                    }
                 )];
             }
         };

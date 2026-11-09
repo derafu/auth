@@ -288,6 +288,31 @@ final class DatabaseUserRepositoryTest extends TestCase
     }
 
     #[Test]
+    public function rolesPreservePdoStringConversionForNumericAndNullValues(): void
+    {
+        $repository = $this->repository(config: [
+            'user_repository' => [
+                'table' => 'user',
+                'field' => ['identity' => 'email', 'password' => 'password'],
+                'sql_get_roles' => 'SELECT value FROM ('
+                    . 'SELECT 1 AS position, 123 AS value '
+                    . 'UNION ALL SELECT 2, 12.5 '
+                    . 'UNION ALL SELECT 3, NULL '
+                    . "UNION ALL SELECT 4, '' "
+                    . 'UNION ALL SELECT 5, FALSE '
+                    . 'UNION ALL SELECT 6, TRUE '
+                    . "UNION ALL SELECT 7, 'admin'"
+                    . ') ORDER BY position',
+            ],
+        ]);
+
+        $expected = ['123', '12.5', '', '', '0', '1', 'admin'];
+
+        $this->assertSame($expected, $repository->authenticate('ana@example.com', 'secret')?->getRoles());
+        $this->assertSame($expected, $repository->find('ana@example.com')?->getRoles());
+    }
+
+    #[Test]
     public function aUserIsFoundByItsIdentityWithItsRolesAndDetailsAndWithoutThePassword(): void
     {
         $repository = $this->repository([

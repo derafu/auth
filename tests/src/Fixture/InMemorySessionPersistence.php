@@ -15,6 +15,7 @@ namespace Derafu\TestsAuth\Fixture;
 use Mezzio\Session\Session;
 use Mezzio\Session\SessionInterface;
 use Mezzio\Session\SessionPersistenceInterface;
+use PHPUnit\Framework\Assert;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
@@ -34,13 +35,20 @@ final class InMemorySessionPersistence implements SessionPersistenceInterface
      */
     public array $store = [];
 
+    /**
+     * {@inheritDoc}
+     */
     public function initializeSessionFromRequest(ServerRequestInterface $request): SessionInterface
     {
-        $id = (string) ($request->getCookieParams()['sid'] ?? '');
+        $id = $request->getCookieParams()['sid'] ?? '';
+        Assert::assertIsString($id);
 
         return new Session($id !== '' ? ($this->store[$id] ?? []) : [], $id);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function persistSession(SessionInterface $session, ResponseInterface $response): ResponseInterface
     {
         $id = $session->getId();
@@ -50,7 +58,12 @@ final class InMemorySessionPersistence implements SessionPersistenceInterface
             $id = bin2hex(random_bytes(16));
         }
 
-        $this->store[$id] = $session->toArray();
+        $data = [];
+        foreach ($session->toArray() as $key => $value) {
+            Assert::assertIsString($key);
+            $data[$key] = $value;
+        }
+        $this->store[$id] = $data;
 
         return $response->withHeader('X-Session-Id', $id);
     }

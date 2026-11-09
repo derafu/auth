@@ -38,7 +38,7 @@ final class AppGlobal extends AbstractExtension implements GlobalsInterface
             }
 
             /**
-             * @return array<string, mixed>
+             * @return array<array-key, mixed>
              */
             public function getFlashes(): array
             {

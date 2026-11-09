@@ -12,12 +12,14 @@ declare(strict_types=1);
 
 namespace Derafu\Auth\Provider\Database;
 
+use Derafu\Array\ArrayReader;
 use Derafu\Auth\Contract\DatabaseConfigurationInterface;
 use Derafu\Auth\Contract\PasswordUserRepositoryInterface;
 use Derafu\Auth\Contract\UserFactoryInterface;
 use Derafu\Auth\Contract\UserInterface;
 use Derafu\Auth\Exception\ConfigurationException;
 use Derafu\Auth\UserFactory;
+use Derafu\Value\ValueType;
 use PDO;
 use PDOException;
 use PDOStatement;
@@ -191,8 +193,11 @@ class DatabaseUserRepository implements PasswordUserRepositoryInterface
         unset($details[$this->config->getUserPasswordField()]);
 
         $roles = [];
-        foreach ($this->query($repository['sql_get_roles'], $identity)->fetchAll(PDO::FETCH_NUM) as $role) {
-            $roles[] = (string) $role[0];
+        foreach ($this->query($repository['sql_get_roles'], $identity)->fetchAll(PDO::FETCH_NUM) as $index => $role) {
+            $value = ArrayReader::fromValue($role, 'sql_get_roles', (string) $index)
+                ->get(0, ValueType::scalar());
+            // Preserve PDO role conversion, including false and null as empty text.
+            $roles[] = (string) $value;
         }
 
         return $this->userFactory->create($identity, $roles, $details);
